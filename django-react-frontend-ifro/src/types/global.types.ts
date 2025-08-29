@@ -174,3 +174,50 @@ export type FavoriteFlow = {
     trafficFlow: number;
   };
 };
+
+// 즐겨찾기 및 조회수 관련 타입들
+export interface IntersectionStats {
+  intersection_id: number;
+  intersection_name: string;
+  view_count: number;
+  favorite_count: number;
+  last_viewed?: string;
+}
+
+export interface ViewRecordResponse {
+  success: boolean;
+  view_count: number;
+  message: string;
+}
+
+export interface FavoriteStatus {
+  is_favorite: boolean;
+  favorite_count: number;
+}
+
+export interface FavoriteToggleResponse {
+  success: boolean;
+  is_favorite: boolean;
+  favorite_count: number;
+  message: string;
+}
+
+// 관리자 통계 관련 타입들
+export interface TopArea {
+  rank: number;
+  area: string;
+  views?: number;
+  favorites?: number;
+  ai_reports?: number;
+  change?: number;
+  growth?: number;
+}
+
+export interface AdminStats {
+  top_viewed_areas: TopArea[];
+  top_favorite_areas: TopArea[];
+  top_ai_report_areas: TopArea[];
+  total_views: number;
+  total_favorites: number;
+  total_ai_reports: number;
+}

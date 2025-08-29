@@ -5,8 +5,12 @@ import {
   TrafficInterpretationResponse,
   ReportData,
   ApiTrafficData,
-  TrafficData,
-  AIAnalysisResponse
+  AIAnalysisResponse,
+  AdminStats,
+  FavoriteStatus,
+  FavoriteToggleResponse,
+  ViewRecordResponse,
+  IntersectionStats
 } from "../types/global.types";
 
 export const getIntersectionTrafficData = async (
@@ -182,3 +186,45 @@ export const getIntersectionReportData = async (
     throw error;
   }
 };
+
+// 즐겨찾기 및 조회수 관련 API 함수들
+export const recordIntersectionView = async (intersectionId: number): Promise<ViewRecordResponse> => {
+  const response = await api.post(`/traffic/intersections/${intersectionId}/record-view`);
+  return response.data;
+};
+
+export const getFavoriteStatus = async (intersectionId: number): Promise<FavoriteStatus> => {
+  const response = await api.get(`/traffic/intersections/${intersectionId}/favorite-status`);
+  return response.data;
+};
+
+export const toggleFavorite = async (intersectionId: number): Promise<FavoriteToggleResponse> => {
+  const response = await api.post(`/traffic/intersections/${intersectionId}/toggle-favorite`);
+  return response.data;
+};
+
+export const getIntersectionStats = async (intersectionId: number): Promise<IntersectionStats> => {
+  const response = await api.get(`/traffic/intersections/${intersectionId}/stats`);
+  return response.data;
+};
+
+export const getUserFavoriteIntersections = async (): Promise<Intersection[]> => {
+  const response = await api.get('/traffic/user/favorite-intersections');
+  return response.data;
+};
+
+// 관리자 통계 API
+export const getAdminStats = async (): Promise<AdminStats> => {
+  const response = await api.get('/traffic/admin/stats');
+  return response.data;
+};
+
+// 관리자용 교차로 목록 (즐겨찾기 수 포함)
+export const getAdminIntersections = async (): Promise<IntersectionStats[]> => {
+  const response = await api.get('/traffic/admin/intersections');
+  return response.data;
+};
+
+// 호환성을 위한 별칭 함수들
+export const getIntersectionFavoriteStatus = getFavoriteStatus;
+export const toggleIntersectionFavorite = toggleFavorite;

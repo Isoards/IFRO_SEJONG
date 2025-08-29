@@ -3,7 +3,8 @@ from ninja_extra import Router
 from typing import List
 from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, Incident, TrafficInterpretation,
-    S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation
+    S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation,
+    IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog
 )
 from .services import TrafficInterpretationService
 from .gemini_service import GeminiTrafficAnalyzer
@@ -11,9 +12,12 @@ from .schemas import (
     IntersectionSchema, TrafficVolumeSchema, TotalTrafficVolumeSchema, IncidentSchema,
     IntersectionMapDataSchema, IntersectionLatestVolumeSchema, TrafficDataSchema, AllIntersectionsTrafficDataSchema,
     TrafficInterpretationRequestSchema, TrafficInterpretationResponseSchema, TrafficInterpretationSchema,
-    ReportDataSchema, ValidationErrorSchema, ServiceErrorSchema
+    ReportDataSchema, ValidationErrorSchema, ServiceErrorSchema,
+    IntersectionStatsSchema, ViewRecordResponseSchema, FavoriteStatusSchema, FavoriteToggleResponseSchema,
+    AdminStatsSchema, IntersectionStatsListSchema
 )
-from django.db.models import Sum, OuterRef, Subquery
+from django.db.models import Sum, OuterRef, Subquery, Count, Q, F
+from django.db import transaction
 from datetime import datetime
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -777,12 +781,28 @@ def generate_ai_traffic_analysis(request, intersection_id: int, time_period: str
     """
     try:
         # Validate intersection exists
-        if not Intersection.objects.filter(id=intersection_id).exists():
+        intersection = Intersection.objects.filter(id=intersection_id).first()
+        if not intersection:
             raise HttpError(404, f"Intersection with ID {intersection_id} not found")
         
         # Validate time period
         if time_period not in ["24h", "7d", "30d"]:
             raise HttpError(400, "Invalid time period. Must be one of: 24h, 7d, 30d")
+        
+        # AI 리포트 요청 카운트 증가
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={
+                'view_count': 0,
+                'favorite_count': 0,
+                'ai_report_count': 0
+            }
+        )
+        stats.ai_report_count += 1
+        stats.last_ai_report = timezone.now()
+        stats.save()
+        
+        print(f"AI report requested for intersection {intersection_id}: {stats.ai_report_count} total requests")
         
         # Initialize Gemini analyzer
         analyzer = GeminiTrafficAnalyzer()
@@ -827,11 +847,27 @@ def generate_secure_ai_traffic_analysis(request, intersection_id: int, time_peri
     Generate AI-powered traffic analysis using Gemini API (Secure version)
     """
     try:
-        if not Intersection.objects.filter(id=intersection_id).exists():
+        intersection = Intersection.objects.filter(id=intersection_id).first()
+        if not intersection:
             raise HttpError(404, f"Intersection with ID {intersection_id} not found")
         
         if time_period not in ["24h", "7d", "30d"]:
             raise HttpError(400, "Invalid time period. Must be one of: 24h, 7d, 30d")
+        
+        # AI 리포트 요청 카운트 증가 (Secure version)
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={
+                'view_count': 0,
+                'favorite_count': 0,
+                'ai_report_count': 0
+            }
+        )
+        stats.ai_report_count += 1
+        stats.last_ai_report = timezone.now()
+        stats.save()
+        
+        print(f"Secure AI report requested for intersection {intersection_id}: {stats.ai_report_count} total requests")
         
         analyzer = GeminiTrafficAnalyzer()
         analysis_result = analyzer.analyze_intersection_traffic(intersection_id, time_period, language, use_report_data=True)
@@ -942,3 +978,283 @@ def secure_chat_with_ai(request, message: str, context: dict = None):
     except Exception as e:
         print(f"Secure Chat API Error: {str(e)}")
         raise HttpError(500, "챗봇 응답 생성 중 오류가 발생했습니다.")
+
+# Favorite and View Count Related APIs
+@router.post("/intersections/{intersection_id}/record-view", response=ViewRecordResponseSchema)
+def record_intersection_view(request, intersection_id: int):
+    """교차로 조회 기록 및 조회수 증가"""
+    try:
+        intersection = Intersection.objects.get(id=intersection_id)
+        
+        # 통계 레코드 가져오기 또는 생성
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={'view_count': 0, 'favorite_count': 0}
+        )
+        
+        # 조회수 증가
+        stats.view_count += 1
+        stats.last_viewed = timezone.now()
+        stats.save()
+        
+        # 조회 로그 기록
+        IntersectionViewLog.objects.create(
+            intersection=intersection,
+            user=request.user if request.user.is_authenticated else None,
+            ip_address=request.META.get('REMOTE_ADDR', ''),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+        
+        return ViewRecordResponseSchema(
+            success=True,
+            view_count=stats.view_count,
+            message="조회가 기록되었습니다."
+        )
+        
+    except Intersection.DoesNotExist:
+        raise HttpError(404, "교차로를 찾을 수 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"조회 기록 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/intersections/{intersection_id}/favorite-status", response=FavoriteStatusSchema, auth=JWTAuth())
+def get_favorite_status(request, intersection_id: int):
+    """사용자의 즐겨찾기 상태 조회"""
+    try:
+        intersection = Intersection.objects.get(id=intersection_id)
+        stats = IntersectionStats.objects.filter(intersection=intersection).first()
+        
+        # 사용자의 즐겨찾기 상태 확인
+        is_favorite = IntersectionFavoriteLog.objects.filter(
+            intersection=intersection,
+            user=request.user,
+            is_favorite=True
+        ).exists()
+        
+        return FavoriteStatusSchema(
+            is_favorite=is_favorite,
+            favorite_count=stats.favorite_count if stats else 0
+        )
+        
+    except Intersection.DoesNotExist:
+        raise HttpError(404, "교차로를 찾을 수 없습니다.")
+
+@router.post("/intersections/{intersection_id}/toggle-favorite", response=FavoriteToggleResponseSchema, auth=JWTAuth())
+def toggle_favorite(request, intersection_id: int):
+    """즐겨찾기 토글"""
+    try:
+        intersection = Intersection.objects.get(id=intersection_id)
+        
+        # 통계 레코드 가져오기 또는 생성
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={'view_count': 0, 'favorite_count': 0}
+        )
+        
+        # 현재 사용자의 최신 즐겨찾기 상태 확인
+        latest_favorite_log = IntersectionFavoriteLog.objects.filter(
+            intersection=intersection,
+            user=request.user
+        ).order_by('-created_at').first()
+        
+        current_favorite = latest_favorite_log.is_favorite if latest_favorite_log else False
+        new_favorite_status = not current_favorite
+        
+        # 즐겨찾기 로그 기록
+        IntersectionFavoriteLog.objects.create(
+            intersection=intersection,
+            user=request.user,
+            is_favorite=new_favorite_status
+        )
+        
+        # 실제 즐겨찾기 수를 정확히 계산
+        # 각 사용자별로 최신 즐겨찾기 상태를 확인
+        users_with_favorites = set()
+        all_users = IntersectionFavoriteLog.objects.filter(
+            intersection=intersection
+        ).values_list('user', flat=True).distinct()
+        
+        for user_id in all_users:
+            latest_log = IntersectionFavoriteLog.objects.filter(
+                intersection=intersection,
+                user_id=user_id
+            ).order_by('-created_at').first()
+            
+            if latest_log and latest_log.is_favorite:
+                users_with_favorites.add(user_id)
+        
+        active_favorites = len(users_with_favorites)
+        
+        # 통계 업데이트
+        stats.favorite_count = active_favorites
+        stats.save()
+        
+        return FavoriteToggleResponseSchema(
+            success=True,
+            is_favorite=new_favorite_status,
+            favorite_count=stats.favorite_count,
+            message="즐겨찾기가 업데이트되었습니다."
+        )
+        
+    except Intersection.DoesNotExist:
+        raise HttpError(404, "교차로를 찾을 수 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"즐겨찾기 업데이트 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/intersections/{intersection_id}/stats", response=IntersectionStatsSchema)
+def get_intersection_stats(request, intersection_id: int):
+    """교차로 통계 조회"""
+    try:
+        intersection = Intersection.objects.get(id=intersection_id)
+        stats = IntersectionStats.objects.filter(intersection=intersection).first()
+        
+        if not stats:
+            return IntersectionStatsSchema(
+                view_count=0,
+                favorite_count=0,
+                last_viewed=None
+            )
+        
+        return IntersectionStatsSchema(
+            view_count=stats.view_count,
+            favorite_count=stats.favorite_count,
+            last_viewed=stats.last_viewed
+        )
+        
+    except Intersection.DoesNotExist:
+        raise HttpError(404, "교차로를 찾을 수 없습니다.")
+
+@router.get("/user/favorite-intersections", response=List[IntersectionSchema], auth=JWTAuth())
+def get_user_favorite_intersections(request):
+    """사용자의 즐겨찾기 교차로 목록 조회"""
+    try:
+        # 사용자가 즐겨찾기한 교차로 ID 목록
+        favorite_intersection_ids = IntersectionFavoriteLog.objects.filter(
+            user=request.user,
+            is_favorite=True
+        ).values_list('intersection_id', flat=True).distinct()
+        
+        # 즐겨찾기한 교차로들 조회
+        favorite_intersections = Intersection.objects.filter(
+            id__in=favorite_intersection_ids
+        )
+        
+        return list(favorite_intersections)
+        
+    except Exception as e:
+        raise HttpError(500, f"즐겨찾기 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+# Admin Statistics API - 최적화된 버전
+@router.get("/admin/stats", response=AdminStatsSchema)
+def get_admin_stats(request):
+    """관리자 통계 데이터 조회 - 성능 최적화"""
+    try:
+        # 한 번의 쿼리로 모든 통계 데이터 조회
+        from django.db.models import Sum
+        
+        # 최다 조회 구간, 최다 즐겨찾기 구간, AI 리포트 다발 지역 TOP 10을 병렬로 조회
+        top_viewed_areas = IntersectionStats.objects.select_related('intersection').filter(
+            view_count__gt=0
+        ).order_by('-view_count')[:10].values(
+            'intersection__name', 'view_count'
+        )
+        
+        top_favorite_areas = IntersectionStats.objects.select_related('intersection').filter(
+            favorite_count__gt=0
+        ).order_by('-favorite_count')[:10].values(
+            'intersection__name', 'favorite_count'
+        )
+        
+        top_ai_report_areas = IntersectionStats.objects.select_related('intersection').filter(
+            ai_report_count__gt=0
+        ).order_by('-ai_report_count')[:10].values(
+            'intersection__name', 'ai_report_count'
+        )
+        
+        # 전체 통계를 한 번의 쿼리로 조회
+        totals = IntersectionStats.objects.aggregate(
+            total_views=Sum('view_count'),
+            total_favorites=Sum('favorite_count'),
+            total_ai_reports=Sum('ai_report_count')
+        )
+        
+        # 결과 구성
+        top_viewed_list = [
+            {
+                'rank': idx + 1,
+                'area': item['intersection__name'],
+                'views': item['view_count'],
+                'change': 0
+            }
+            for idx, item in enumerate(top_viewed_areas)
+        ]
+        
+        top_favorite_list = [
+            {
+                'rank': idx + 1,
+                'area': item['intersection__name'],
+                'favorites': item['favorite_count'],
+                'growth': 0
+            }
+            for idx, item in enumerate(top_favorite_areas)
+        ]
+        
+        top_ai_report_list = [
+            {
+                'rank': idx + 1,
+                'area': item['intersection__name'],
+                'ai_reports': item['ai_report_count'],
+                'growth': 0
+            }
+            for idx, item in enumerate(top_ai_report_areas)
+        ]
+        
+        return AdminStatsSchema(
+            top_viewed_areas=top_viewed_list,
+            top_favorite_areas=top_favorite_list,
+            top_ai_report_areas=top_ai_report_list,
+            total_views=totals['total_views'] or 0,
+            total_favorites=totals['total_favorites'] or 0,
+            total_ai_reports=totals['total_ai_reports'] or 0
+        )
+        
+    except Exception as e:
+        raise HttpError(500, f"관리자 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+# Admin용 교차로 목록 (즐겨찾기 수 포함) - 최적화된 버전
+@router.get("/admin/intersections", response=List[IntersectionStatsListSchema])
+def get_admin_intersections(request):
+    """관리자용 교차로 목록 조회 (즐겨찾기 수 포함) - 성능 최적화"""
+    try:
+        # 통계가 있는 교차로만 조회 (LEFT JOIN 사용)
+        from django.db.models import Q, F, Value, IntegerField
+        from django.db.models.functions import Coalesce
+        
+        # 교차로와 통계를 한 번의 쿼리로 조회
+        intersections_with_stats = Intersection.objects.select_related('intersectionstats').annotate(
+            stats_view_count=Coalesce('intersectionstats__view_count', Value(0), output_field=IntegerField()),
+            stats_favorite_count=Coalesce('intersectionstats__favorite_count', Value(0), output_field=IntegerField()),
+            stats_ai_report_count=Coalesce('intersectionstats__ai_report_count', Value(0), output_field=IntegerField()),
+            stats_last_viewed=F('intersectionstats__last_viewed'),
+            stats_last_ai_report=F('intersectionstats__last_ai_report')
+        ).filter(
+            Q(intersectionstats__favorite_count__gt=0) | 
+            Q(intersectionstats__view_count__gt=0) |
+            Q(intersectionstats__ai_report_count__gt=0)
+        ).order_by('-intersectionstats__ai_report_count', '-intersectionstats__favorite_count', '-intersectionstats__view_count')[:100]  # 상위 100개만
+        
+        result = []
+        for intersection in intersections_with_stats:
+            result.append({
+                'intersection_id': intersection.id,
+                'intersection_name': intersection.name,
+                'view_count': intersection.stats_view_count,
+                'favorite_count': intersection.stats_favorite_count,
+                'ai_report_count': intersection.stats_ai_report_count,
+                'last_viewed': intersection.stats_last_viewed,
+                'last_ai_report': intersection.stats_last_ai_report
+            })
+        
+        return result
+        
+    except Exception as e:
+        raise HttpError(500, f"관리자 교차로 목록 조회 중 오류가 발생했습니다: {str(e)}")
