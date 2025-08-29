@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { X, MapPin, Info, Calendar, ClipboardList } from "lucide-react";
 import { Incident } from "../../types/global.types";
-import { Button } from "../common/Button";
 
 interface IncidentDetailPanelProps {
   incident: Incident;
@@ -56,15 +55,13 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
         <h2 className="text-2xl font-bold text-red-600">
           {t("incidents.title")} {t("traffic.analysis")}
         </h2>
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
           onClick={onClose}
           aria-label="Close panel"
-          className="ml-2"
+          className="inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground ml-2"
         >
           <X size={28} className="text-gray-500" />
-        </Button>
+        </button>
       </div>
 
       {/* 상단 요약 */}

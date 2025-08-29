@@ -2,7 +2,6 @@ import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Star } from "lucide-react";
 import { Intersection, ApiTrafficData, ReportData, TrafficData, TrafficInterpretationResponse } from "../../types/global.types";
-import { Button } from "../common/Button";
 import { MiniChart } from "../common/MiniChart";
 import { usePDFGeneration } from "../../utils/usePDFGeneration";
 import { PDFGenerationStatus } from "../PDF/PDFGenerationStatus";
@@ -156,27 +155,32 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
                 buttonText="AI PDF"
                 timePeriod="24h"
               />
-              <Button 
+              <button 
                 onClick={handleDownloadPDF} 
-                size="sm" 
-                className="bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300" 
+                className="inline-flex items-center justify-center h-9 px-3 bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:pointer-events-none" 
                 disabled={status.isGenerating || isLoadingReportData}
               >
                 {isLoadingReportData ? "Loading..." : "PDF"}
-              </Button>
+              </button>
             </>
           )}
-          <Button
-            variant={isFavorited ? "default" : "ghost"}
-            size="icon"
+          <button
             onClick={() => onToggleFavorite(intersection.id)}
-            className={isFavorited ? "text-yellow-400" : "text-gray-400"}
+            className={`inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+              isFavorited 
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 text-yellow-400" 
+                : "hover:bg-accent hover:text-accent-foreground text-gray-400"
+            }`}
           >
             <Star size={20} fill={isFavorited ? "currentColor" : "none"} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close panel">
+          </button>
+          <button 
+            onClick={onClose} 
+            aria-label="Close panel"
+            className="inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+          >
             <X size={24} className="text-gray-500" />
-          </Button>
+          </button>
         </div>
       </div>
       

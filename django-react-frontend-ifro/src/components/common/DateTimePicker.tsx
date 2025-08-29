@@ -1,6 +1,5 @@
 import React, { memo, useCallback, useMemo, useEffect } from "react";
 // import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "./Button";
 
 interface DateTimePickerProps {
   currentDate: Date;
@@ -95,14 +94,14 @@ export const DateTimePicker = memo<DateTimePickerProps>(
         {/* 날짜 */}
         <div className="flex flex-1 items-center justify-center border-r min-w-[90px] px-2">
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeDate(-1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#60;
-            </Button>
+            </button>
           )}
           <span
             className={`font-semibold text-sm flex-1 text-center ${
@@ -112,27 +111,27 @@ export const DateTimePicker = memo<DateTimePickerProps>(
             {isToday ? "Today" : `${mm}.${dd}`}
           </span>
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeDate(1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#62;
-            </Button>
+            </button>
           )}
         </div>
         {/* 시 */}
         <div className="flex flex-1 items-center justify-center border-r min-w-[70px] px-2">
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeHour(-1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#60;
-            </Button>
+            </button>
           )}
           <span
             className={`font-semibold text-sm flex-1 text-center ${
@@ -142,27 +141,27 @@ export const DateTimePicker = memo<DateTimePickerProps>(
             {formatHour(currentDate)}
           </span>
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeHour(1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#62;
-            </Button>
+            </button>
           )}
         </div>
         {/* 분 */}
         <div className="flex flex-1 items-center justify-center min-w-[70px] px-2">
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeMinute(-5)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#60;
-            </Button>
+            </button>
           )}
           <span
             className={`font-semibold text-sm flex-1 text-center ${
@@ -172,14 +171,14 @@ export const DateTimePicker = memo<DateTimePickerProps>(
             {formatMinute(currentDate)}
           </span>
           {!isNowMode && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              
+              
               onClick={() => changeMinute(5)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
               &#62;
-            </Button>
+            </button>
           )}
         </div>
       </div>

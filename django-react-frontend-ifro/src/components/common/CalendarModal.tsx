@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Button } from "./Button";
 import { cn } from "../../lib/utils";
 
 // Dialog components integrated into CalendarModal
@@ -247,16 +246,16 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
 
     for (let i = firstDay - 1; i >= 0; i--) {
       days.push(
-        <Button
+        <button
           key={`prev-${prevMonthDays - i}`}
-          variant="ghost"
+          
           className="w-8 h-8 text-gray-400 text-sm"
           onClick={() => {
             /* 이전 달 날짜 클릭 처리 가능 */
           }}
         >
           {prevMonthDays - i}
-        </Button>
+        </button>
       );
     }
 
@@ -273,14 +272,14 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
       }
 
       days.push(
-        <Button
+        <button
           key={day}
-          variant="ghost"
+          
           className={buttonClass}
           onClick={() => handleDateClick(day)}
         >
           {day}
-        </Button>
+        </button>
       );
     }
 
@@ -290,16 +289,16 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
 
     for (let day = 1; day <= remainingCells; day++) {
       days.push(
-        <Button
+        <button
           key={`next-${day}`}
-          variant="ghost"
+          
           className="w-8 h-8 text-gray-400 text-sm"
           onClick={() => {
             /* 다음 달 날짜 클릭 처리 가능 */
           }}
         >
           {day}
-        </Button>
+        </button>
       );
     }
 
@@ -312,51 +311,51 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
         {/* Left Sidebar */}
         <div className="w-32 bg-gray-50 p-4 rounded-l-lg border-r">
           <div className="space-y-2">
-            <Button
-              variant="ghost"
+            <button
+              
               className="block w-full text-left text-sm text-gray-700 hover:text-gray-900 py-1"
               onClick={() => handleQuickSelect("today")}
             >
               Today
-            </Button>
-            <Button
-              variant="ghost"
+            </button>
+            <button
+              
               className="block w-full text-left text-sm text-gray-700 hover:text-gray-900 py-1"
               onClick={() => handleQuickSelect("yesterday")}
             >
               Yesterday
-            </Button>
-            <Button
-              variant="ghost"
+            </button>
+            <button
+              
               className="block w-full text-left text-sm text-gray-700 hover:text-gray-900 py-1"
               onClick={() => handleQuickSelect("lastWeek")}
             >
               Last week
-            </Button>
-            <Button
-              variant="ghost"
+            </button>
+            <button
+              
               className="block w-full text-left text-sm text-gray-700 hover:text-gray-900 py-1"
               onClick={() => handleQuickSelect("lastMonth")}
             >
               Last month
-            </Button>
-            <Button
-              variant="ghost"
+            </button>
+            <button
+              
               className="block w-full text-left text-sm text-gray-700 hover:text-gray-900 py-1"
               onClick={() => handleQuickSelect("lastQuarter")}
             >
               Last quarter
-            </Button>
+            </button>
           </div>
 
           <div className="mt-16">
-            <Button
-              variant="link"
+            <button
+              
               className="text-blue-500 text-sm font-medium hover:text-blue-600"
               onClick={handleReset}
             >
               Reset
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -364,25 +363,25 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
         <div className="flex-1 p-4">
           {/* Calendar Header */}
           <div className="flex items-center justify-between mb-4 pr-10">
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
+              
+              
               onClick={() => navigateMonth("prev")}
               className="p-1"
             >
               <ChevronLeft className="w-4 h-4 text-gray-600" />
-            </Button>
+            </button>
             <h2 className="text-lg font-medium text-gray-900">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h2>
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
+              
+              
               onClick={() => navigateMonth("next")}
               className="p-1"
             >
               <ChevronRight className="w-4 h-4 text-gray-600" />
-            </Button>
+            </button>
           </div>
 
           {/* Calendar Grid */}
@@ -406,15 +405,15 @@ const CalendarModal: React.FC<CalendarModalProps> = ({
 
         {/* Close button */}
         {onClose && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
+            
+            
             onClick={onClose}
             className="absolute top-2 right-4 text-gray-400 hover:text-gray-600 text-xl font-bold"
             aria-label="Close"
           >
             ×
-          </Button>
+          </button>
         )}
       </DialogContent>
     </Dialog>

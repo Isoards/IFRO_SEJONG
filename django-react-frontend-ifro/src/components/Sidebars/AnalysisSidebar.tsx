@@ -5,7 +5,6 @@ import { Intersection } from "../../types/global.types";
 import { DateTimePicker } from "../common/DateTimePicker";
 import { MiniChart } from "../common/MiniChart";
 import CalendarModal from "../common/CalendarModal";
-import { Button } from "../common/Button";
 
 interface AnalysisSidebarProps {
   selectedIntersection: Intersection | null;
@@ -246,11 +245,9 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
                 {formatFullDate(currentDate)}
               </p>
               <div className="flex gap-1">
-                <Button
-                  variant={isNowMode ? "default" : "outline"}
-                  size="sm"
+                <button
                   onClick={handleStartNowMode}
-                  className={`text-xs px-3 py-1.5 flex-shrink-0 font-semibold transition-all duration-200 ${
+                  className={`text-xs px-3 py-1.5 flex-shrink-0 font-semibold transition-all duration-200 rounded-md inline-flex items-center justify-center border ${
                     isNowMode
                       ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md hover:shadow-lg transform hover:scale-105 border-0"
                       : "border-gray-300 text-gray-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
@@ -264,20 +261,18 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
                   ) : (
                     "NOW"
                   )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
+                </button>
+                <button
                   onClick={() => setIsCalendarOpen(true)}
                   disabled={isNowMode}
-                  className={`text-xs px-2 py-1 flex-shrink-0 transition-all duration-200 ${
+                  className={`text-xs px-2 py-1 flex-shrink-0 transition-all duration-200 rounded-md inline-flex items-center justify-center border ${
                     isNowMode
                       ? "border-gray-200 text-gray-400 cursor-not-allowed opacity-50"
                       : "border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-700 hover:bg-gray-50"
                   }`}
                 >
                   {t("navigation.settings")}
-                </Button>
+                </button>
               </div>
             </div>
             {activeNav === "map" && (

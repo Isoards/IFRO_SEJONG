@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2, RefreshCw, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { Button } from '../common/Button';
 import { ProgressIndicator } from '../common/ProgressIndicator';
 import { FeedbackMessage } from '../common/FeedbackMessage';
 import { PDFGenerationStatus as PDFStatus } from '../../types/global.types';
@@ -98,17 +97,16 @@ export const PDFGenerationStatus: React.FC<PDFGenerationStatusProps> = ({
   // Compact mode for header placement
   if (compact) {
     return (
-      <Button
+      <button
         onClick={onDownload}
         disabled={!isPdfSupported || status.isGenerating || !hasData}
-        size="sm"
-        className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center space-x-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
         aria-label={String(status.isGenerating ? (t("reports.generating") || 'Generating') : (t("reports.downloadPdf") || 'Download PDF'))}
         title={String(status.isGenerating ? (t("reports.generating") || 'Generating') : (t("reports.downloadPdf") || 'Download PDF'))}
       >
         {getStatusIcon()}
         <span className="text-sm">{status.isGenerating ? t("reports.generating") || "Generating..." : t("reports.downloadPdf") || "PDF"}</span>
-      </Button>
+      </button>
     );
   }
 
@@ -116,22 +114,22 @@ export const PDFGenerationStatus: React.FC<PDFGenerationStatusProps> = ({
     <div className="space-y-4">
       {/* Download Button with Status */}
       <div className="flex items-center space-x-3">
-        <Button
+        <button
           onClick={onDownload}
           disabled={!isPdfSupported || status.isGenerating || !hasData}
-          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
           aria-label={String(status.isGenerating ? (t("reports.generating") || 'Generating') : (t("reports.downloadPdf") || 'Download PDF'))}
         >
           {getStatusIcon()}
           <span>{getButtonText()}</span>
-        </Button>
+        </button>
         
         {/* Retry Button - Only show when there's an error and retry is available */}
         {status.error && onRetry && retryCount < maxRetries && (
-          <Button
+          <button
             onClick={onRetry}
             disabled={status.isGenerating}
-            className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50"
+            className="flex items-center space-x-1 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 disabled:opacity-50 text-sm font-medium"
             aria-label={String(t("common.retry") || 'Retry')}
           >
             <RefreshCw size={14} />
@@ -139,7 +137,7 @@ export const PDFGenerationStatus: React.FC<PDFGenerationStatusProps> = ({
               {t("reports.retryWithCount", { count: retryCount, max: maxRetries }) || 
                 `Retry (${retryCount}/${maxRetries})`}
             </span>
-          </Button>
+          </button>
         )}
       </div>
       
