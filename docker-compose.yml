@@ -1,0 +1,65 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: traffic
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./django-react-backend-api-ifro/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./django-react-backend-api-ifro/sqldata-backup/20250727:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./django-react-backend-api-ifro
+    container_name: backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_DATABASE=traffic
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=1234
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - DJANGO_SECRET_KEY=unsafe-dev-secret-key-for-local-development
+      - JWT_SECRET_KEY=a-different-unsafe-secret-key-for-jwt
+      - DJANGO_ENCRYPTION_PASSWORD=forBus_password
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - GEMINI_API_KEY=AIzaSyAwA17afiK3RW95Z9hBcWpDOOVU_PELtfw
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./django-react-backend-api-ifro:/app
+
+  frontend:
+    build:
+      context: ./django-react-frontend-ifro
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./django-react-frontend-ifro:/app
+      - /app/node_modules
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+    stdin_open: true
+    tty: true
+
+volumes:
+  mysql_data:

@@ -1,0 +1,14 @@
+Django
+django-cors-headers
+django-ninja
+django-ninja-extra
+django-ninja-jwt[crypto]
+python-decouple
+numpy
+pandas
+rav
+mysqlclient
+./python_encrypter-0.1.0-py3-none-any.whl
+pymysql
+dotenv
+requests
