@@ -3,6 +3,7 @@ from ninja_extra import Router
 from django.contrib.auth import authenticate
 from ninja_jwt.tokens import RefreshToken
 from ninja.errors import HttpError
+from django.utils.translation import gettext as _
 from user_auth.schemas import RegisterSchema, LoginSchema, UserResponseSchema, UserUpdateSchema, PasswordChangeSchema
 from user_auth.models import User, AdminCode
 from ninja_jwt.authentication import JWTAuth
