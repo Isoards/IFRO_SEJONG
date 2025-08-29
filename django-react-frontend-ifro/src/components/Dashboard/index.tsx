@@ -15,10 +15,13 @@ import { Map as MapIcon, Star } from "lucide-react";
 import {
   getTrafficIntersections,
   getIntersectionTrafficStat,
-  getLatestIntersectionTrafficData, // 1. API 함수 import
+  getLatestIntersectionTrafficData,
+  recordIntersectionView,
+  getUserFavoriteIntersections,
+  toggleIntersectionFavorite,
 } from "../../api/intersections";
 import { getIncidents } from "../../api/incidents";
-import { calculateAllIntersectionTraffic } from "../../utils/intersectionUtils";
+
 import { ChatBotButton } from "../common/ChatBotButton";
 import { debugLog } from "../../utils/debugUtils";
 
@@ -218,14 +221,53 @@ export default function Dashboard() {
   }, [favoriteFlows, isInitialLoadComplete]);
 
   // 즐겨찾기 토글 함수
-  const handleToggleFavorite = useCallback((intersectionId: number) => {
-    setFavoriteIntersections((prev) => {
-      if (prev.includes(intersectionId)) {
-        return prev.filter((id) => id !== intersectionId);
-      } else {
-        return [...prev, intersectionId];
+  const handleToggleFavorite = useCallback(async (intersectionId: number) => {
+    const token = localStorage.getItem('access');
+
+    if (token) {
+      // 로그인된 경우: 백엔드 API 호출 후 응답에 따라 로컬 상태 업데이트
+      try {
+        const response = await toggleIntersectionFavorite(intersectionId);
+
+        setFavoriteIntersections(prev => {
+          if (response.is_favorite) {
+            // 즐겨찾기 추가
+            if (!prev.includes(intersectionId)) {
+              return [...prev, intersectionId];
+            }
+            return prev;
+          } else {
+            // 즐겨찾기 제거
+            return prev.filter(id => id !== intersectionId);
+          }
+        });
+
+        console.log(`Backend favorite toggled for intersection ${intersectionId}: ${response.is_favorite}`);
+      } catch (error) {
+        console.error('Failed to sync favorite with backend:', error);
+        // 백엔드 오류 시 로컬 상태만 토글 (fallback)
+        setFavoriteIntersections(prev => {
+          const isCurrentlyFavorite = prev.includes(intersectionId);
+          if (isCurrentlyFavorite) {
+            return prev.filter(id => id !== intersectionId);
+          } else {
+            return [...prev, intersectionId];
+          }
+        });
       }
-    });
+    } else {
+      // 로그인하지 않은 경우: 로컬 상태만 토글
+      setFavoriteIntersections(prev => {
+        const isCurrentlyFavorite = prev.includes(intersectionId);
+        if (isCurrentlyFavorite) {
+          console.log(`Local favorite removed for intersection ${intersectionId} (not logged in)`);
+          return prev.filter(id => id !== intersectionId);
+        } else {
+          console.log(`Local favorite added for intersection ${intersectionId} (not logged in)`);
+          return [...prev, intersectionId];
+        }
+      });
+    }
   }, []);
 
   // 사고 즐겨찾기 토글 함수 (현재 사용하지 않음)
@@ -243,6 +285,14 @@ export default function Dashboard() {
     async (intersection: Intersection) => {
       setSelectedIntersection(intersection);
       setSelectedIncident(null); // 교차로 선택 시 incident 선택 해제
+
+      // 조회수 기록
+      try {
+        await recordIntersectionView(intersection.id);
+        console.log(`Recorded view for intersection ${intersection.id}`);
+      } catch (error) {
+        console.error("Failed to record intersection view:", error);
+      }
 
       // 교통 통계 데이터 로드
       try {
@@ -443,9 +493,9 @@ export default function Dashboard() {
         setTrafficStat(
           stat
             ? {
-                average_speed: stat.average_speed ?? null,
-                total_volume: stat.total_volume ?? null,
-              }
+              average_speed: stat.average_speed ?? null,
+              total_volume: stat.total_volume ?? null,
+            }
             : { average_speed: null, total_volume: null }
         );
       };
@@ -466,9 +516,9 @@ export default function Dashboard() {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((point1.latitude * Math.PI) / 180) *
-        Math.cos((point2.latitude * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((point2.latitude * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
@@ -710,8 +760,8 @@ export default function Dashboard() {
                         (selectedPoints.length === 0
                           ? t("map.clickFirstPoint")
                           : selectedPoints.length === 1
-                          ? t("map.clickSecondPoint")
-                          : t("map.selectTwoPointsDesc"))}
+                            ? t("map.clickSecondPoint")
+                            : t("map.selectTwoPointsDesc"))}
                       {activeTrafficView === "incidents" &&
                         t("dashboard.selectIncident")}
                     </p>
@@ -725,11 +775,10 @@ export default function Dashboard() {
             selectedIntersection && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${
-                  showIntersectionPanel
+                ${showIntersectionPanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                }`}
+                  }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
@@ -763,11 +812,10 @@ export default function Dashboard() {
             selectedPoints.length === 2 && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${
-                  showRoutePanel
+                ${showRoutePanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                }`}
+                  }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
@@ -800,11 +848,10 @@ export default function Dashboard() {
             selectedIncident && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${
-                  showIncidentPanel
+                ${showIncidentPanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                }`}
+                  }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",

@@ -148,6 +148,61 @@ class ReportDataSchema(Schema):
     interpretation: Optional[InterpretationDataSchema]
     generated_at: str
 
+# 즐겨찾기 및 조회수 관련 스키마들
+class IntersectionStatsSchema(Schema):
+    """교차로 통계 스키마"""
+    view_count: int
+    favorite_count: int
+    last_viewed: Optional[datetime]
+
+class ViewRecordResponseSchema(Schema):
+    """조회 기록 응답 스키마"""
+    success: bool
+    view_count: int
+    message: str
+
+class FavoriteStatusSchema(Schema):
+    """즐겨찾기 상태 스키마"""
+    is_favorite: bool
+    favorite_count: int
+
+class FavoriteToggleResponseSchema(Schema):
+    """즐겨찾기 토글 응답 스키마"""
+    success: bool
+    is_favorite: bool
+    favorite_count: int
+    message: str
+
+# 관리자 통계 관련 스키마들
+class TopAreaSchema(Schema):
+    """TOP 지역 스키마"""
+    rank: int
+    area: str
+    views: Optional[int] = None
+    favorites: Optional[int] = None
+    ai_reports: Optional[int] = None
+    change: Optional[int] = None
+    growth: Optional[int] = None
+
+class AdminStatsSchema(Schema):
+    """관리자 통계 스키마"""
+    top_viewed_areas: List[TopAreaSchema]
+    top_favorite_areas: List[TopAreaSchema]
+    top_ai_report_areas: List[TopAreaSchema]
+    total_views: int
+    total_favorites: int
+    total_ai_reports: int
+
+class IntersectionStatsListSchema(Schema):
+    """교차로 통계 목록 스키마"""
+    intersection_id: int
+    intersection_name: str
+    view_count: int
+    favorite_count: int
+    ai_report_count: int
+    last_viewed: Optional[datetime]
+    last_ai_report: Optional[datetime]
+
 # Error Response Schemas
 class ValidationErrorSchema(Schema):
     """Schema for validation error responses"""

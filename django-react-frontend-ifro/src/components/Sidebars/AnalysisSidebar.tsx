@@ -335,13 +335,38 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
                     >
                       {/* Header Section */}
                       <div className="p-3 border-b border-gray-100">
-                        <div className="flex items-center">
+                        <div className="flex items-center justify-between">
                           <h4
-                            className="font-bold text-sm text-gray-800 break-words whitespace-normal"
+                            className="font-bold text-sm text-gray-800 break-words whitespace-normal flex-1"
                             style={{ overflowWrap: "break-word" }}
                           >
                             {intersection.name}
                           </h4>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleFavorite(intersection.id);
+                            }}
+                            className={`ml-2 p-1 rounded-full transition-colors ${
+                              favoriteIntersections.includes(intersection.id)
+                                ? "text-yellow-500 hover:text-yellow-600"
+                                : "text-gray-300 hover:text-yellow-400"
+                            }`}
+                            title={
+                              favoriteIntersections.includes(intersection.id)
+                                ? "Remove from favorites"
+                                : "Add to favorites"
+                            }
+                          >
+                            <Star
+                              size={16}
+                              fill={
+                                favoriteIntersections.includes(intersection.id)
+                                  ? "currentColor"
+                                  : "none"
+                              }
+                            />
+                          </button>
                         </div>
                       </div>
                       {/* Content Section */}
