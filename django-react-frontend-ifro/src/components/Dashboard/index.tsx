@@ -68,6 +68,12 @@ export default function Dashboard() {
     "analysis" | "flow" | "incidents" | "favorites"
   >("analysis");
   const [selectedPoints, setSelectedPoints] = useState<Intersection[]>([]);
+  const [routeData, setRouteData] = useState<{
+    distance: string;
+    duration: string;
+    source: string;
+    coordinates: { lat: number; lng: number }[];
+  } | null>(null);
 
   // 뷰 변경 핸들러 - 뷰 변경 시 선택된 점들 초기화
   const handleTrafficViewChange = useCallback(
@@ -566,6 +572,13 @@ export default function Dashboard() {
     setTimeout(() => setSelectedPoints([]), 300);
   };
 
+  // 분석 정보와 선택된 점들을 지우는 함수
+  const handleClearAnalysis = () => {
+    setSelectedPoints([]);
+    setRouteData(null);
+    setSelectedFlowId(null);
+  };
+
   // 컴포넌트 마운트 시 스타일 추가
   useEffect(() => {
     const style = document.createElement("style");
@@ -689,6 +702,8 @@ export default function Dashboard() {
                 setCurrentDate={setCurrentDate}
                 calculateDistance={calculateDistance}
                 calculateTravelTime={calculateTravelTime}
+                onRouteUpdate={setRouteData}
+                routeData={routeData}
               />
             ) : activeTrafficView === "incidents" ? (
               <IncidentSidebar
@@ -716,9 +731,11 @@ export default function Dashboard() {
                   activeTrafficView={activeTrafficView}
                   intersectionTrafficData={intersectionTrafficData}
                   incidents={incidents}
+                  selectedPoints={selectedPoints}
                   onSelectedPointsChange={setSelectedPoints}
                   onIncidentClick={handleIncidentClick}
                   center={incidentMapCenter}
+                  onRouteUpdate={setRouteData}
                 />
               </div>
               {activeTrafficView === "favorites" && !selectedIntersection && (
@@ -832,6 +849,7 @@ export default function Dashboard() {
                     <TrafficFlowDetailPanel
                       selectedPoints={selectedPoints}
                       onClose={handleCloseRoutePanel}
+                      onClearAnalysis={handleClearAnalysis}
                       calculateDistance={calculateDistance}
                       calculateTravelTime={calculateTravelTime}
                       isFullscreen={isDetailPanelFullscreen}
