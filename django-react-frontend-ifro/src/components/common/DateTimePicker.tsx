@@ -1,5 +1,4 @@
 import React, { memo, useCallback, useMemo, useEffect } from "react";
-// import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface DateTimePickerProps {
   currentDate: Date;
@@ -95,8 +94,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
         <div className="flex flex-1 items-center justify-center border-r min-w-[90px] px-2">
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeDate(-1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
@@ -112,8 +109,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
           </span>
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeDate(1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
@@ -125,8 +120,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
         <div className="flex flex-1 items-center justify-center border-r min-w-[70px] px-2">
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeHour(-1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
@@ -142,8 +135,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
           </span>
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeHour(1)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
@@ -155,8 +146,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
         <div className="flex flex-1 items-center justify-center min-w-[70px] px-2">
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeMinute(-5)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >
@@ -172,8 +161,6 @@ export const DateTimePicker = memo<DateTimePickerProps>(
           </span>
           {!isNowMode && (
             <button
-              
-              
               onClick={() => changeMinute(5)}
               className="text-gray-500 h-8 w-8 p-0 flex-shrink-0"
             >

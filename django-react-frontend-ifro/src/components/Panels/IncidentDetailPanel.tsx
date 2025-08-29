@@ -6,7 +6,6 @@ import { Incident } from "../../types/global.types";
 interface IncidentDetailPanelProps {
   incident: Incident;
   onClose: () => void;
-  isFullscreen: boolean;
 }
 
 // 긴 텍스트 2줄까지 자르고, 마우스 오버 시 전체 표시
@@ -44,7 +43,6 @@ const OneLineTruncate: React.FC<{ text: string }> = ({ text }) => (
 export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
   incident,
   onClose,
-  isFullscreen,
 }) => {
   const { t } = useTranslation();
 

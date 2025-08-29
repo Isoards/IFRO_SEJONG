@@ -12,16 +12,15 @@ import { TrafficFlowDetailPanel } from "../Panels/TrafficFlowDetailPanel";
 import { TableauDashboard } from "../Panels/TableauDashboard";
 import { Intersection, Incident } from "../../types/global.types";
 import { Map as MapIcon, Star } from "lucide-react";
-// import { DateTimePicker } from "../common/DateTimePicker";
 import {
   getTrafficIntersections,
   getIntersectionTrafficStat,
   getLatestIntersectionTrafficData, // 1. API 함수 import
 } from "../../api/intersections";
 import { getIncidents } from "../../api/incidents";
-// import { Button } from "../common/Button";
 import { calculateAllIntersectionTraffic } from "../../utils/intersectionUtils";
 import { ChatBotButton } from "../common/ChatBotButton";
+import { debugLog } from "../../utils/debugUtils";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -67,12 +66,14 @@ export default function Dashboard() {
   // 뷰 변경 핸들러 - 뷰 변경 시 선택된 점들 초기화
   const handleTrafficViewChange = useCallback(
     (view: "analysis" | "flow" | "incidents" | "favorites") => {
-      console.log(`Traffic view changing from ${activeTrafficView} to ${view}`);
+      debugLog.log(
+        `Traffic view changing from ${activeTrafficView} to ${view}`
+      );
       setActiveTrafficView(view);
 
       // 교차로 간 뷰가 아닌 다른 뷰(analysis, incidents, favorites)로 전환할 때 선택된 점들 초기화
       if (view === "analysis" || view === "incidents" || view === "favorites") {
-        console.log(`Clearing selected points for ${view} view`);
+        debugLog.log(`Clearing selected points for ${view} view`);
         setSelectedPoints([]);
       }
 
@@ -712,7 +713,6 @@ export default function Dashboard() {
                     <IncidentDetailPanel
                       incident={selectedIncident}
                       onClose={handleCloseIncidentPanel}
-                      isFullscreen={isDetailPanelFullscreen}
                     />
                   </div>
                 </div>
