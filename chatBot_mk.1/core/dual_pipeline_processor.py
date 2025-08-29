@@ -64,7 +64,8 @@ class DualPipelineProcessor:
                  answer_generator: AnswerGenerator,
                  sql_generator: SQLGenerator,
                  vector_store: HybridVectorStore,
-                 database_schema: Optional[DatabaseSchema] = None):
+                 database_schema: Optional[DatabaseSchema] = None,
+                 expression_enhancer=None):
         """
         DualPipelineProcessor 초기화
         
@@ -74,12 +75,14 @@ class DualPipelineProcessor:
             sql_generator: SQL 생성기
             vector_store: 벡터 저장소
             database_schema: 데이터베이스 스키마
+            expression_enhancer: 표현 향상기 (KeywordEnhancer)
         """
         self.question_analyzer = question_analyzer
         self.answer_generator = answer_generator
         self.sql_generator = sql_generator
         self.vector_store = vector_store
         self.database_schema = database_schema
+        self.expression_enhancer = expression_enhancer
         
         # Few-shot 예시 (SQL 생성용)
         self.few_shot_examples = [
@@ -97,66 +100,73 @@ class DualPipelineProcessor:
             }
         ]
         
-        logger.info("Dual Pipeline Processor 초기화 완료")
+        logger.info("Dual Pipeline Processor 초기화 완료 (다중 표현 지원)")
     
-    def process_question(self, question: str, use_context: bool = True) -> DualPipelineResult:
+    def process_question_with_expressions(self, question: str, 
+                                        conversation_history: Optional[List] = None) -> DualPipelineResult:
         """
-        질문을 Dual Pipeline으로 처리
+        다중 표현을 고려한 질문 처리
         
         Args:
             question: 사용자 질문
-            use_context: 컨텍스트 사용 여부
+            conversation_history: 대화 히스토리
             
         Returns:
-            Dual Pipeline 처리 결과
+            처리 결과
         """
         start_time = time.time()
         
-        # 1. 질문 분석
-        analyzed_question = self.question_analyzer.analyze_question(question, use_context)
-        logger.info(f"질문 분석 완료: {analyzed_question.question_type.value}, SQL 필요: {analyzed_question.requires_sql}")
+        # 1. 다중 표현을 고려한 질문 분석
+        analyzed_question = self.question_analyzer.analyze_question_with_expressions(
+            question, conversation_history, self.expression_enhancer
+        )
         
-        # 2. 파이프라인 분기 결정
-        pipeline_type = self._determine_pipeline_type(analyzed_question)
-        logger.info(f"파이프라인 타입 결정: {pipeline_type.value}")
+        # 2. 컨텍스트 결정
+        context = analyzed_question.metadata.get("context", "general") if analyzed_question.metadata else "general"
         
-        # 3. 파이프라인별 처리
+        # 3. 파이프라인 분기 결정
+        pipeline_type = self._determine_pipeline_type_with_expressions(analyzed_question, context)
+        
+        # 4. 파이프라인별 처리
         document_result = None
         sql_result = None
         
         if pipeline_type in [PipelineType.DOCUMENT_SEARCH, PipelineType.HYBRID]:
-            document_result = self._process_document_pipeline(analyzed_question)
+            document_result = self._process_document_search_with_expressions(
+                analyzed_question, context
+            )
         
         if pipeline_type in [PipelineType.SQL_QUERY, PipelineType.HYBRID]:
-            if self.database_schema and analyzed_question.requires_sql:
-                sql_result = self._process_sql_pipeline(analyzed_question)
-            else:
-                logger.warning("SQL 파이프라인 처리 불가: 스키마 없음 또는 SQL 불필요")
+            sql_result = self._process_sql_query_with_expressions(
+                analyzed_question, context
+            )
         
-        # 4. 결과 통합
-        final_answer, confidence_score = self._integrate_results(
-            analyzed_question, document_result, sql_result
+        # 5. 결과 통합
+        final_answer = self._combine_results_with_expressions(
+            document_result, sql_result, analyzed_question, context
         )
         
-        # 5. 최종 결과 생성
+        # 6. 피드백 업데이트
+        self._update_expression_feedback(question, analyzed_question, context)
+        
         total_time = time.time() - start_time
-        result = DualPipelineResult(
+        
+        return DualPipelineResult(
             question=question,
             analyzed_question=analyzed_question,
+            final_answer=final_answer,
+            confidence_score=self._calculate_confidence_with_expressions(
+                document_result, sql_result, analyzed_question
+            ),
+            total_processing_time=total_time,
             document_result=document_result,
             sql_result=sql_result,
-            final_answer=final_answer,
-            confidence_score=confidence_score,
-            total_processing_time=total_time,
             metadata={
                 "pipeline_type": pipeline_type.value,
-                "document_processed": document_result is not None,
-                "sql_processed": sql_result is not None
+                "context": context,
+                "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
             }
         )
-        
-        logger.info(f"Dual Pipeline 처리 완료: {total_time:.2f}초, 신뢰도: {confidence_score:.2f}")
-        return result
     
     def _determine_pipeline_type(self, analyzed_question: AnalyzedQuestion) -> PipelineType:
         """
@@ -340,6 +350,172 @@ class DualPipelineProcessor:
         
         # 결과가 없는 경우
         return "죄송합니다. 질문에 대한 답변을 찾을 수 없습니다.", 0.0
+    
+    def _determine_pipeline_type_with_expressions(self, analyzed_question: AnalyzedQuestion, 
+                                                context: str) -> PipelineType:
+        """표현을 고려한 파이프라인 타입 결정"""
+        # 기본 파이프라인 결정
+        base_type = self._determine_pipeline_type(analyzed_question)
+        
+        # 컨텍스트별 파이프라인 조정
+        if context == "database" and analyzed_question.requires_sql:
+            return PipelineType.SQL_QUERY
+        elif context == "traffic" and "사고" in analyzed_question.original_question.lower():
+            return PipelineType.HYBRID  # 교통사고는 문서와 데이터 모두 필요
+        elif context == "general" and len(analyzed_question.metadata.get("expressions", [])) > 2:
+            return PipelineType.HYBRID  # 다양한 표현이 있으면 하이브리드
+        
+        return base_type
+    
+    def _process_document_search_with_expressions(self, analyzed_question: AnalyzedQuestion, 
+                                                context: str) -> PipelineResult:
+        """표현을 고려한 문서 검색 처리"""
+        start_time = time.time()
+        
+        # 표현을 활용한 쿼리 향상
+        enhanced_query = analyzed_question.processed_question
+        if self.expression_enhancer:
+            enhanced_query = self.expression_enhancer.enhance_query_with_expressions(
+                analyzed_question.processed_question, context
+            )
+        
+        # 표현을 고려한 검색
+        relevant_chunks = self.vector_store.search_with_expressions(
+            enhanced_query, self.expression_enhancer, context, top_k=5
+        )
+        
+        # 답변 생성
+        answer = self.answer_generator.generate_answer_from_chunks(
+            analyzed_question.processed_question,
+            [chunk for chunk, _ in relevant_chunks],
+            model_type=ModelType.GEMINI
+        )
+        
+        processing_time = time.time() - start_time
+        
+        return PipelineResult(
+            pipeline_type=PipelineType.DOCUMENT_SEARCH,
+            answer=answer,
+            relevant_chunks=[chunk for chunk, _ in relevant_chunks],
+            confidence_score=self._calculate_document_confidence(relevant_chunks),
+            processing_time=processing_time,
+            metadata={
+                "enhanced_query": enhanced_query,
+                "context": context,
+                "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
+            }
+        )
+    
+    def _process_sql_query_with_expressions(self, analyzed_question: AnalyzedQuestion, 
+                                          context: str) -> PipelineResult:
+        """표현을 고려한 SQL 쿼리 처리"""
+        start_time = time.time()
+        
+        # 표현을 활용한 SQL 생성
+        enhanced_question = analyzed_question.processed_question
+        if self.expression_enhancer:
+            # 데이터베이스 관련 표현으로 쿼리 향상
+            db_expressions = self.expression_enhancer.get_multi_expressions(
+                analyzed_question.processed_question, "database"
+            )
+            if db_expressions:
+                enhanced_question += f" ({', '.join(db_expressions[:3])})"
+        
+        # SQL 생성
+        sql_query = self.sql_generator.generate_sql(
+            enhanced_question,
+            self.database_schema,
+            few_shot_examples=self.few_shot_examples
+        )
+        
+        # SQL 실행 및 결과 처리
+        if sql_query.is_valid:
+            try:
+                result = self.sql_generator.execute_sql(sql_query)
+                answer = self.answer_generator.generate_answer_from_sql_result(
+                    analyzed_question.processed_question,
+                    result,
+                    model_type=ModelType.GEMINI
+                )
+            except Exception as e:
+                logger.error(f"SQL 실행 오류: {e}")
+                answer = Answer(
+                    content=f"데이터베이스 조회 중 오류가 발생했습니다: {str(e)}",
+                    confidence=0.3
+                )
+        else:
+            answer = Answer(
+                content="적절한 SQL 쿼리를 생성할 수 없습니다.",
+                confidence=0.2
+            )
+        
+        processing_time = time.time() - start_time
+        
+        return PipelineResult(
+            pipeline_type=PipelineType.SQL_QUERY,
+            answer=answer,
+            sql_query=sql_query,
+            confidence_score=sql_query.confidence if sql_query.is_valid else 0.2,
+            processing_time=processing_time,
+            metadata={
+                "enhanced_question": enhanced_question,
+                "context": context,
+                "db_expressions_used": self.expression_enhancer.get_multi_expressions(
+                    analyzed_question.processed_question, "database"
+                ) if self.expression_enhancer else []
+            }
+        )
+    
+    def _combine_results_with_expressions(self, document_result: Optional[PipelineResult],
+                                        sql_result: Optional[PipelineResult],
+                                        analyzed_question: AnalyzedQuestion,
+                                        context: str) -> str:
+        """표현을 고려한 결과 통합"""
+        if document_result and sql_result:
+            # 하이브리드 결과 통합
+            doc_answer = document_result.answer.content
+            sql_answer = sql_result.answer.content
+            
+            # 컨텍스트별 통합 전략
+            if context == "traffic":
+                combined = f"{sql_answer}\n\n추가 정보: {doc_answer}"
+            elif context == "database":
+                combined = f"{sql_answer}\n\n관련 문서: {doc_answer}"
+            else:
+                combined = f"{sql_answer}\n\n{doc_answer}"
+            
+            return combined
+        
+        elif document_result:
+            return document_result.answer.content
+        elif sql_result:
+            return sql_result.answer.content
+        else:
+            return "죄송합니다. 적절한 답변을 찾을 수 없습니다."
+    
+    def _calculate_confidence_with_expressions(self, document_result: Optional[PipelineResult],
+                                             sql_result: Optional[PipelineResult],
+                                             analyzed_question: AnalyzedQuestion) -> float:
+        """표현을 고려한 신뢰도 계산"""
+        base_confidence = self._calculate_confidence(document_result, sql_result)
+        
+        # 표현 기반 신뢰도 보정
+        if analyzed_question.metadata and "expressions" in analyzed_question.metadata:
+            expression_count = len(analyzed_question.metadata["expressions"])
+            expression_boost = min(expression_count * 0.05, 0.2)  # 최대 20% 보정
+            base_confidence += expression_boost
+        
+        return min(base_confidence, 1.0)
+    
+    def _update_expression_feedback(self, question: str, analyzed_question: AnalyzedQuestion, context: str):
+        """표현 사용 피드백 업데이트"""
+        if self.expression_enhancer and analyzed_question.metadata:
+            expressions_used = analyzed_question.metadata.get("expressions", [])
+            if expressions_used:
+                # 임시로 성공으로 처리 (실제로는 사용자 피드백 필요)
+                self.expression_enhancer.update_expression_feedback(
+                    question, expressions_used, success=True
+                )
     
     def update_database_schema(self, schema: DatabaseSchema):
         """데이터베이스 스키마 업데이트"""

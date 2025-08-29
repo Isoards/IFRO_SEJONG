@@ -12,7 +12,7 @@ import os
 import logging
 import time
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent))
@@ -27,6 +27,7 @@ from core.sql_generator import SQLGenerator, DatabaseSchema
 from core.dual_pipeline_processor import DualPipelineProcessor
 from api.endpoints import run_server
 from utils.file_manager import PDFFileManager, setup_pdf_storage
+from utils.keyword_enhancer import KeywordEnhancer
 
 # 로깅 설정
 logging.basicConfig(
@@ -72,6 +73,7 @@ class PDFQASystem:
         self.sql_generator: Optional[SQLGenerator] = None
         self.dual_pipeline_processor: Optional[DualPipelineProcessor] = None
         self.file_manager: Optional[PDFFileManager] = None
+        self.keyword_enhancer: Optional[KeywordEnhancer] = None
         
         logger.info(f"PDF QA 시스템 초기화: {model_type}/{model_name}")
     
@@ -174,9 +176,16 @@ class PDFQASystem:
             # 8. 파일 매니저 초기화
             self.file_manager = setup_pdf_storage()
             logger.info("✓ 파일 매니저 초기화 완료")
+
+            # 9. 키워드 향상기 초기화 (다중 표현 인덱싱 지원)
+            self.keyword_enhancer = KeywordEnhancer(domain="traffic")
+            logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
             
-            # 9. data 폴더의 PDF 파일들 자동 처리
+            # 10. data 폴더의 PDF 파일들 자동 처리
             self.process_data_folder_pdfs()
+            
+            # 11. 다중 표현 인덱싱 통합
+            self._integrate_multi_expression_indexing()
             
             logger.info("모든 컴포넌트 초기화 완료!")
             return True
@@ -184,6 +193,22 @@ class PDFQASystem:
         except Exception as e:
             logger.error(f"컴포넌트 초기화 실패: {e}")
             return False
+    
+    def _integrate_multi_expression_indexing(self):
+        """다중 표현 인덱싱 통합"""
+        try:
+            # Dual Pipeline 프로세서에 표현 향상기 연결
+            if hasattr(self.dual_pipeline_processor, 'expression_enhancer'):
+                self.dual_pipeline_processor.expression_enhancer = self.keyword_enhancer
+            
+            # 벡터 저장소에 표현 향상기 연결
+            if hasattr(self.vector_store, 'expression_enhancer'):
+                self.vector_store.expression_enhancer = self.keyword_enhancer
+            
+            logger.info("✓ 다중 표현 인덱싱 통합 완료")
+            
+        except Exception as e:
+            logger.warning(f"다중 표현 인덱싱 통합 실패 (무시됨): {e}")
     
     def process_data_folder_pdfs(self):
         """data 폴더의 모든 PDF 파일들을 자동으로 처리"""
@@ -247,8 +272,11 @@ class PDFQASystem:
             # 1. PDF 텍스트 추출 및 임베딩 생성
             chunks, metadata = self.pdf_processor.process_pdf(pdf_path)
             
-            # 2. 벡터 저장소에 추가
-            self.vector_store.add_chunks(chunks)
+            # 2. 벡터 저장소에 추가 (다중 표현 인덱싱 지원)
+            if hasattr(self.vector_store, 'add_chunks_with_expressions'):
+                self.vector_store.add_chunks_with_expressions(chunks, self.keyword_enhancer)
+            else:
+                self.vector_store.add_chunks(chunks)
             
             # 3. 저장소 저장
             self.vector_store.save()
