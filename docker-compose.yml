@@ -53,6 +53,7 @@ services:
       - /app/node_modules
     environment:
       - NODE_OPTIONS=--max-old-space-size=4096
+      - REACT_APP_CHATBOT_IP=http://localhost:8008
     deploy:
       resources:
         limits:
@@ -60,5 +61,26 @@ services:
     stdin_open: true
     tty: true
 
+  chatbot:
+    build:
+      context: ./chatBot_mk.1
+    container_name: chatbot
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./chatBot_mk.1:/app
+      - chatbot_data:/app/data
+      - chatbot_vector_store:/app/vector_store
+    environment:
+      - PYTHONPATH=/app
+      - MODEL_TYPE=ollama
+      - MODEL_NAME=mistral:latest
+      - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   mysql_data:
+  chatbot_data:
+  chatbot_vector_store:

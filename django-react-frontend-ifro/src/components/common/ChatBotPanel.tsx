@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Minimize2 } from "lucide-react";
+import { sendChatMessage, testChatConnection } from "../../api/chat";
 
 interface Message {
   id: string;
@@ -40,12 +41,16 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // 패널이 열릴 때 입력창에 포커스
+  // 패널이 열릴 때 입력창에 포커스 및 연결 테스트
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
+    if (isOpen) {
+      if (inputRef.current) {
+        setTimeout(() => {
+          inputRef.current?.focus();
+        }, 100);
+      }
+      // 챗봇 연결 테스트
+      testChatConnection();
     }
   }, [isOpen]);
 
@@ -64,13 +69,12 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     setIsLoading(true);
 
     try {
-      // TODO: 실제 AI API 호출 구현
-      // 현재는 더미 응답
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
+      // 실제 챗봇 API 호출
+      const response = await sendChatMessage(userMessage.content);
+      
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: generateDummyResponse(userMessage.content),
+        content: response,
         sender: "bot",
         timestamp: new Date(),
       };
@@ -80,8 +84,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
       console.error("AI 응답 생성 중 오류:", error);
       const errorResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content:
-          "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        content: error instanceof Error ? error.message : "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
         sender: "bot",
         timestamp: new Date(),
       };
@@ -98,31 +101,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     }
   };
 
-  // 더미 응답 생성 함수 (실제 AI API로 대체 예정)
-  const generateDummyResponse = (userInput: string): string => {
-    const lowerInput = userInput.toLowerCase();
 
-    if (lowerInput.includes("교통량") || lowerInput.includes("통행량")) {
-      return "교통량 데이터는 대시보드의 '분석' 탭에서 확인하실 수 있습니다. 특정 교차로를 클릭하시면 해당 지점의 상세한 교통량 정보를 볼 수 있어요.";
-    } else if (lowerInput.includes("사고") || lowerInput.includes("incident")) {
-      return "교통사고 정보는 '사고' 탭에서 확인 가능합니다. 빨간색 삼각형 아이콘을 클릭하시면 사고 목록과 상세 정보를 볼 수 있습니다.";
-    } else if (lowerInput.includes("경로") || lowerInput.includes("route")) {
-      return "경로 분석은 '교통흐름' 탭에서 이용하실 수 있습니다. 지도에서 두 지점을 선택하시면 해당 구간의 교통 흐름을 분석해드립니다.";
-    } else if (
-      lowerInput.includes("즐겨찾기") ||
-      lowerInput.includes("favorite")
-    ) {
-      return "관심 있는 교차로나 사고를 즐겨찾기에 추가하실 수 있습니다. 별표 아이콘을 클릭하시면 '즐겨찾기' 탭에서 쉽게 찾아보실 수 있어요.";
-    } else if (
-      lowerInput.includes("help") ||
-      lowerInput.includes("도움") ||
-      lowerInput.includes("사용법")
-    ) {
-      return "IFRO 대시보드 사용법:\n\n🚗 분석: 교차로별 교통량 분석\n🔄 교통흐름: 두 지점 간 경로 분석\n⚠️ 사고: 교통사고 현황\n⭐ 즐겨찾기: 관심 지점 관리\n📊 Tableau: 고급 분석 대시보드\n\n더 자세한 정보가 필요하시면 구체적으로 물어보세요!";
-    } else {
-      return "네, 무엇을 도와드릴까요? 교통 데이터 분석, 대시보드 사용법, 특정 기능에 대해 궁금한 점이 있으시면 언제든 말씀해 주세요!";
-    }
-  };
 
   if (!isOpen) return null;
 

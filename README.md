@@ -2,7 +2,7 @@
 산학연계 뉴노멀 프로젝트 - 지능형 교통 흐름 및 도로 운영 시스템
 
 ## 🚀 프로젝트 개요
-IFRO는 Django 백엔드와 React 프론트엔드로 구성된 지능형 교통 분석 및 관리 시스템입니다. 실시간 교통 데이터 분석, 교통사고 관리, 교차로 간 통행량 분석 등의 기능을 제공합니다.
+IFRO는 Django 백엔드와 React 프론트엔드로 구성된 지능형 교통 분석 및 관리 시스템입니다. 실시간 교통 데이터 분석, 교통사고 관리, 교차로 간 통행량 분석 등의 기능을 제공합니다. 또한 PDF QA 챗봇 시스템을 통합하여 문서 기반 질의응답 기능도 제공합니다.
 
 ## 📁 프로젝트 구조
 ```
@@ -27,6 +27,18 @@ IFRO/
 │   │   ├── types/                    # TypeScript 타입 정의
 │   │   └── utils/                    # 유틸리티 함수
 │   └── package.json
+├── chatBot_mk.1/                     # PDF QA 챗봇 시스템
+│   ├── api/                          # FastAPI 엔드포인트
+│   ├── core/                         # 핵심 처리 모듈
+│   ├── data/                         # PDF 데이터 및 벡터 저장소
+│   ├── utils/                        # 유틸리티 함수
+│   ├── main.py                       # 메인 실행 파일
+│   ├── run_server.py                 # 서버 실행 스크립트
+│   ├── requirements.txt              # Python 의존성
+│   └── Dockerfile                    # 챗봇 컨테이너 설정
+├── docker-compose.yml                # 전체 서비스 오케스트레이션
+├── start_chatbot.sh                  # 챗봇 서비스 시작 스크립트 (Linux/Mac)
+├── start_chatbot.ps1                 # 챗봇 서비스 시작 스크립트 (Windows)
 └── README.md
 ```
 
@@ -312,6 +324,81 @@ python manage.py migrate
 - 📍 **교차로 마커**: 클릭 가능한 교차로 표시
 - 🚨 **사고 마커**: 교통사고 위치 표시
 - 🔗 **연결선**: 교차로 간 통행량 흐름 시각화
+
+## 🤖 PDF QA 챗봇 시스템
+
+### 개요
+PDF QA 챗봇 시스템은 문서 기반 질의응답을 제공하는 AI 시스템입니다. Dual Pipeline 아키텍처를 사용하여 문서 검색과 SQL 질의를 통합한 하이브리드 답변을 생성합니다.
+
+### 주요 기능
+- 📄 **PDF 문서 처리**: 다양한 PDF 형식 지원
+- 🔍 **벡터 검색**: 의미 기반 문서 검색
+- 💬 **대화 컨텍스트**: 이전 대화 기반 연속성 유지
+- 🗄️ **SQL 생성**: 데이터베이스 스키마 기반 SQL 쿼리 생성
+- 🔄 **Dual Pipeline**: 문서 검색 + SQL 질의 통합
+- 📊 **평가 시스템**: 답변 품질 자동 평가
+
+### 챗봇 서비스 실행
+
+#### 1. Docker Compose로 전체 서비스 실행
+```bash
+# 모든 서비스 실행 (백엔드, 프론트엔드, 챗봇)
+docker-compose up --build
+
+# 챗봇 서비스만 실행
+docker-compose up --build chatbot
+```
+
+#### 2. 스크립트로 챗봇 서비스만 실행
+```bash
+# Linux/Mac
+./start_chatbot.sh
+
+# Windows PowerShell
+.\start_chatbot.ps1
+```
+
+#### 3. 수동으로 챗봇 서비스 실행
+```bash
+cd chatBot_mk.1
+docker build -t chatbot .
+docker run -p 8008:8008 chatbot
+```
+
+### 챗봇 API 엔드포인트
+
+#### 기본 엔드포인트
+- `GET /` - 서버 상태 확인
+- `GET /docs` - API 문서 (Swagger UI)
+- `GET /health` - 헬스 체크
+
+#### PDF 관련
+- `POST /upload-pdf` - PDF 파일 업로드
+- `GET /pdfs` - 등록된 PDF 목록
+- `DELETE /pdfs/{pdf_id}` - PDF 삭제
+
+#### 질의응답
+- `POST /ask` - 질문하기
+- `POST /ask-with-context` - 대화 컨텍스트와 함께 질문
+- `GET /conversation-history` - 대화 기록 조회
+
+#### 시스템 관리
+- `GET /system-status` - 시스템 상태 확인
+- `POST /update-model-config` - 모델 설정 변경
+- `POST /evaluate-answers` - 답변 품질 평가
+
+### 접속 정보
+- **서버 주소**: http://localhost:8008
+- **API 문서**: http://localhost:8008/docs
+- **헬스 체크**: http://localhost:8008/health
+
+### 환경 변수 설정
+```bash
+# 챗봇 서비스 환경 변수
+MODEL_TYPE=ollama                    # 모델 타입 (ollama/huggingface/llama_cpp)
+MODEL_NAME=mistral:latest           # 모델 이름
+EMBEDDING_MODEL=jhgan/ko-sroberta-multitask  # 임베딩 모델
+```
 
 ## 🔒 보안 고려사항
 

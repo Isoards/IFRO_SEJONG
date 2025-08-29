@@ -848,3 +848,97 @@ def generate_secure_ai_traffic_analysis(request, intersection_id: int, time_peri
     except Exception as e:
         print(f"Secure AI Analysis Error: {str(e)}")
         raise HttpError(500, "Failed to generate AI analysis. Please check API configuration.")
+
+# ChatBot Endpoints
+@router.post("/chat/message")
+def chat_with_ai(request, message: str, context: dict = None):
+    """
+    Chat with AI assistant
+    
+    Request Body:
+    - message: User's message
+    - context: Optional context information (current intersection, etc.)
+    
+    Returns:
+    - response: AI's response
+    - timestamp: Response timestamp
+    """
+    try:
+        if not message or not message.strip():
+            raise HttpError(400, "Message cannot be empty")
+        
+        # Initialize Gemini analyzer for chat
+        analyzer = GeminiTrafficAnalyzer()
+        
+        # Create chat prompt
+        chat_prompt = f"""
+        당신은 IFRO 교통 분석 시스템의 AI 어시스턴트입니다. 
+        사용자의 질문에 친절하고 도움이 되는 답변을 제공해주세요.
+        
+        사용자 메시지: {message}
+        
+        가능한 질문 유형:
+        - 교통 데이터 분석 방법
+        - 대시보드 사용법
+        - 교차로 정보
+        - 교통사고 정보
+        - 경로 분석
+        - 즐겨찾기 기능
+        - 일반적인 교통 관련 질문
+        
+        답변은 한국어로 제공하고, 구체적이고 실용적인 정보를 포함해주세요.
+        """
+        
+        # Call Gemini API
+        response = analyzer._call_gemini_api(chat_prompt)
+        
+        return {
+            "success": True,
+            "response": response,
+            "timestamp": timezone.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"Chat API Error: {str(e)}")
+        raise HttpError(500, "챗봇 응답 생성 중 오류가 발생했습니다.")
+
+@secure_router.post("/chat/message")
+def secure_chat_with_ai(request, message: str, context: dict = None):
+    """
+    Secure chat with AI assistant
+    """
+    try:
+        if not message or not message.strip():
+            raise HttpError(400, "Message cannot be empty")
+        
+        analyzer = GeminiTrafficAnalyzer()
+        
+        chat_prompt = f"""
+        당신은 IFRO 교통 분석 시스템의 AI 어시스턴트입니다. 
+        사용자의 질문에 친절하고 도움이 되는 답변을 제공해주세요.
+        
+        사용자 메시지: {message}
+        
+        가능한 질문 유형:
+        - 교통 데이터 분석 방법
+        - 대시보드 사용법
+        - 교차로 정보
+        - 교통사고 정보
+        - 경로 분석
+        - 즐겨찾기 기능
+        - 일반적인 교통 관련 질문
+        
+        답변은 한국어로 제공하고, 구체적이고 실용적인 정보를 포함해주세요.
+        """
+        
+        response = analyzer._call_gemini_api(chat_prompt)
+        
+        return {
+            "success": True,
+            "response": response,
+            "timestamp": timezone.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"Secure Chat API Error: {str(e)}")
+        raise HttpError(500, "챗봇 응답 생성 중 오류가 발생했습니다.")
