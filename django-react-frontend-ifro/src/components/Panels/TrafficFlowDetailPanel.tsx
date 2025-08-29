@@ -6,6 +6,7 @@ import { Star } from "lucide-react";
 interface TrafficFlowDetailPanelProps {
   selectedPoints: Intersection[];
   onClose: () => void;
+  onClearAnalysis?: () => void; // 분석 정보와 마커를 지우는 함수
   calculateDistance: (point1: Intersection, point2: Intersection) => number;
   calculateTravelTime: (point1: Intersection, point2: Intersection) => number;
   isFullscreen?: boolean;
@@ -16,6 +17,7 @@ interface TrafficFlowDetailPanelProps {
 export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
   selectedPoints,
   onClose,
+  onClearAnalysis,
   calculateDistance,
   calculateTravelTime,
   isFullscreen = false,
@@ -58,6 +60,14 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
     }
   };
 
+  // Close 버튼 클릭 시 분석 정보와 마커를 지우는 함수
+  const handleClose = () => {
+    if (onClearAnalysis) {
+      onClearAnalysis(); // 분석 정보와 마커 지우기
+    }
+    onClose(); // 패널 닫기
+  };
+
   return (
     <div className="h-full w-full">
       {/* 헤더 영역 */}
@@ -98,7 +108,7 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
               </button>
             )}
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
               title="Close analysis panel"
             >
