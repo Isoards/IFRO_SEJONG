@@ -209,6 +209,186 @@ class QuestionAnalyzer:
         logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개")
         return analyzed_question
     
+    def analyze_question_with_expressions(self, question: str, 
+                                        conversation_history: Optional[List[ConversationItem]] = None,
+                                        expression_enhancer=None) -> AnalyzedQuestion:
+        """
+        다중 표현을 고려한 질문 분석
+        
+        Args:
+            question: 분석할 질문
+            conversation_history: 대화 히스토리
+            expression_enhancer: 표현 향상기 (KeywordEnhancer)
+            
+        Returns:
+            분석된 질문 정보
+        """
+        # 기본 질문 분석
+        analyzed = self.analyze_question(question, conversation_history)
+        
+        # 다중 표현 분석 추가
+        if expression_enhancer:
+            analyzed = self._enhance_analysis_with_expressions(analyzed, expression_enhancer)
+        
+        return analyzed
+    
+    def _enhance_analysis_with_expressions(self, analyzed: AnalyzedQuestion, 
+                                         expression_enhancer) -> AnalyzedQuestion:
+        """표현을 활용한 분석 강화"""
+        # 컨텍스트 결정
+        context = self._determine_context(analyzed.original_question)
+        
+        # 관련 표현들 추출
+        expressions = expression_enhancer.get_multi_expressions(
+            analyzed.original_question, context
+        )
+        
+        # 최적 표현 선택
+        optimal_expressions = expression_enhancer.get_optimal_expressions(
+            analyzed.original_question, context, top_k=3
+        )
+        
+        # 키워드 확장
+        enhanced_keywords = analyzed.keywords.copy()
+        for expr, score in optimal_expressions:
+            if expr not in enhanced_keywords:
+                enhanced_keywords.append(expr)
+        
+        # 의도 분석 강화
+        enhanced_intent = self._analyze_intent_with_expressions(
+            analyzed.original_question, expressions, context
+        )
+        
+        # 메타데이터에 표현 정보 추가
+        expression_metadata = {
+            "context": context,
+            "expressions": expressions,
+            "optimal_expressions": optimal_expressions,
+            "expression_count": len(expressions)
+        }
+        
+        if analyzed.metadata is None:
+            analyzed.metadata = {}
+        analyzed.metadata.update(expression_metadata)
+        
+        # 분석 결과 업데이트
+        analyzed.keywords = enhanced_keywords
+        analyzed.intent = enhanced_intent
+        
+        return analyzed
+    
+    def _determine_context(self, question: str) -> str:
+        """질문의 컨텍스트 결정"""
+        question_lower = question.lower()
+        
+        # 교통 관련 키워드
+        traffic_keywords = ["교통", "사고", "교차로", "신호등", "교통량", "정체", "교통사고"]
+        if any(keyword in question_lower for keyword in traffic_keywords):
+            return "traffic"
+        
+        # 데이터베이스 관련 키워드
+        db_keywords = ["조회", "통계", "데이터", "테이블", "SELECT", "COUNT", "WHERE"]
+        if any(keyword in question_lower for keyword in db_keywords):
+            return "database"
+        
+        return "general"
+    
+    def _analyze_intent_with_expressions(self, question: str, 
+                                       expressions: List[str], 
+                                       context: str) -> str:
+        """표현을 고려한 의도 분석"""
+        question_lower = question.lower()
+        
+        # 기본 의도 분석
+        base_intent = self._analyze_basic_intent(question)
+        
+        # 표현 기반 의도 보정
+        if context == "traffic":
+            if any(expr in question_lower for expr in ["사고", "충돌", "발생"]):
+                return "traffic_accident_inquiry"
+            elif any(expr in question_lower for expr in ["교통량", "트래픽", "정체"]):
+                return "traffic_volume_inquiry"
+            elif any(expr in question_lower for expr in ["교차로", "신호등", "신호"]):
+                return "traffic_signal_inquiry"
+        
+        elif context == "database":
+            if any(expr in question_lower for expr in ["조회", "검색", "찾기"]):
+                return "data_retrieval"
+            elif any(expr in question_lower for expr in ["통계", "집계", "평균"]):
+                return "data_analysis"
+            elif any(expr in question_lower for expr in ["기간", "날짜", "시간"]):
+                return "temporal_analysis"
+        
+        return base_intent
+    
+    def _analyze_basic_intent(self, question: str) -> str:
+        """기본 의도 분석"""
+        question_lower = question.lower()
+        
+        # 질문 유형별 의도 분류
+        if any(word in question_lower for word in ["무엇", "뭐", "어떤"]):
+            return "what_inquiry"
+        elif any(word in question_lower for word in ["언제", "몇시", "날짜"]):
+            return "when_inquiry"
+        elif any(word in question_lower for word in ["어디", "장소", "위치"]):
+            return "where_inquiry"
+        elif any(word in question_lower for word in ["누가", "누구", "사람"]):
+            return "who_inquiry"
+        elif any(word in question_lower for word in ["왜", "이유", "원인"]):
+            return "why_inquiry"
+        elif any(word in question_lower for word in ["어떻게", "방법", "과정"]):
+            return "how_inquiry"
+        else:
+            return "general_inquiry"
+    
+    def get_expression_suggestions(self, question: str, 
+                                 expression_enhancer=None,
+                                 context: str = "general") -> List[str]:
+        """
+        질문에 대한 표현 제안
+        
+        Args:
+            question: 원본 질문
+            expression_enhancer: 표현 향상기
+            context: 컨텍스트
+            
+        Returns:
+            제안 표현 리스트
+        """
+        if not expression_enhancer:
+            return []
+        
+        # 관련 표현들 가져오기
+        expressions = expression_enhancer.get_multi_expressions(question, context)
+        
+        # 질문 개선 제안 생성
+        suggestions = []
+        for expr in expressions[:5]:  # 상위 5개만 사용
+            if expr.lower() not in question.lower():
+                # 질문에 표현을 추가한 제안 생성
+                suggestion = f"{question} ({expr} 관련)"
+                suggestions.append(suggestion)
+        
+        return suggestions
+    
+    def update_expression_feedback(self, question: str, 
+                                 expressions_used: List[str],
+                                 success: bool,
+                                 expression_enhancer=None):
+        """
+        표현 사용 피드백 업데이트
+        
+        Args:
+            question: 원본 질문
+            expressions_used: 사용된 표현들
+            success: 성공 여부
+            expression_enhancer: 표현 향상기
+        """
+        if expression_enhancer:
+            expression_enhancer.update_expression_feedback(
+                question, expressions_used, success
+            )
+    
     def _preprocess_question(self, question: str) -> str:
         """
         질문 전처리

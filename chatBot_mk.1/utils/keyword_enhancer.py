@@ -7,11 +7,115 @@
 
 import re
 import json
-from typing import List, Dict, Set, Tuple, Optional
-from collections import Counter
+import pickle
+from typing import List, Dict, Set, Tuple, Optional, Any
+from collections import Counter, defaultdict
 import logging
+from datetime import datetime
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+class ExpressionChain:
+    """표현 체인 관리 클래스"""
+    
+    def __init__(self, base_expression: str, related_expressions: List[str], weight: float = 1.0):
+        self.base_expression = base_expression
+        self.related_expressions = related_expressions
+        self.weight = weight
+        self.usage_count = 0
+        self.success_count = 0
+        self.last_used = None
+        
+    def update_usage(self, success: bool = True):
+        """사용 통계 업데이트"""
+        self.usage_count += 1
+        if success:
+            self.success_count += 1
+        self.last_used = datetime.now()
+        
+    def get_success_rate(self) -> float:
+        """성공률 계산"""
+        return self.success_count / self.usage_count if self.usage_count > 0 else 0.0
+
+class MultiExpressionIndex:
+    """다중 표현 인덱스 관리 클래스"""
+    
+    def __init__(self):
+        self.expression_chains: Dict[str, ExpressionChain] = {}
+        self.context_weights: Dict[str, Dict[str, float]] = defaultdict(dict)
+        self.user_feedback: List[Dict] = []
+        
+    def add_expression_chain(self, base_expression: str, related_expressions: List[str], 
+                           context: str = "general", weight: float = 1.0):
+        """표현 체인 추가"""
+        chain = ExpressionChain(base_expression, related_expressions, weight)
+        self.expression_chains[base_expression] = chain
+        self.context_weights[context][base_expression] = weight
+        
+    def get_expressions_for_query(self, query: str, context: str = "general") -> List[str]:
+        """쿼리에 대한 모든 관련 표현 반환"""
+        expressions = []
+        for base_expr, chain in self.expression_chains.items():
+            if base_expr.lower() in query.lower():
+                expressions.extend([base_expr] + chain.related_expressions)
+            else:
+                for related_expr in chain.related_expressions:
+                    if related_expr.lower() in query.lower():
+                        expressions.extend([base_expr] + chain.related_expressions)
+                        break
+        return list(set(expressions))
+    
+    def update_feedback(self, query: str, expressions_used: List[str], 
+                       success: bool, user_rating: Optional[int] = None):
+        """사용자 피드백 업데이트"""
+        feedback = {
+            "query": query,
+            "expressions_used": expressions_used,
+            "success": success,
+            "user_rating": user_rating,
+            "timestamp": datetime.now()
+        }
+        self.user_feedback.append(feedback)
+        
+        # 표현 체인 성공률 업데이트
+        for expr in expressions_used:
+            if expr in self.expression_chains:
+                self.expression_chains[expr].update_usage(success)
+    
+    def get_optimal_expressions(self, query: str, context: str = "general", 
+                              top_k: int = 5) -> List[Tuple[str, float]]:
+        """최적 표현 선택 (성공률과 가중치 기반)"""
+        candidates = []
+        for base_expr, chain in self.expression_chains.items():
+            if base_expr.lower() in query.lower() or any(rel.lower() in query.lower() for rel in chain.related_expressions):
+                # 성공률과 가중치를 결합한 점수 계산
+                success_rate = chain.get_success_rate()
+                context_weight = self.context_weights[context].get(base_expr, 1.0)
+                score = (success_rate * 0.7 + context_weight * 0.3) * chain.weight
+                candidates.append((base_expr, score))
+        
+        # 점수순 정렬 후 상위 k개 반환
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[:top_k]
+    
+    def save(self, filepath: str):
+        """인덱스 저장"""
+        data = {
+            "expression_chains": self.expression_chains,
+            "context_weights": dict(self.context_weights),
+            "user_feedback": self.user_feedback
+        }
+        with open(filepath, 'wb') as f:
+            pickle.dump(data, f)
+    
+    def load(self, filepath: str):
+        """인덱스 로드"""
+        with open(filepath, 'rb') as f:
+            data = pickle.load(f)
+        self.expression_chains = data["expression_chains"]
+        self.context_weights = defaultdict(dict, data["context_weights"])
+        self.user_feedback = data["user_feedback"]
 
 class KeywordEnhancer:
     """
@@ -36,7 +140,61 @@ class KeywordEnhancer:
         self.synonym_dict = self._load_synonym_dictionary()
         self.abbreviation_dict = self._load_abbreviation_dictionary()
         
+        # 다중 표현 인덱스 초기화
+        self.multi_expression_index = MultiExpressionIndex()
+        self._initialize_multi_expressions()
+        
         logger.info(f"KeywordEnhancer 초기화 완료 (도메인: {domain})")
+    
+    def _initialize_multi_expressions(self):
+        """다중 표현 인덱스 초기화"""
+        # 교통 도메인 특화 표현
+        traffic_expressions = {
+            "교통사고": ["사고", "충돌", "교통사고", "교통사고사고", "교통사고"],
+            "교차로": ["사거리", "교차점", "인터섹션", "교차로"],
+            "신호등": ["신호", "신호등", "트래픽라이트", "신호등"],
+            "교통량": ["트래픽", "교통량", "차량수", "교통량"],
+            "교통정체": ["정체", "교통정체", "막힘", "교통정체"],
+            "사고발생": ["사고", "발생", "사고발생", "사고발생"],
+            "교통상황": ["상황", "교통상황", "교통상황", "교통상황"],
+            "교통정보": ["정보", "교통정보", "교통정보", "교통정보"],
+            "교통관리": ["관리", "교통관리", "교통관리", "교통관리"],
+            "교통안전": ["안전", "교통안전", "교통안전", "교통안전"]
+        }
+        
+        # 데이터베이스 쿼리 관련 표현
+        db_expressions = {
+            "조회": ["검색", "찾기", "가져오기", "SELECT", "조회"],
+            "통계": ["집계", "합계", "평균", "COUNT", "통계"],
+            "기간": ["기간", "날짜", "시간", "기간", "기간"],
+            "정렬": ["순서", "정렬", "ORDER BY", "정렬"],
+            "필터": ["조건", "필터", "WHERE", "필터"],
+            "그룹": ["묶음", "그룹", "GROUP BY", "그룹"],
+            "최대": ["최대값", "MAX", "최대"],
+            "최소": ["최소값", "MIN", "최소"],
+            "평균": ["평균값", "AVG", "평균"],
+            "합계": ["총합", "SUM", "합계"]
+        }
+        
+        # 일반 표현
+        general_expressions = {
+            "시스템": ["시스템", "프로그램", "소프트웨어", "시스템"],
+            "데이터": ["데이터", "정보", "자료", "데이터"],
+            "사용자": ["사용자", "관리자", "고객", "사용자"],
+            "기능": ["기능", "특성", "역할", "기능"],
+            "설정": ["설정", "구성", "환경", "설정"],
+            "문제": ["문제", "오류", "장애", "문제"],
+            "해결": ["해결", "수정", "개선", "해결"]
+        }
+        
+        # 표현 체인 추가
+        for context, expressions in [("traffic", traffic_expressions), 
+                                   ("database", db_expressions), 
+                                   ("general", general_expressions)]:
+            for base_expr, related_exprs in expressions.items():
+                self.multi_expression_index.add_expression_chain(
+                    base_expr, related_exprs, context, weight=1.2 if context == "traffic" else 1.0
+                )
     
     def _load_domain_keywords(self, domain: str) -> Dict[str, float]:
         """
@@ -396,6 +554,141 @@ class KeywordEnhancer:
         similarities.sort(key=lambda x: x[1], reverse=True)
         
         return similarities
+    
+    # 다중 표현 인덱싱 관련 메서드들
+    def get_multi_expressions(self, query: str, context: str = "general") -> List[str]:
+        """
+        쿼리에 대한 다중 표현 반환
+        
+        Args:
+            query: 사용자 쿼리
+            context: 컨텍스트 (traffic, database, general 등)
+            
+        Returns:
+            관련된 모든 표현 리스트
+        """
+        return self.multi_expression_index.get_expressions_for_query(query, context)
+    
+    def get_optimal_expressions(self, query: str, context: str = "general", 
+                              top_k: int = 5) -> List[Tuple[str, float]]:
+        """
+        최적 표현 선택 (성공률과 가중치 기반)
+        
+        Args:
+            query: 사용자 쿼리
+            context: 컨텍스트
+            top_k: 반환할 최적 표현 수
+            
+        Returns:
+            (표현, 점수) 튜플 리스트
+        """
+        return self.multi_expression_index.get_optimal_expressions(query, context, top_k)
+    
+    def update_expression_feedback(self, query: str, expressions_used: List[str], 
+                                 success: bool, user_rating: Optional[int] = None):
+        """
+        표현 사용 피드백 업데이트
+        
+        Args:
+            query: 원본 쿼리
+            expressions_used: 사용된 표현들
+            success: 성공 여부
+            user_rating: 사용자 평가 (1-5)
+        """
+        self.multi_expression_index.update_feedback(query, expressions_used, success, user_rating)
+    
+    def add_custom_expression_chain(self, base_expression: str, related_expressions: List[str], 
+                                  context: str = "general", weight: float = 1.0):
+        """
+        사용자 정의 표현 체인 추가
+        
+        Args:
+            base_expression: 기본 표현
+            related_expressions: 관련 표현들
+            context: 컨텍스트
+            weight: 가중치
+        """
+        self.multi_expression_index.add_expression_chain(
+            base_expression, related_expressions, context, weight
+        )
+    
+    def enhance_query_with_expressions(self, query: str, context: str = "general") -> str:
+        """
+        표현을 활용한 쿼리 향상
+        
+        Args:
+            query: 원본 쿼리
+            context: 컨텍스트
+            
+        Returns:
+            향상된 쿼리
+        """
+        expressions = self.get_multi_expressions(query, context)
+        if not expressions:
+            return query
+        
+        # 쿼리에 표현들을 추가하여 검색 범위 확장
+        enhanced_query = query
+        for expr in expressions[:3]:  # 상위 3개 표현만 사용
+            if expr.lower() not in query.lower():
+                enhanced_query += f" {expr}"
+        
+        return enhanced_query
+    
+    def get_expression_statistics(self) -> Dict[str, Any]:
+        """
+        표현 사용 통계 반환
+        
+        Returns:
+            표현 통계 정보
+        """
+        stats = {
+            "total_chains": len(self.multi_expression_index.expression_chains),
+            "total_feedback": len(self.multi_expression_index.user_feedback),
+            "contexts": list(self.multi_expression_index.context_weights.keys()),
+            "top_expressions": []
+        }
+        
+        # 상위 사용 표현들
+        usage_stats = []
+        for base_expr, chain in self.multi_expression_index.expression_chains.items():
+            usage_stats.append({
+                "expression": base_expr,
+                "usage_count": chain.usage_count,
+                "success_rate": chain.get_success_rate(),
+                "weight": chain.weight
+            })
+        
+        usage_stats.sort(key=lambda x: x["usage_count"], reverse=True)
+        stats["top_expressions"] = usage_stats[:10]
+        
+        return stats
+    
+    def save_multi_expression_index(self, filepath: str):
+        """다중 표현 인덱스 저장"""
+        self.multi_expression_index.save(filepath)
+    
+    def load_multi_expression_index(self, filepath: str):
+        """다중 표현 인덱스 로드"""
+        self.multi_expression_index.load(filepath)
+    
+    def get_context_specific_expressions(self, context: str) -> Dict[str, List[str]]:
+        """
+        특정 컨텍스트의 표현들 반환
+        
+        Args:
+            context: 컨텍스트 이름
+            
+        Returns:
+            표현 체인 딕셔너리
+        """
+        context_expressions = {}
+        for base_expr, chain in self.multi_expression_index.expression_chains.items():
+            if context in self.multi_expression_index.context_weights and \
+               base_expr in self.multi_expression_index.context_weights[context]:
+                context_expressions[base_expr] = chain.related_expressions
+        
+        return context_expressions
 
 # 사용 예시
 if __name__ == "__main__":

@@ -477,31 +477,197 @@ class ChromaDBVectorStore(VectorStoreInterface):
 
 class HybridVectorStore:
     """
-    FAISS와 ChromaDB를 결합한 하이브리드 벡터 저장소
+    하이브리드 벡터 저장소
     
-    - FAISS: 빠른 유사도 검색
-    - ChromaDB: 메타데이터 관리 및 필터링
+    FAISS와 ChromaDB를 병행 사용하여 빠른 검색과 메타데이터 관리를 모두 제공합니다.
+    다중 임베딩 모델과 표현별 인덱싱을 지원합니다.
     """
     
-    def __init__(self, embedding_dimension: int = 768, 
-                 collection_name: str = "pdf_chunks",
-                 persist_directory: str = "./vector_store"):
+    def __init__(self, 
+                 faiss_store: Optional[FAISSVectorStore] = None,
+                 chroma_store: Optional[ChromaDBVectorStore] = None,
+                 embedding_models: Optional[List[str]] = None,
+                 primary_model: str = "jhgan/ko-sroberta-multitask"):
         """
-        하이브리드 벡터 저장소 초기화
+        HybridVectorStore 초기화
         
         Args:
-            embedding_dimension: 임베딩 차원
-            collection_name: ChromaDB 컬렉션 이름
-            persist_directory: 데이터 저장 디렉토리
+            faiss_store: FAISS 벡터 저장소
+            chroma_store: ChromaDB 벡터 저장소
+            embedding_models: 사용할 임베딩 모델 리스트
+            primary_model: 주 임베딩 모델
         """
-        self.faiss_store = FAISSVectorStore(embedding_dimension)
-        self.chroma_store = ChromaDBVectorStore(
-            collection_name, 
-            os.path.join(persist_directory, "chroma")
-        )
-        self.persist_directory = persist_directory
+        self.faiss_store = faiss_store or FAISSVectorStore()
+        self.chroma_store = chroma_store or ChromaDBVectorStore()
         
-        logger.info("하이브리드 벡터 저장소 초기화 완료")
+        # 다중 임베딩 모델 설정
+        self.embedding_models = embedding_models or [
+            "jhgan/ko-sroberta-multitask",  # 한국어 특화
+            "all-MiniLM-L6-v2",            # 영어/다국어
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 다국어
+        ]
+        self.primary_model = primary_model
+        
+        # 표현별 인덱스 관리
+        self.expression_indices: Dict[str, Dict] = {}
+        self.model_embeddings: Dict[str, Dict[str, np.ndarray]] = {}
+        
+        logger.info(f"Hybrid Vector Store 초기화 완료 (모델: {len(self.embedding_models)}개)")
+    
+    def add_chunks_with_expressions(self, chunks: List[TextChunk], 
+                                  expression_enhancer=None) -> None:
+        """
+        표현을 고려한 청크 추가
+        
+        Args:
+            chunks: 텍스트 청크들
+            expression_enhancer: 표현 향상기 (KeywordEnhancer)
+        """
+        # 기본 청크 추가
+        self.faiss_store.add_chunks(chunks)
+        self.chroma_store.add_chunks(chunks)
+        
+        # 표현별 인덱스 생성
+        if expression_enhancer:
+            self._create_expression_indices(chunks, expression_enhancer)
+    
+    def _create_expression_indices(self, chunks: List[TextChunk], 
+                                 expression_enhancer) -> None:
+        """표현별 인덱스 생성"""
+        for chunk in chunks:
+            # 교통, 데이터베이스, 일반 컨텍스트별 표현 추출
+            for context in ["traffic", "database", "general"]:
+                expressions = expression_enhancer.get_multi_expressions(
+                    chunk.text, context
+                )
+                
+                if expressions:
+                    if context not in self.expression_indices:
+                        self.expression_indices[context] = {}
+                    
+                    for expr in expressions:
+                        if expr not in self.expression_indices[context]:
+                            self.expression_indices[context][expr] = []
+                        self.expression_indices[context][expr].append(chunk.chunk_id)
+    
+    def search_with_expressions(self, query: str, 
+                              expression_enhancer=None,
+                              context: str = "general",
+                              top_k: int = 5) -> List[Tuple[TextChunk, float]]:
+        """
+        표현을 고려한 검색
+        
+        Args:
+            query: 검색 쿼리
+            expression_enhancer: 표현 향상기
+            context: 컨텍스트
+            top_k: 반환할 결과 수
+            
+        Returns:
+            (청크, 유사도) 튜플 리스트
+        """
+        # 기본 검색
+        basic_results = self.search(query, top_k=top_k)
+        
+        if not expression_enhancer:
+            return basic_results
+        
+        # 표현 기반 검색
+        expression_results = self._search_by_expressions(
+            query, expression_enhancer, context, top_k
+        )
+        
+        # 결과 통합 및 랭킹
+        combined_results = self._combine_search_results(
+            basic_results, expression_results, top_k
+        )
+        
+        return combined_results
+    
+    def _search_by_expressions(self, query: str, 
+                             expression_enhancer,
+                             context: str,
+                             top_k: int) -> List[Tuple[TextChunk, float]]:
+        """표현 기반 검색"""
+        expressions = expression_enhancer.get_multi_expressions(query, context)
+        if not expressions:
+            return []
+        
+        # 표현별 관련 청크 수집
+        expression_chunks = set()
+        for expr in expressions:
+            if context in self.expression_indices and expr in self.expression_indices[context]:
+                chunk_ids = self.expression_indices[context][expr]
+                expression_chunks.update(chunk_ids)
+        
+        # 관련 청크들의 임베딩 검색
+        results = []
+        for chunk_id in expression_chunks:
+            # ChromaDB에서 청크 정보 가져오기
+            chunk_info = self.chroma_store.get_chunk_by_id(chunk_id)
+            if chunk_info:
+                # 임시 유사도 점수 (표현 매칭 기반)
+                similarity = 0.8  # 기본 점수
+                results.append((chunk_info, similarity))
+        
+        return sorted(results, key=lambda x: x[1], reverse=True)[:top_k]
+    
+    def _combine_search_results(self, 
+                              basic_results: List[Tuple[TextChunk, float]],
+                              expression_results: List[Tuple[TextChunk, float]],
+                              top_k: int) -> List[Tuple[TextChunk, float]]:
+        """검색 결과 통합"""
+        # 청크 ID별로 최고 점수 유지
+        combined_scores = {}
+        
+        # 기본 결과 추가
+        for chunk, score in basic_results:
+            combined_scores[chunk.chunk_id] = score
+        
+        # 표현 결과 추가 (더 높은 점수로 업데이트)
+        for chunk, score in expression_results:
+            if chunk.chunk_id in combined_scores:
+                combined_scores[chunk.chunk_id] = max(
+                    combined_scores[chunk.chunk_id], score
+                )
+            else:
+                combined_scores[chunk.chunk_id] = score
+        
+        # 점수순 정렬
+        sorted_chunks = sorted(
+            combined_scores.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )
+        
+        # 결과 구성
+        final_results = []
+        for chunk_id, score in sorted_chunks[:top_k]:
+            chunk = self.chroma_store.get_chunk_by_id(chunk_id)
+            if chunk:
+                final_results.append((chunk, score))
+        
+        return final_results
+    
+    def get_expression_statistics(self) -> Dict[str, Any]:
+        """표현 인덱스 통계 반환"""
+        stats = {
+            "total_contexts": len(self.expression_indices),
+            "context_details": {}
+        }
+        
+        for context, expressions in self.expression_indices.items():
+            stats["context_details"][context] = {
+                "total_expressions": len(expressions),
+                "total_chunks": sum(len(chunk_ids) for chunk_ids in expressions.values()),
+                "top_expressions": sorted(
+                    expressions.items(), 
+                    key=lambda x: len(x[1]), 
+                    reverse=True
+                )[:5]
+            }
+        
+        return stats
     
     def add_chunks(self, chunks: List[TextChunk]) -> None:
         """두 저장소에 모두 청크 추가"""
@@ -532,7 +698,7 @@ class HybridVectorStore:
     
     def save(self, path: Optional[str] = None) -> None:
         """두 저장소 모두 저장"""
-        save_path = path or self.persist_directory
+        save_path = path or "./vector_store"
         
         faiss_path = os.path.join(save_path, "faiss")
         self.faiss_store.save(faiss_path)
@@ -544,7 +710,7 @@ class HybridVectorStore:
     
     def load(self, path: Optional[str] = None) -> None:
         """저장된 데이터 로드"""
-        load_path = path or self.persist_directory
+        load_path = path or "./vector_store"
         
         faiss_path = os.path.join(load_path, "faiss")
         if os.path.exists(faiss_path):
