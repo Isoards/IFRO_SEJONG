@@ -10,7 +10,7 @@ import { IntersectionDetailPanel } from "../Panels/IntersectionDetailPanel";
 import { IncidentDetailPanel } from "../Panels/IncidentDetailPanel";
 import { TrafficFlowDetailPanel } from "../Panels/TrafficFlowDetailPanel";
 import { TableauDashboard } from "../Panels/TableauDashboard";
-import { Intersection, Incident } from "../../types/global.types";
+import { Intersection, Incident, FavoriteFlow } from "../../types/global.types";
 import { Map as MapIcon, Star } from "lucide-react";
 import {
   getTrafficIntersections,
@@ -38,6 +38,9 @@ export default function Dashboard() {
     []
   );
   const [favoriteIncidents] = useState<number[]>([]);
+  const [favoriteFlows, setFavoriteFlows] = useState<FavoriteFlow[]>([]);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false); // 초기 로드 완료 플래그
+  const [selectedFlowId, setSelectedFlowId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [trafficStat, setTrafficStat] = useState<any>(null);
   const [trafficChartData, setTrafficChartData] = useState<any[]>([]); // 2. 차트 데이터 상태 추가
@@ -88,18 +91,31 @@ export default function Dashboard() {
   // activeTrafficView가 변경될 때 선택된 항목들과 패널 상태 초기화
   useEffect(() => {
     if (activeTrafficView === "analysis") {
-      setSelectedIntersection(null);
-      setSelectedIncident(null);
-      setShowIntersectionPanel(false);
-      setShowIncidentPanel(false);
-      setShowRoutePanel(false);
+      // Analysis 뷰로 전환할 때는 이미 선택된 교차로가 있다면 유지
+      if (!selectedIntersection) {
+        setSelectedIncident(null);
+        setShowIntersectionPanel(false);
+        setShowIncidentPanel(false);
+        setShowRoutePanel(false);
+      } else {
+        // 교차로가 선택되어 있다면 다른 패널만 닫기
+        setSelectedIncident(null);
+        setShowIncidentPanel(false);
+        setShowRoutePanel(false);
+      }
     } else if (activeTrafficView === "incidents") {
       setSelectedIntersection(null);
       setSelectedPoints([]);
       setShowIntersectionPanel(false);
       setShowRoutePanel(false);
     } else if (activeTrafficView === "favorites") {
+      // Favorites 뷰로 전환할 때 모든 선택 항목과 패널 초기화
+      setSelectedIntersection(null);
+      setSelectedIncident(null);
       setSelectedPoints([]);
+      setSelectedFlowId(null); // flow 선택 초기화 추가
+      setShowIntersectionPanel(false);
+      setShowIncidentPanel(false);
       setShowRoutePanel(false);
     } else if (activeTrafficView === "flow") {
       setSelectedIntersection(null);
@@ -164,17 +180,42 @@ export default function Dashboard() {
   useEffect(() => {
     const savedFavorites = localStorage.getItem("favoriteIntersections");
     if (savedFavorites) {
-      setFavoriteIntersections(JSON.parse(savedFavorites));
+      const parsedFavorites = JSON.parse(savedFavorites);
+      console.log("Loading favorite intersections:", parsedFavorites);
+      setFavoriteIntersections(parsedFavorites);
     }
+
+    const savedFlows = localStorage.getItem("favoriteFlows");
+    if (savedFlows) {
+      const parsedFlows = JSON.parse(savedFlows);
+      console.log("Loading favorite flows:", parsedFlows);
+      setFavoriteFlows(parsedFlows);
+    }
+
+    // 초기 로드 완료 표시
+    setIsInitialLoadComplete(true);
   }, []);
 
-  // 즐겨찾기 변경 시 로컬 스토리지에 저장
+  // 즐겨찾기 변경 시 로컬 스토리지에 저장 (초기 로드 완료 후에만)
   useEffect(() => {
-    localStorage.setItem(
-      "favoriteIntersections",
-      JSON.stringify(favoriteIntersections)
-    );
-  }, [favoriteIntersections]);
+    if (isInitialLoadComplete) {
+      console.log(
+        "Saving favorite intersections to localStorage:",
+        favoriteIntersections
+      );
+      localStorage.setItem(
+        "favoriteIntersections",
+        JSON.stringify(favoriteIntersections)
+      );
+    }
+  }, [favoriteIntersections, isInitialLoadComplete]);
+
+  useEffect(() => {
+    if (isInitialLoadComplete) {
+      console.log("Saving favorite flows to localStorage:", favoriteFlows);
+      localStorage.setItem("favoriteFlows", JSON.stringify(favoriteFlows));
+    }
+  }, [favoriteFlows, isInitialLoadComplete]);
 
   // 즐겨찾기 토글 함수
   const handleToggleFavorite = useCallback((intersectionId: number) => {
@@ -250,6 +291,64 @@ export default function Dashboard() {
     },
     []
   );
+
+  // 플로우 클릭 핸들러
+  const handleFlowClick = useCallback(
+    async (flow: FavoriteFlow) => {
+      // 플로우 뷰로 전환
+      setActiveTrafficView("flow");
+      // 해당 교차로들을 찾아서 선택
+      const fromIntersection = intersections.find(
+        (i) => i.id === flow.fromIntersectionId
+      );
+      const toIntersection = intersections.find(
+        (i) => i.id === flow.toIntersectionId
+      );
+
+      if (fromIntersection && toIntersection) {
+        setSelectedFlowId(flow.id);
+        setSelectedPoints([fromIntersection, toIntersection]);
+      }
+    },
+    [intersections]
+  );
+
+  // Favorites에서 교차로 클릭 시 Analysis 뷰로 전환하는 핸들러
+  const handleFavoriteIntersectionClick = useCallback(
+    async (intersection: Intersection) => {
+      // 먼저 교차로를 선택하고 데이터를 로드
+      await handleIntersectionClick(intersection);
+      // 그 다음에 Analysis 뷰로 전환
+      setActiveTrafficView("analysis");
+    },
+    [handleIntersectionClick]
+  );
+
+  // 플로우를 즐겨찾기에 추가하는 함수
+  const handleAddFlowToFavorites = useCallback((flow: FavoriteFlow) => {
+    setFavoriteFlows((prev) => {
+      // 이미 즐겨찾기에 있는지 확인 (교차로 ID로만 비교)
+      const isAlreadyFavorited = prev.some(
+        (f) =>
+          f.fromIntersectionId === flow.fromIntersectionId &&
+          f.toIntersectionId === flow.toIntersectionId
+      );
+
+      if (isAlreadyFavorited) {
+        // 이미 있으면 제거
+        return prev.filter(
+          (f) =>
+            !(
+              f.fromIntersectionId === flow.fromIntersectionId &&
+              f.toIntersectionId === flow.toIntersectionId
+            )
+        );
+      } else {
+        // 없으면 추가
+        return [...prev, flow];
+      }
+    });
+  }, []);
 
   const [incidentMapCenter, setIncidentMapCenter] = useState<{
     lat: number;
@@ -512,10 +611,13 @@ export default function Dashboard() {
                 favoriteIncidents={incidents.filter((incident) =>
                   favoriteIncidents.includes(incident.id)
                 )}
-                onIntersectionClick={handleIntersectionClick}
+                favoriteFlows={favoriteFlows}
+                onIntersectionClick={handleFavoriteIntersectionClick}
                 onIncidentClick={handleIncidentClick}
+                onFlowClick={handleFlowClick}
                 selectedIntersectionId={selectedIntersection?.id}
                 selectedIncidentId={selectedIncident?.id}
+                selectedFlowId={selectedFlowId}
               />
             ) : activeTrafficView === "analysis" ? (
               <AnalysisSidebar
@@ -577,9 +679,13 @@ export default function Dashboard() {
                       Favorites Mode
                     </p>
                     <p className="text-gray-600">
-                      {favoriteIntersections.length > 0
-                        ? `${favoriteIntersections.length} favorite intersections`
-                        : "No favorite intersections yet"}
+                      {(() => {
+                        const totalFavorites =
+                          favoriteIntersections.length + favoriteFlows.length;
+                        return totalFavorites > 0
+                          ? `${totalFavorites} favorites`
+                          : "No favorites yet";
+                      })()}
                     </p>
                   </div>
                 </div>
@@ -644,7 +750,7 @@ export default function Dashboard() {
                       onClose={handleCloseIntersectionPanel}
                       isFullscreen={isDetailPanelFullscreen}
                       trafficStat={trafficStat}
-                      trafficChartData={trafficChartData} // 4. prop으로 전달
+                      trafficChartData={trafficChartData}
                     />
                   </div>
                 </div>
@@ -681,6 +787,8 @@ export default function Dashboard() {
                       calculateDistance={calculateDistance}
                       calculateTravelTime={calculateTravelTime}
                       isFullscreen={isDetailPanelFullscreen}
+                      onAddFlowToFavorites={handleAddFlowToFavorites}
+                      favoriteFlows={favoriteFlows}
                     />
                   </div>
                 </div>

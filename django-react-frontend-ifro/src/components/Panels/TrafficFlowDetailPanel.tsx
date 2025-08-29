@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Intersection } from "../../types/global.types";
+import { Intersection, FavoriteFlow } from "../../types/global.types";
+import { Star } from "lucide-react";
 
 interface TrafficFlowDetailPanelProps {
   selectedPoints: Intersection[];
@@ -8,6 +9,8 @@ interface TrafficFlowDetailPanelProps {
   calculateDistance: (point1: Intersection, point2: Intersection) => number;
   calculateTravelTime: (point1: Intersection, point2: Intersection) => number;
   isFullscreen?: boolean;
+  onAddFlowToFavorites?: (flow: FavoriteFlow) => void;
+  favoriteFlows?: FavoriteFlow[];
 }
 
 export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
@@ -16,8 +19,44 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
   calculateDistance,
   calculateTravelTime,
   isFullscreen = false,
+  onAddFlowToFavorites,
+  favoriteFlows = [],
 }) => {
   const { t } = useTranslation();
+
+  // 현재 플로우가 즐겨찾기에 있는지 확인
+  const isCurrentFlowFavorited =
+    selectedPoints.length === 2 &&
+    favoriteFlows.some(
+      (flow) =>
+        flow.fromIntersectionId === selectedPoints[0].id &&
+        flow.toIntersectionId === selectedPoints[1].id
+    );
+
+  // 플로우를 즐겨찾기에 추가하는 함수
+  const handleAddFlowToFavorites = () => {
+    if (onAddFlowToFavorites && selectedPoints.length === 2) {
+      const [from, to] = selectedPoints;
+
+      const flow: FavoriteFlow = {
+        id: Date.now(), // 임시 ID (실제로는 서버에서 생성)
+        fromIntersectionId: from.id,
+        toIntersectionId: to.id,
+        fromIntersectionName: from.name,
+        toIntersectionName: to.name,
+        distance: calculateDistance(from, to),
+        travelTime: calculateTravelTime(from, to),
+        dateTime: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        flowData: {
+          averageVolume: Math.floor(Math.random() * 1000) + 500, // 임시 데이터
+          averageSpeed: Math.floor(Math.random() * 20) + 30, // 임시 데이터
+          trafficFlow: Math.floor(Math.random() * 100) + 50, // 임시 데이터
+        },
+      };
+      onAddFlowToFavorites(flow);
+    }
+  };
 
   return (
     <div className="h-full w-full">
@@ -36,8 +75,28 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
                 : t("map.selectTwoPointsDesc")}
             </p>
           </div>
-          {/* 닫기 버튼 */}
+          {/* 버튼 영역 */}
           <div className="flex items-center space-x-2 ml-4">
+            {onAddFlowToFavorites && selectedPoints.length === 2 && (
+              <button
+                onClick={handleAddFlowToFavorites}
+                className={`inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+                  isCurrentFlowFavorited
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 text-yellow-400"
+                    : "hover:bg-accent hover:text-accent-foreground text-gray-400"
+                }`}
+                title={
+                  isCurrentFlowFavorited
+                    ? "즐겨찾기 해제"
+                    : "플로우를 즐겨찾기에 추가"
+                }
+              >
+                <Star
+                  size={20}
+                  fill={isCurrentFlowFavorited ? "currentColor" : "none"}
+                />
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-gray-100 transition-colors"

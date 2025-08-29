@@ -53,8 +53,8 @@ export type Incident = {
 
 // PDF Report Types
 export type PDFConfig = {
-  format: 'A4' | 'Letter';
-  orientation: 'portrait' | 'landscape';
+  format: "A4" | "Letter";
+  orientation: "portrait" | "landscape";
   margins: {
     top: number;
     right: number;
@@ -141,4 +141,36 @@ export type AIAnalysisResponse = {
 // Enhanced Report Data with AI Analysis
 export type EnhancedReportData = ReportData & {
   aiAnalysis?: AITrafficAnalysis;
+};
+
+// Favorite Analysis Types
+export type FavoriteAnalysis = {
+  id: number;
+  intersectionId: number;
+  intersectionName: string;
+  dateTime: string;
+  createdAt: string;
+  analysisData?: {
+    totalVolume: number;
+    averageSpeed: number;
+    chartData: TrafficData[];
+  };
+};
+
+// Favorite Flow Types
+export type FavoriteFlow = {
+  id: number;
+  fromIntersectionId: number;
+  toIntersectionId: number;
+  fromIntersectionName: string;
+  toIntersectionName: string;
+  distance: number;
+  travelTime: number;
+  dateTime: string;
+  createdAt: string;
+  flowData?: {
+    averageVolume: number;
+    averageSpeed: number;
+    trafficFlow: number;
+  };
 };

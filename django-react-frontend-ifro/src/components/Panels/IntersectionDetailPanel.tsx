@@ -1,15 +1,19 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Star } from "lucide-react";
-import { Intersection, ApiTrafficData, ReportData, TrafficData, TrafficInterpretationResponse } from "../../types/global.types";
+import {
+  Intersection,
+  ApiTrafficData,
+  ReportData,
+  TrafficData,
+  TrafficInterpretationResponse,
+} from "../../types/global.types";
 import { MiniChart } from "../common/MiniChart";
 import { usePDFGeneration } from "../../utils/usePDFGeneration";
 import { PDFGenerationStatus } from "../PDF/PDFGenerationStatus";
 import { AIEnhancedPDFButton } from "../Dashboard/AIEnhancedPDFButton";
 import { PDFTemplate } from "../PDF/PDFTemplate";
 import { getIntersectionReportData } from "../../api/intersections";
-
-
 
 interface IntersectionDetailPanelProps {
   intersection: Intersection;
@@ -24,7 +28,9 @@ interface IntersectionDetailPanelProps {
   trafficChartData: ApiTrafficData[];
 }
 
-export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = ({
+export const IntersectionDetailPanel: React.FC<
+  IntersectionDetailPanelProps
+> = ({
   intersection,
   favoriteIntersections,
   onToggleFavorite,
@@ -35,16 +41,21 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
 }) => {
   const { t, i18n } = useTranslation();
   const templateRef = useRef<HTMLDivElement>(null);
-  const [actualReportData, setActualReportData] = useState<ReportData | null>(null);
+  const [actualReportData, setActualReportData] = useState<ReportData | null>(
+    null
+  );
   const [isLoadingReportData, setIsLoadingReportData] = useState(false);
 
   // 컴포넌트 마운트 시 실제 데이터 가져오기
   React.useEffect(() => {
-    console.log('Intersection changed to:', intersection.id, 'clearing previous data');
+    console.log(
+      "Intersection changed to:",
+      intersection.id,
+      "clearing previous data"
+    );
     setActualReportData(null); // 이전 데이터 초기화
     fetchReportData();
   }, [intersection.id]);
-
 
   const { status, generatePDF, isSupported } = usePDFGeneration({
     onSuccess: () => console.log("PDF generated successfully!"),
@@ -57,32 +68,48 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
     setIsLoadingReportData(true);
     try {
       // 올바른 API 함수 사용 (현재 언어 전달)
-      const currentLanguage = i18n.language || 'ko';
-      const data = await getIntersectionReportData(intersection.id, undefined, currentLanguage);
-      
-      console.log('API Response:', data);
-      console.log('Traffic Volumes:', data.trafficVolumes);
-      
+      const currentLanguage = i18n.language || "ko";
+      const data = await getIntersectionReportData(
+        intersection.id,
+        undefined,
+        currentLanguage
+      );
+
+      console.log("API Response:", data);
+      console.log("Traffic Volumes:", data.trafficVolumes);
+
       const newReportData = {
         intersection: {
           ...intersection,
-          average_speed: (data as any)?.average_speed || data?.averageSpeed || 0,
-          total_traffic_volume: (data as any)?.total_volume || data?.totalVolume || 0,
+          average_speed:
+            (data as any)?.average_speed || data?.averageSpeed || 0,
+          total_traffic_volume:
+            (data as any)?.total_volume || data?.totalVolume || 0,
         },
         datetime: data?.datetime || new Date().toISOString(),
-        trafficVolumes: (data as any)?.traffic_volumes || data?.trafficVolumes || {},
+        trafficVolumes:
+          (data as any)?.traffic_volumes || data?.trafficVolumes || {},
         totalVolume: (data as any)?.total_volume || data?.totalVolume || 0,
         averageSpeed: (data as any)?.average_speed || data?.averageSpeed || 0,
-        chartData: chartData.map(d => ({ hour: d.hour, speed: d.speed, volume: d.volume })),
-        interpretation: (data as any).interpretation?.interpretation || (data as any).interpretation || undefined,
-        congestionLevel: (data as any).interpretation?.congestion_level || undefined,
-        peakDirection: (data as any).interpretation?.peak_direction || undefined,
+        chartData: chartData.map((d) => ({
+          hour: d.hour,
+          speed: d.speed,
+          volume: d.volume,
+        })),
+        interpretation:
+          (data as any).interpretation?.interpretation ||
+          (data as any).interpretation ||
+          undefined,
+        congestionLevel:
+          (data as any).interpretation?.congestion_level || undefined,
+        peakDirection:
+          (data as any).interpretation?.peak_direction || undefined,
       };
-      
-      console.log('Setting report data:', newReportData);
+
+      console.log("Setting report data:", newReportData);
       setActualReportData(newReportData);
     } catch (error) {
-      console.error('Failed to fetch report data:', error);
+      console.error("Failed to fetch report data:", error);
       // 실패 시 기본 데이터 사용
       setActualReportData(null);
     } finally {
@@ -96,7 +123,7 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
   const displayVolume = trafficStat?.total_volume ?? 0;
 
   const chartData = trafficChartData.map((d: ApiTrafficData) => ({
-    hour: new Date(d.datetime).getHours() + ':00',
+    hour: new Date(d.datetime).getHours() + ":00",
     volume: d.total_volume,
     speed: d.average_speed, // speed 속성 추가
   }));
@@ -111,7 +138,11 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
     trafficVolumes: { N: 0, S: 0, E: 0, W: 0 }, // Placeholder data
     totalVolume: displayVolume,
     averageSpeed: displaySpeed,
-    chartData: chartData.map(d => ({ hour: d.hour, speed: d.speed, volume: d.volume })),
+    chartData: chartData.map((d) => ({
+      hour: d.hour,
+      speed: d.speed,
+      volume: d.volume,
+    })),
     interpretation: undefined,
     congestionLevel: undefined,
     peakDirection: undefined,
@@ -141,7 +172,11 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
   };
 
   return (
-    <div className={`h-full p-8 ${isFullscreen ? 'pt-12' : 'pt-20'} relative overflow-y-auto`}>
+    <div
+      className={`h-full p-8 ${
+        isFullscreen ? "pt-12" : "pt-20"
+      } relative overflow-y-auto`}
+    >
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-blue-600">
           {t("traffic.intersections")} {t("traffic.analysis")}
@@ -149,15 +184,15 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
         <div className="flex items-center space-x-2">
           {isSupported && (
             <>
-              <AIEnhancedPDFButton 
+              <AIEnhancedPDFButton
                 reportData={actualReportData || reportData}
                 className="bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300"
                 buttonText="AI PDF"
                 timePeriod="24h"
               />
-              <button 
-                onClick={handleDownloadPDF} 
-                className="inline-flex items-center justify-center h-9 px-3 bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:pointer-events-none" 
+              <button
+                onClick={handleDownloadPDF}
+                className="inline-flex items-center justify-center h-9 px-3 bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:pointer-events-none"
                 disabled={status.isGenerating || isLoadingReportData}
               >
                 {isLoadingReportData ? "Loading..." : "PDF"}
@@ -167,15 +202,16 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
           <button
             onClick={() => onToggleFavorite(intersection.id)}
             className={`inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
-              isFavorited 
-                ? "bg-primary text-primary-foreground hover:bg-primary/90 text-yellow-400" 
+              isFavorited
+                ? "bg-primary text-primary-foreground hover:bg-primary/90 text-yellow-400"
                 : "hover:bg-accent hover:text-accent-foreground text-gray-400"
             }`}
+            title={isFavorited ? "즐겨찾기 해제" : "즐겨찾기 추가"}
           >
             <Star size={20} fill={isFavorited ? "currentColor" : "none"} />
           </button>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             aria-label="Close panel"
             className="inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
           >
@@ -183,21 +219,25 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
           </button>
         </div>
       </div>
-      
+
       <div className="space-y-6">
         <div className="p-6 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">{intersection.name}</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+            {intersection.name}
+          </h3>
           <div className="grid grid-cols-2 gap-4 my-4">
             <div className="p-4 bg-white rounded-lg shadow-sm">
               <p className="text-sm text-gray-500">{t("traffic.speed")}</p>
-              <p className="text-xl font-bold text-gray-800">{`${displaySpeed.toFixed(1)} km/h`}</p>
+              <p className="text-xl font-bold text-gray-800">{`${displaySpeed.toFixed(
+                1
+              )} km/h`}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm">
               <p className="text-sm text-gray-500">{t("traffic.volume")}</p>
               <p className="text-xl font-bold text-gray-800">{`${displayVolume} vph`}</p>
             </div>
           </div>
-          
+
           <div className="w-full h-40 bg-white rounded-lg flex items-center justify-center shadow-sm">
             <MiniChart
               data={chartData}
@@ -209,14 +249,26 @@ export const IntersectionDetailPanel: React.FC<IntersectionDetailPanelProps> = (
         </div>
 
         <div className="p-6 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">{t("incidents.location")}</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+            {t("incidents.location")}
+          </h3>
           <div className="flex flex-row items-center space-x-6 text-gray-700 text-sm">
-            <span>Lat: <span className="font-medium">{intersection.latitude.toFixed(6)}</span></span>
-            <span>Lng: <span className="font-medium">{intersection.longitude.toFixed(6)}</span></span>
+            <span>
+              Lat:{" "}
+              <span className="font-medium">
+                {intersection.latitude.toFixed(6)}
+              </span>
+            </span>
+            <span>
+              Lng:{" "}
+              <span className="font-medium">
+                {intersection.longitude.toFixed(6)}
+              </span>
+            </span>
           </div>
         </div>
       </div>
-      
+
       {/* PDF Template (Hidden) */}
       <div className="absolute -z-10 -left-[9999px] -top-[9999px]">
         <div ref={templateRef}>
