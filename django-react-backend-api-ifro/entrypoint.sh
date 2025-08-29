@@ -11,8 +11,23 @@ done
 
 echo "MySQL is ready."
 
-echo "Running migrations..."
-python manage.py migrate traffic --fake
+# Create fresh migrations
+echo "Creating fresh migrations..."
+python manage.py makemigrations user_auth
+python manage.py makemigrations traffic
+
+# Apply migrations - first migrate everything except our apps, then fake our initial migrations
+echo "Applying base migrations..."
+python manage.py migrate contenttypes
+python manage.py migrate auth
+python manage.py migrate admin
+python manage.py migrate sessions
+
+echo "Faking initial migrations for our apps..."
+python manage.py migrate user_auth 0001 --fake
+python manage.py migrate traffic 0001 --fake
+
+echo "Applying remaining migrations..."
 python manage.py migrate
 
 # 병렬로 encrypt_transfer.py 실행
