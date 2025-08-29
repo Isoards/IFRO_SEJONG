@@ -122,11 +122,11 @@ export default function Dashboard() {
         setIntersections(data);
 
         // 교차로 간 통행량 데이터 계산
-        if (data.length > 0) {
-          const trafficData = calculateAllIntersectionTraffic(data);
-          setIntersectionTrafficData(trafficData);
-          // 초기값은 아무것도 선택하지 않음
-        }
+        // if (data.length > 0) {
+        //   const trafficData = calculateAllIntersectionTraffic(data);
+        //   setIntersectionTrafficData(trafficData);
+        //   // 초기값은 아무것도 선택하지 않음
+        // }
       } catch (error) {
         console.error("교차로 데이터 로드 실패:", error);
       } finally {

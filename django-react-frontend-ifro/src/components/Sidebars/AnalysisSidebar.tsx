@@ -161,18 +161,26 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
 
   // 각 교차로별로 데이터가 없으면 useEffect로 생성
   useEffect(() => {
-    filteredIntersections.forEach((intersection) => {
+    const newChartData: Record<
+      number,
+      { hour: string; speed: number; volume: number }[]
+    > = {};
+    visibleIntersections.forEach((intersection) => {
       if (!chartDataMap[intersection.id]) {
         const arr = Array.from({ length: 24 }, (_, i) => ({
           hour: `${i}:00`,
           speed: 0,
           volume: Math.floor(1000 + Math.random() * 2000),
         }));
-        setChartDataMap((prev) => ({ ...prev, [intersection.id]: arr }));
+        newChartData[intersection.id] = arr;
       }
     });
+
+    if (Object.keys(newChartData).length > 0) {
+      setChartDataMap((prev) => ({ ...prev, ...newChartData }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredIntersections, currentDate]);
+  }, [visibleIntersections, currentDate]);
 
   // 검색어나 필터 변경 시 visibleCount 리셋
   useEffect(() => {
