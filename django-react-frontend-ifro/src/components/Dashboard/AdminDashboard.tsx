@@ -1,27 +1,61 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import { getAdminStats, getAdminIntersections } from "../../api/intersections";
+import { AdminStats, TopArea, IntersectionStats } from "../../types/global.types";
 
 const AdminDashboard = () => {
-  // 세종시 모킹 데이터
-  const topViewedAreas = [
-    { rank: 1, area: "정부청사 교차로", views: 1847, change: 15 },
-    { rank: 2, area: "세종로터리", views: 1456, change: 8 },
-    { rank: 3, area: "나성동 교차로", views: 1323, change: -3 },
-    { rank: 4, area: "조치원읍 중심가", views: 1184, change: 12 },
-    { rank: 5, area: "반곡동 교차로", views: 967, change: 7 },
-    { rank: 6, area: "어진동 사거리", views: 832, change: -1 },
-    { rank: 7, area: "새롬동 중앙로", views: 798, change: 4 },
-    { rank: 8, area: "종촌동 교차로", views: 656, change: 9 },
-    { rank: 9, area: "연기면 소재지", views: 589, change: -2 },
-    { rank: 10, area: "전동면 중심가", views: 487, change: 6 },
-  ];
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const topFavoriteAreas = [
-    { rank: 1, area: "정부청사 출근길", favorites: 234, growth: 12 },
-    { rank: 2, area: "세종로터리", favorites: 198, growth: 8 },
-    { rank: 3, area: "나성동 학교앞", favorites: 167, growth: -2 },
-    { rank: 4, area: "조치원역 주변", favorites: 145, growth: 15 },
-    { rank: 5, area: "새롬동 아파트단지", favorites: 123, growth: 5 },
-  ];
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        setLoading(true);
+        
+        // 통계 데이터만 먼저 빠르게 로드 (더 중요한 데이터)
+        const statsPromise = getAdminStats();
+        const stats = await statsPromise;
+        
+        console.log('Fetched admin stats:', stats);
+        console.log('Top favorite areas:', stats.top_favorite_areas);
+        console.log('Top favorite areas length:', stats.top_favorite_areas?.length);
+        
+        setAdminStats(stats);
+        setError(null);
+        
+        // 교차로 목록은 백그라운드에서 로드 (덜 중요한 데이터)
+        getAdminIntersections().then(intersections => {
+          setIntersectionStats(intersections);
+        }).catch(err => {
+          console.error('Failed to fetch intersection stats:', err);
+          setIntersectionStats([]);
+        });
+        
+      } catch (err) {
+        console.error('Failed to fetch admin stats:', err);
+        setError('통계 데이터를 불러오는데 실패했습니다.');
+        // 에러 시 기본 데이터 사용
+        setAdminStats({
+          top_viewed_areas: [],
+          top_favorite_areas: [],
+          top_ai_report_areas: [],
+          total_views: 0,
+          total_favorites: 0,
+          total_ai_reports: 0
+        });
+        setIntersectionStats([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdminData();
+    
+    // 60초마다 데이터 새로고침 (30초에서 60초로 변경)
+    const interval = setInterval(fetchAdminData, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="bg-gray-100 min-h-screen">
@@ -58,7 +92,9 @@ const AdminDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">총 조회수</p>
-                <p className="text-2xl font-bold text-gray-900">2,123</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loading ? "..." : adminStats?.total_views.toLocaleString() || "0"}
+                </p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                 <svg
@@ -84,8 +120,10 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">활성 사용자</p>
-                <p className="text-2xl font-bold text-gray-900">3,143</p>
+                <p className="text-sm font-medium text-gray-600">총 즐겨찾기</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loading ? "..." : adminStats?.total_favorites.toLocaleString() || "0"}
+                </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <svg
@@ -98,20 +136,22 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="mt-2 flex items-center">
-              <span className="text-green-600 text-sm font-medium">+8.2%</span>
-              <span className="text-gray-500 text-sm ml-1">전일 대비</span>
+              <span className="text-green-600 text-sm font-medium">실시간</span>
+              <span className="text-gray-500 text-sm ml-1">업데이트</span>
             </div>
           </div>
 
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">정책 제안</p>
-                <p className="text-2xl font-bold text-gray-900">1,423</p>
+                <p className="text-sm font-medium text-gray-600">AI 리포트</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loading ? "..." : "0"}
+                </p>
               </div>
-              <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <svg
-                  className="w-6 h-6 text-yellow-600"
+                  className="w-6 h-6 text-purple-600"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -124,8 +164,8 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="mt-2 flex items-center">
-              <span className="text-green-600 text-sm font-medium">+5.1%</span>
-              <span className="text-gray-500 text-sm ml-1">전일 대비</span>
+              <span className="text-gray-600 text-sm font-medium">준비 중</span>
+              <span className="text-gray-500 text-sm ml-1">기능 개발 예정</span>
             </div>
           </div>
 
@@ -133,7 +173,9 @@ const AdminDashboard = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">AI 리포트</p>
-                <p className="text-2xl font-bold text-gray-900">89</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loading ? "..." : "0"}
+                </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <svg
@@ -150,8 +192,8 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="mt-2 flex items-center">
-              <span className="text-red-600 text-sm font-medium">-2.3%</span>
-              <span className="text-gray-500 text-sm ml-1">전일 대비</span>
+              <span className="text-gray-600 text-sm font-medium">준비 중</span>
+              <span className="text-gray-500 text-sm ml-1">기능 개발 예정</span>
             </div>
           </div>
         </div>
@@ -169,48 +211,64 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="p-6">
-              <div className="space-y-3">
-                {topViewedAreas.map((item) => (
-                  <div
-                    key={item.rank}
-                    className="flex items-center justify-between py-2"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span
-                        className={`text-sm font-bold w-6 ${
-                          item.rank <= 3
-                            ? "text-red-600"
-                            : item.rank <= 5
-                            ? "text-orange-600"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        {item.rank}
-                      </span>
-                      <span className="text-gray-900 font-medium">
-                        {item.area}
-                      </span>
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-red-500">{error}</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {adminStats?.top_viewed_areas.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      조회 데이터가 없습니다.
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">
-                        {item.views.toLocaleString()}
-                      </span>
-                      <span
-                        className={`text-xs px-1 ${
-                          item.change > 0
-                            ? "text-red-600"
-                            : item.change < 0
-                            ? "text-blue-600"
-                            : "text-gray-600"
-                        }`}
+                  ) : (
+                    adminStats?.top_viewed_areas.map((item: TopArea) => (
+                      <div
+                        key={item.rank}
+                        className="flex items-center justify-between py-2"
                       >
-                        {item.change > 0 ? "▲" : item.change < 0 ? "▼" : "—"}{" "}
-                        {Math.abs(item.change)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                        <div className="flex items-center space-x-3">
+                          <span
+                            className={`text-sm font-bold w-6 ${
+                              item.rank <= 3
+                                ? "text-red-600"
+                                : item.rank <= 5
+                                ? "text-orange-600"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {item.rank}
+                          </span>
+                          <span className="text-gray-900 font-medium">
+                            {item.area}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-600">
+                            {(item.views ?? 0).toLocaleString()}
+                          </span>
+                          <span
+                            className={`text-xs px-1 ${
+                              (item.change ?? 0) > 0
+                                ? "text-red-600"
+                                : (item.change ?? 0) < 0
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {(item.change ?? 0) > 0 ? "▲" : (item.change ?? 0) < 0 ? "▼" : "—"}{" "}
+                            {Math.abs(item.change ?? 0)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -260,48 +318,64 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="p-6">
-              <div className="space-y-3">
-                {topFavoriteAreas.map((item) => (
-                  <div
-                    key={item.rank}
-                    className="flex items-center justify-between py-2"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <span
-                        className={`text-sm font-bold w-6 ${
-                          item.rank <= 2
-                            ? "text-yellow-600"
-                            : item.rank <= 4
-                            ? "text-blue-600"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        {item.rank}
-                      </span>
-                      <span className="text-gray-900 font-medium">
-                        {item.area}
-                      </span>
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-red-500">{error}</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(!adminStats?.top_favorite_areas || adminStats?.top_favorite_areas.length === 0) ? (
+                    <div className="text-center text-gray-500 py-8">
+                      즐겨찾기 데이터가 없습니다. (Length: {adminStats?.top_favorite_areas?.length})
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600">
-                        {item.favorites}명
-                      </span>
-                      <span
-                        className={`text-xs px-1 ${
-                          item.growth > 0
-                            ? "text-green-600"
-                            : item.growth < 0
-                            ? "text-red-600"
-                            : "text-gray-600"
-                        }`}
+                  ) : (
+                    adminStats?.top_favorite_areas.map((item: TopArea) => (
+                      <div
+                        key={item.rank}
+                        className="flex items-center justify-between py-2"
                       >
-                        {item.growth > 0 ? "▲" : item.growth < 0 ? "▼" : "—"}{" "}
-                        {Math.abs(item.growth)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                        <div className="flex items-center space-x-3">
+                          <span
+                            className={`text-sm font-bold w-6 ${
+                              item.rank <= 2
+                                ? "text-yellow-600"
+                                : item.rank <= 4
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {item.rank}
+                          </span>
+                          <span className="text-gray-900 font-medium">
+                            {item.area}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-600">
+                            {(item.favorites ?? 0)}명
+                          </span>
+                          <span
+                            className={`text-xs px-1 ${
+                              (item.growth ?? 0) > 0
+                                ? "text-green-600"
+                                : (item.growth ?? 0) < 0
+                                ? "text-red-600"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
+                            {Math.abs(item.growth ?? 0)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -340,7 +414,7 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* AI 리포트 생성 지역 */}
+          {/* AI 리포트 다발 지역 */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -351,14 +425,175 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">지역별 리포트 빈도</p>
-              </div>
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-red-500">{error}</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {(!adminStats?.top_ai_report_areas || adminStats?.top_ai_report_areas.length === 0) ? (
+                    <div className="text-center text-gray-500 py-8">
+                      AI 리포트 데이터가 없습니다.
+                    </div>
+                  ) : (
+                    adminStats.top_ai_report_areas.map((area, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className="flex items-center justify-center w-6 h-6 bg-purple-100 text-purple-600 rounded-full text-sm font-medium">
+                            {area.rank}
+                          </span>
+                          <span className="font-medium text-gray-900">
+                            {area.area}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <span className="text-sm text-gray-600">
+                            {area.ai_reports}회
+                          </span>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-xs text-green-600">↗</span>
+                            <span className="text-xs text-green-600">
+                              {area.growth}%
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* 네 번째 행 - 정책 제안 섹션 */}
+        {/* 네 번째 행 - 교차로별 즐겨찾기 현황 */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-6 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">
+              교차로별 즐겨찾기 현황
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              각 교차로의 조회수와 즐겨찾기 등록 수 현황
+            </p>
+          </div>
+          <div className="p-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="text-gray-500">데이터 로딩 중...</div>
+              </div>
+            ) : error ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="text-red-500">{error}</div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        순위
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        교차로명
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        총 조회수
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        즐겨찾기 수
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        즐겨찾기 비율
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        최근 조회
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {intersectionStats.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                          교차로 데이터가 없습니다.
+                        </td>
+                      </tr>
+                    ) : (
+                      intersectionStats.map((intersection, index) => {
+                        const favoriteRatio = intersection.view_count > 0 
+                          ? ((intersection.favorite_count / intersection.view_count) * 100).toFixed(1)
+                          : "0.0";
+                        
+                        return (
+                          <tr key={intersection.intersection_id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`text-sm font-bold ${
+                                index < 3 ? "text-red-600" : 
+                                index < 5 ? "text-orange-600" : "text-gray-600"
+                              }`}>
+                                {index + 1}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">
+                                {intersection.intersection_name}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {intersection.view_count.toLocaleString()}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <span className="text-sm font-medium text-blue-600">
+                                  {intersection.favorite_count}
+                                </span>
+                                <span className="text-sm text-gray-500 ml-1">명</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                                  <div 
+                                    className="bg-blue-600 h-2 rounded-full" 
+                                    style={{ width: `${Math.min(parseFloat(favoriteRatio), 100)}%` }}
+                                  ></div>
+                                </div>
+                                <span className="text-sm text-gray-600">
+                                  {favoriteRatio}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {intersection.last_viewed 
+                                ? new Date(intersection.last_viewed).toLocaleDateString('ko-KR', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })
+                                : "조회 없음"
+                              }
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 다섯 번째 행 - 정책 제안 섹션 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* 정책 제안 공감 순위 */}
           <div className="bg-white rounded-lg shadow-sm border">

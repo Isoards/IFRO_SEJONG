@@ -1,6 +1,7 @@
 .vscode/
 .idea/
 .DS_Store
+.kiro/
 
 __pycache__/
 *.pyc
