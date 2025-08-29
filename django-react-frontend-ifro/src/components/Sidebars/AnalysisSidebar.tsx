@@ -45,16 +45,16 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
 
   useEffect(() => {
     const updateEncryptionStatus = () => {
-      const savedEncryption = localStorage.getItem('encryptionEnabled');
-      setEncryptionEnabled(savedEncryption === 'true');
+      const savedEncryption = localStorage.getItem("encryptionEnabled");
+      setEncryptionEnabled(savedEncryption === "true");
     };
 
     updateEncryptionStatus(); // Initial check
 
-    window.addEventListener('storage', updateEncryptionStatus); // Listen for changes
+    window.addEventListener("storage", updateEncryptionStatus); // Listen for changes
 
     return () => {
-      window.removeEventListener('storage', updateEncryptionStatus); // Clean up
+      window.removeEventListener("storage", updateEncryptionStatus); // Clean up
     };
   }, []);
 
@@ -218,7 +218,7 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
                 {t("traffic.analysis")}
               </h2>
               <p className="text-xs text-gray-500">
-                Encryption Enabled: {encryptionEnabled ? 'On' : 'Off'}
+                Encryption Enabled: {encryptionEnabled ? "On" : "Off"}
               </p>
             </div>
             <div className="relative">

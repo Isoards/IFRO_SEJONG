@@ -11,10 +11,7 @@ import { IncidentDetailPanel } from "../Panels/IncidentDetailPanel";
 import { TrafficFlowDetailPanel } from "../Panels/TrafficFlowDetailPanel";
 import { TableauDashboard } from "../Panels/TableauDashboard";
 import { Intersection, Incident } from "../../types/global.types";
-import {
-  Map as MapIcon,
-  Star,
-} from "lucide-react";
+import { Map as MapIcon, Star } from "lucide-react";
 // import { DateTimePicker } from "../common/DateTimePicker";
 import {
   getTrafficIntersections,
@@ -24,6 +21,7 @@ import {
 import { getIncidents } from "../../api/incidents";
 // import { Button } from "../common/Button";
 import { calculateAllIntersectionTraffic } from "../../utils/intersectionUtils";
+import { ChatBotButton } from "../common/ChatBotButton";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -199,48 +197,58 @@ export default function Dashboard() {
   //   });
   // }, []);
 
-  const handleIntersectionClick = useCallback(async (intersection: Intersection) => {
-    setSelectedIntersection(intersection);
-    setSelectedIncident(null); // 교차로 선택 시 incident 선택 해제
+  const handleIntersectionClick = useCallback(
+    async (intersection: Intersection) => {
+      setSelectedIntersection(intersection);
+      setSelectedIncident(null); // 교차로 선택 시 incident 선택 해제
 
-    // 교통 통계 데이터 로드
-    try {
-      const datetime = intersection.datetime || new Date().toISOString();
-      console.log(`Loading traffic stats for intersection ${intersection.id} at ${datetime}`);
-      const stats = await getIntersectionTrafficStat(intersection.id, datetime);
-      console.log('Loaded traffic stats:', stats);
-      setTrafficStat(stats);
+      // 교통 통계 데이터 로드
+      try {
+        const datetime = intersection.datetime || new Date().toISOString();
+        console.log(
+          `Loading traffic stats for intersection ${intersection.id} at ${datetime}`
+        );
+        const stats = await getIntersectionTrafficStat(
+          intersection.id,
+          datetime
+        );
+        console.log("Loaded traffic stats:", stats);
+        setTrafficStat(stats);
 
-      // 3. 최근 10개 데이터 로드 로직 추가
-      const chartData = await getLatestIntersectionTrafficData(intersection.id, 10);
-      setTrafficChartData(chartData);
-
-    } catch (error) {
-      console.error('Failed to load traffic stats or chart data:', error);
-      setTrafficStat(null);
-      setTrafficChartData([]); // 에러 발생 시 차트 데이터 초기화
-    }
-
-    // 사이드바에서 해당 항목으로 스크롤
-    setTimeout(() => {
-      const element = document.getElementById(
-        `intersection-${intersection.id}`
-      );
-      if (element) {
-        element.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-          inline: "nearest",
-        });
-        // 잠시 강조 효과
-        element.style.transition = "background-color 0.3s ease";
-        element.style.backgroundColor = "#fef3c7"; // 노란색 강조
-        setTimeout(() => {
-          element.style.backgroundColor = "";
-        }, 1500);
+        // 3. 최근 10개 데이터 로드 로직 추가
+        const chartData = await getLatestIntersectionTrafficData(
+          intersection.id,
+          10
+        );
+        setTrafficChartData(chartData);
+      } catch (error) {
+        console.error("Failed to load traffic stats or chart data:", error);
+        setTrafficStat(null);
+        setTrafficChartData([]); // 에러 발생 시 차트 데이터 초기화
       }
-    }, 100); // 다시 100ms로 단축 (선택된 항목이 이제 항상 맨 위에 있음)
-  }, []);
+
+      // 사이드바에서 해당 항목으로 스크롤
+      setTimeout(() => {
+        const element = document.getElementById(
+          `intersection-${intersection.id}`
+        );
+        if (element) {
+          element.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "nearest",
+          });
+          // 잠시 강조 효과
+          element.style.transition = "background-color 0.3s ease";
+          element.style.backgroundColor = "#fef3c7"; // 노란색 강조
+          setTimeout(() => {
+            element.style.backgroundColor = "";
+          }, 1500);
+        }
+      }, 100); // 다시 100ms로 단축 (선택된 항목이 이제 항상 맨 위에 있음)
+    },
+    []
+  );
 
   const [incidentMapCenter, setIncidentMapCenter] = useState<{
     lat: number;
@@ -712,6 +720,9 @@ export default function Dashboard() {
             )}
         </main>
       </div>
+
+      {/* AI 챗봇 플로팅 버튼 */}
+      <ChatBotButton />
     </div>
   );
 }
