@@ -781,12 +781,28 @@ def generate_ai_traffic_analysis(request, intersection_id: int, time_period: str
     """
     try:
         # Validate intersection exists
-        if not Intersection.objects.filter(id=intersection_id).exists():
+        intersection = Intersection.objects.filter(id=intersection_id).first()
+        if not intersection:
             raise HttpError(404, f"Intersection with ID {intersection_id} not found")
         
         # Validate time period
         if time_period not in ["24h", "7d", "30d"]:
             raise HttpError(400, "Invalid time period. Must be one of: 24h, 7d, 30d")
+        
+        # AI 리포트 요청 카운트 증가
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={
+                'view_count': 0,
+                'favorite_count': 0,
+                'ai_report_count': 0
+            }
+        )
+        stats.ai_report_count += 1
+        stats.last_ai_report = timezone.now()
+        stats.save()
+        
+        print(f"AI report requested for intersection {intersection_id}: {stats.ai_report_count} total requests")
         
         # Initialize Gemini analyzer
         analyzer = GeminiTrafficAnalyzer()
@@ -831,11 +847,27 @@ def generate_secure_ai_traffic_analysis(request, intersection_id: int, time_peri
     Generate AI-powered traffic analysis using Gemini API (Secure version)
     """
     try:
-        if not Intersection.objects.filter(id=intersection_id).exists():
+        intersection = Intersection.objects.filter(id=intersection_id).first()
+        if not intersection:
             raise HttpError(404, f"Intersection with ID {intersection_id} not found")
         
         if time_period not in ["24h", "7d", "30d"]:
             raise HttpError(400, "Invalid time period. Must be one of: 24h, 7d, 30d")
+        
+        # AI 리포트 요청 카운트 증가 (Secure version)
+        stats, created = IntersectionStats.objects.get_or_create(
+            intersection=intersection,
+            defaults={
+                'view_count': 0,
+                'favorite_count': 0,
+                'ai_report_count': 0
+            }
+        )
+        stats.ai_report_count += 1
+        stats.last_ai_report = timezone.now()
+        stats.save()
+        
+        print(f"Secure AI report requested for intersection {intersection_id}: {stats.ai_report_count} total requests")
         
         analyzer = GeminiTrafficAnalyzer()
         analysis_result = analyzer.analyze_intersection_traffic(intersection_id, time_period, language, use_report_data=True)

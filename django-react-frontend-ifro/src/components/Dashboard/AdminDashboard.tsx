@@ -144,7 +144,7 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">AI 리포트</p>
+                <p className="text-sm font-medium text-gray-600">총 정책 제안</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {loading ? "..." : "0"}
                 </p>
@@ -172,9 +172,9 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">AI 리포트</p>
+                <p className="text-sm font-medium text-gray-600">AI 분석 요청</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? "..." : "0"}
+                  {loading ? "..." : adminStats?.total_ai_reports.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -192,8 +192,8 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="mt-2 flex items-center">
-              <span className="text-gray-600 text-sm font-medium">준비 중</span>
-              <span className="text-gray-500 text-sm ml-1">기능 개발 예정</span>
+              <span className="text-blue-600 text-sm font-medium">누적</span>
+              <span className="text-gray-500 text-sm ml-1">전체 요청 수</span>
             </div>
           </div>
         </div>
