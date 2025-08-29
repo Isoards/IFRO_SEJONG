@@ -4,7 +4,7 @@ set -e
 cd /app/src
 
 echo "Waiting for MySQL to be ready..."
-until mysqladmin ping -h db -u root -p"$MYSQL_PASSWORD" --silent; do
+until mysql -h db -u root -p"$MYSQL_PASSWORD" --skip-ssl -e "SELECT 1;" > /dev/null 2>&1; do
     echo "DB not ready yet... retrying in 1s"
     sleep 1
 done
