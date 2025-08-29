@@ -67,6 +67,21 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
 
+# 개발 환경에서 더 관대한 CORS 설정
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 ROOT_URLCONF = 'dashboard.urls'
 
 TEMPLATES = [
