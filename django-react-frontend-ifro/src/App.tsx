@@ -1,6 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import Dashboard from "./components/Dashboard/index";
+import AdminDashboard from "./components/Dashboard/AdminDashboard";
 import LoginForm from "./components/Auth/LoginForm";
 import RegisterForm from "./components/Auth/RegisterForm";
 import Settings from "./components/Navigation/Settings";
@@ -17,6 +18,7 @@ function App() {
       <Route path="/register" element={<RegisterForm />} />
       <Route element={<PrivateRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/settings" element={<Settings />} />
         {/* 인증이 필요한 라우트는 여기에 추가 */}
       </Route>
