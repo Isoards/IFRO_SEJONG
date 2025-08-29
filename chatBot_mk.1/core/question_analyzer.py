@@ -26,6 +26,10 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.keyword_enhancer import KeywordEnhancer
 
+# 핵심요소 추출 및 컨텍스트 연속성 관리 모듈 import
+from .core_element_extractor import CoreElementExtractor, ExtractedElements
+from .context_continuity_manager import ContextContinuityManager, ConversationContext, ContinuityResult
+
 class QuestionType(Enum):
     """질문 유형 분류"""
     GREETING = "greeting"            # 인사말 (안녕, 반갑, 하이 등)
@@ -63,6 +67,10 @@ class AnalyzedQuestion:
     sql_intent: Optional[str] = None  # SQL 의도 (SELECT, INSERT, UPDATE, DELETE)
     embedding: Optional[np.ndarray] = None
     metadata: Optional[Dict] = None
+    # 새로운 필드들
+    core_elements: Optional[ExtractedElements] = None  # 추출된 핵심요소
+    enhanced_question: Optional[str] = None  # 향상된 질문
+    continuity_result: Optional[ContinuityResult] = None  # 연속성 분석 결과
 
 class QuestionAnalyzer:
     """
@@ -102,8 +110,17 @@ class QuestionAnalyzer:
         # 키워드 향상 모듈 초기화
         self.keyword_enhancer = KeywordEnhancer(domain=domain)
         
+        # 핵심요소 추출기 초기화
+        self.core_element_extractor = CoreElementExtractor()
+        
+        # 컨텍스트 연속성 관리자 초기화
+        self.context_manager = ContextContinuityManager()
+        
         # 대화 기록 저장
         self.conversation_history: List[ConversationItem] = []
+        
+        # 현재 대화 컨텍스트
+        self.current_context = ConversationContext()
         
         # 질문 유형 분류를 위한 패턴
         self.question_patterns = {
@@ -155,7 +172,7 @@ class QuestionAnalyzer:
     def analyze_question(self, question: str, 
                         use_conversation_context: bool = True) -> AnalyzedQuestion:
         """
-        질문을 종합적으로 분석
+        질문을 종합적으로 분석 (개선된 버전 - 컨텍스트 연속성 고려)
         
         Args:
             question: 사용자 질문
@@ -167,32 +184,61 @@ class QuestionAnalyzer:
         # 1. 질문 전처리
         processed_question = self._preprocess_question(question)
         
-        # 2. 질문 유형 분류
-        question_type = self._classify_question_type(processed_question)
+        # 2. 핵심요소 추출
+        core_elements = self.core_element_extractor.extract_core_elements(question)
         
-        # 3. 키워드 추출
-        keywords = self._extract_keywords(processed_question)
+        # 3. 컨텍스트 연속성 분석
+        continuity_result = None
+        enhanced_question = question
         
-        # 4. 개체명 추출 (간단한 규칙 기반)
-        entities = self._extract_entities(processed_question)
+        if use_conversation_context and self.conversation_history:
+            # 이전 질문의 핵심요소 추출
+            previous_question = self.conversation_history[-1].question
+            previous_elements = self.core_element_extractor.extract_core_elements(previous_question)
+            
+            # 연속성 분석
+            continuity_result = self.context_manager.check_context_continuity(
+                question, self.current_context, core_elements, previous_elements
+            )
+            
+            # 컨텍스트 병합 (필요시)
+            if continuity_result.should_merge:
+                enhanced_question = continuity_result.enhanced_question or question
+                core_elements = self.context_manager.merge_context(
+                    core_elements, previous_elements, continuity_result
+                )
+                
+                # 컨텍스트 업데이트
+                self.current_context = self.context_manager.update_conversation_context(
+                    self.current_context, core_elements, continuity_result
+                )
         
-        # 5. 질문 의도 분석
-        intent = self._analyze_intent(processed_question, question_type)
+        # 4. 질문 유형 분류 (향상된 질문 사용)
+        question_type = self._classify_question_type(enhanced_question)
         
-        # 6. 컨텍스트 키워드 추출
+        # 5. 키워드 추출 (핵심요소 기반)
+        keywords = self._extract_keywords_with_core_elements(enhanced_question, core_elements)
+        
+        # 6. 개체명 추출
+        entities = self._extract_entities(enhanced_question)
+        
+        # 7. 질문 의도 분석
+        intent = self._analyze_intent(enhanced_question, question_type)
+        
+        # 8. 컨텍스트 키워드 추출
         context_keywords = []
         if use_conversation_context and self.conversation_history:
-            context_keywords = self._extract_context_keywords(processed_question)
+            context_keywords = self._extract_context_keywords(enhanced_question)
         
-        # 7. SQL 필요 여부 및 의도 분석
-        requires_sql, sql_intent = self._analyze_sql_requirements(processed_question, question_type)
+        # 9. SQL 필요 여부 및 의도 분석
+        requires_sql, sql_intent = self._analyze_sql_requirements(enhanced_question, question_type)
         
-        # 8. 임베딩 생성
-        embedding = self.embedding_model.encode(processed_question)
+        # 10. 임베딩 생성
+        embedding = self.embedding_model.encode(enhanced_question)
         
         analyzed_question = AnalyzedQuestion(
             original_question=question,
-            processed_question=processed_question,
+            processed_question=enhanced_question,
             question_type=question_type,
             keywords=keywords,
             entities=entities,
@@ -201,13 +247,18 @@ class QuestionAnalyzer:
             requires_sql=requires_sql,
             sql_intent=sql_intent,
             embedding=embedding,
+            core_elements=core_elements,
+            enhanced_question=enhanced_question,
+            continuity_result=continuity_result,
             metadata={
                 "analysis_timestamp": datetime.now().isoformat(),
-                "has_context": len(context_keywords) > 0
+                "has_context": len(context_keywords) > 0,
+                "continuity_type": continuity_result.continuity_type.value if continuity_result else "none",
+                "overlap_score": continuity_result.overlap_score if continuity_result else 0.0
             }
         )
         
-        logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개")
+        logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개, 연속성: {continuity_result.continuity_type.value if continuity_result else 'none'}")
         return analyzed_question
     
     def analyze_question_with_expressions(self, question: str, 
@@ -496,7 +547,7 @@ class QuestionAnalyzer:
     
     def _extract_keywords(self, question: str) -> List[str]:
         """
-        질문에서 키워드 추출 (개선된 버전)
+        질문에서 키워드 추출 (기본 버전)
         
         Args:
             question: 전처리된 질문
@@ -536,6 +587,89 @@ class QuestionAnalyzer:
         # 가중치로 정렬하고 상위 15개 선택
         keyword_weights.sort(key=lambda x: x[1], reverse=True)
         top_keywords = [kw for kw, _ in keyword_weights[:15]]
+        
+        return top_keywords
+    
+    def _extract_keywords_with_core_elements(self, question: str, core_elements: ExtractedElements) -> List[str]:
+        """
+        핵심요소를 고려한 키워드 추출 (개선된 버전)
+        
+        Args:
+            question: 전처리된 질문
+            core_elements: 추출된 핵심요소
+            
+        Returns:
+            키워드 리스트
+        """
+        # 1. 기본 키워드 추출
+        basic_keywords = self._extract_keywords(question)
+        
+        # 2. 핵심요소에서 키워드 추가
+        core_keywords = []
+        
+        # 주제 키워드 (높은 우선순위)
+        if core_elements.topic:
+            core_keywords.append(core_elements.topic.text)
+        
+        # 개체 키워드 (중간 우선순위)
+        for entity in core_elements.entities:
+            if entity.text not in core_keywords:
+                core_keywords.append(entity.text)
+        
+        # 속성 키워드 (중간 우선순위)
+        for attr in core_elements.attributes:
+            if attr.text not in core_keywords:
+                core_keywords.append(attr.text)
+        
+        # 관계 키워드 (낮은 우선순위)
+        for relation in core_elements.relations:
+            if relation.text not in core_keywords:
+                core_keywords.append(relation.text)
+        
+        # 시간 키워드 (낮은 우선순위)
+        for temporal in core_elements.temporal:
+            if temporal.text not in core_keywords:
+                core_keywords.append(temporal.text)
+        
+        # 위치 키워드 (중간 우선순위)
+        for location in core_elements.locations:
+            if location.text not in core_keywords:
+                core_keywords.append(location.text)
+        
+        # 3. 키워드 통합 및 우선순위 적용
+        all_keywords = []
+        
+        # 핵심요소 키워드를 먼저 추가 (높은 우선순위)
+        all_keywords.extend(core_keywords)
+        
+        # 기본 키워드 추가 (중복 제거)
+        for keyword in basic_keywords:
+            if keyword not in all_keywords:
+                all_keywords.append(keyword)
+        
+        # 4. 키워드 향상
+        enhanced_keywords = self.keyword_enhancer.enhance_keywords(all_keywords)
+        
+        # 5. 도메인 특화 키워드 추가
+        domain_keywords = self.keyword_enhancer.extract_domain_specific_keywords(question)
+        enhanced_keywords.extend(domain_keywords)
+        
+        # 6. 중복 제거 및 정렬
+        unique_keywords = list(set(enhanced_keywords))
+        unique_keywords.sort(key=len, reverse=True)  # 긴 키워드 우선
+        
+        # 7. 키워드 가중치 계산 및 상위 키워드 선택
+        keyword_weights = []
+        for keyword in unique_keywords:
+            weight = self.keyword_enhancer.calculate_keyword_weight(keyword, question)
+            # 핵심요소 키워드에 가중치 부여
+            if keyword in core_keywords:
+                weight *= 1.5
+            keyword_weights.append((keyword, weight))
+        
+        # 가중치로 정렬하고 상위 20개 선택 (핵심요소 고려로 더 많은 키워드)
+        keyword_weights.sort(key=lambda x: x[1], reverse=True)
+        top_keywords = [kw for kw, _ in keyword_weights[:20]]
         
         return top_keywords
     
@@ -652,7 +786,7 @@ class QuestionAnalyzer:
                             relevant_chunks: List[str],
                             confidence_score: float = 0.0) -> None:
         """
-        대화 항목을 기록에 추가
+        대화 항목을 기록에 추가 (개선된 버전 - 컨텍스트 관리 포함)
         
         Args:
             question: 질문
@@ -660,8 +794,25 @@ class QuestionAnalyzer:
             relevant_chunks: 답변에 사용된 청크 ID들
             confidence_score: 답변 신뢰도
         """
-        # 질문 분석
-        analyzed_q = self.analyze_question(question, use_conversation_context=False)
+        # 질문 분석 (컨텍스트 연속성 고려)
+        analyzed_q = self.analyze_question(question, use_conversation_context=True)
+        
+        # 컨텍스트 정보 추가
+        context_info = {}
+        if analyzed_q.continuity_result:
+            context_info.update({
+                "continuity_type": analyzed_q.continuity_result.continuity_type.value,
+                "overlap_score": analyzed_q.continuity_result.overlap_score,
+                "should_merge": analyzed_q.continuity_result.should_merge,
+                "missing_elements_count": len(analyzed_q.continuity_result.missing_elements)
+            })
+        
+        if analyzed_q.core_elements:
+            context_info.update({
+                "topic": analyzed_q.core_elements.topic.text if analyzed_q.core_elements.topic else None,
+                "entities_count": len(analyzed_q.core_elements.entities),
+                "attributes_count": len(analyzed_q.core_elements.attributes)
+            })
         
         conv_item = ConversationItem(
             question=question,
@@ -672,7 +823,10 @@ class QuestionAnalyzer:
             confidence_score=confidence_score,
             metadata={
                 "keywords": analyzed_q.keywords,
-                "intent": analyzed_q.intent
+                "intent": analyzed_q.intent,
+                "enhanced_question": analyzed_q.enhanced_question,
+                "context_info": context_info,
+                "conversation_depth": self.current_context.depth
             }
         )
         
@@ -682,7 +836,7 @@ class QuestionAnalyzer:
         if len(self.conversation_history) > 50:
             self.conversation_history = self.conversation_history[-50:]
         
-        logger.info(f"대화 항목 추가: {analyzed_q.question_type.value}")
+        logger.info(f"대화 항목 추가: {analyzed_q.question_type.value}, 연속성: {analyzed_q.continuity_result.continuity_type.value if analyzed_q.continuity_result else 'none'}")
     
     def get_conversation_context(self, max_items: int = 3) -> List[Dict]:
         """
@@ -833,6 +987,86 @@ class QuestionAnalyzer:
             sql_intent = 'SELECT'
         
         return requires_sql, sql_intent
+    
+    def get_current_context(self) -> ConversationContext:
+        """
+        현재 대화 컨텍스트 반환
+        
+        Returns:
+            현재 대화 컨텍스트
+        """
+        return self.current_context
+    
+    def reset_context(self) -> None:
+        """
+        대화 컨텍스트 초기화
+        """
+        self.current_context = ConversationContext()
+        logger.info("대화 컨텍스트 초기화 완료")
+    
+    def get_context_summary(self) -> Dict[str, Any]:
+        """
+        현재 컨텍스트 요약 정보 반환
+        
+        Returns:
+            컨텍스트 요약 정보
+        """
+        return {
+            "topic": self.current_context.topic,
+            "entities": self.current_context.entities,
+            "attributes": self.current_context.attributes,
+            "relations": self.current_context.relations,
+            "temporal": self.current_context.temporal,
+            "locations": self.current_context.locations,
+            "depth": self.current_context.depth,
+            "conversation_count": len(self.conversation_history)
+        }
+    
+    def analyze_conversation_flow(self) -> Dict[str, Any]:
+        """
+        대화 흐름 분석
+        
+        Returns:
+            대화 흐름 분석 결과
+        """
+        if len(self.conversation_history) < 2:
+            return {"message": "분석할 대화가 충분하지 않습니다."}
+        
+        flow_analysis = {
+            "total_conversations": len(self.conversation_history),
+            "context_changes": 0,
+            "continuity_scores": [],
+            "topic_transitions": [],
+            "average_depth": 0
+        }
+        
+        continuity_scores = []
+        topic_transitions = []
+        
+        for i in range(1, len(self.conversation_history)):
+            prev_item = self.conversation_history[i-1]
+            curr_item = self.conversation_history[i]
+            
+            # 연속성 점수 추출
+            if "context_info" in curr_item.metadata:
+                context_info = curr_item.metadata["context_info"]
+                if "overlap_score" in context_info:
+                    continuity_scores.append(context_info["overlap_score"])
+                
+                # 주제 전환 확인
+                if "continuity_type" in context_info:
+                    if context_info["continuity_type"] == "none":
+                        flow_analysis["context_changes"] += 1
+        
+        if continuity_scores:
+            flow_analysis["continuity_scores"] = continuity_scores
+            flow_analysis["average_continuity"] = sum(continuity_scores) / len(continuity_scores)
+        
+        # 평균 대화 깊이 계산
+        depths = [item.metadata.get("conversation_depth", 0) for item in self.conversation_history]
+        flow_analysis["average_depth"] = sum(depths) / len(depths) if depths else 0
+        
+        return flow_analysis
 
 # 유틸리티 함수들
 def calculate_question_complexity(analyzed_question: AnalyzedQuestion) -> float:
