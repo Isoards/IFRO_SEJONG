@@ -694,11 +694,20 @@ async def search_conversation_cache(
 
 # 간단한 챗봇 엔드포인트 (PDF 없이 작동)
 @app.post("/chat")
-async def simple_chat(message: str):
+async def simple_chat(message: Dict[str, str]):
     """간단한 챗봇 응답 (PDF 없이 작동)"""
     try:
+        # 메시지 추출
+        user_message = message.get("message", "")
+        if not user_message:
+            return {
+                "success": False,
+                "response": "메시지가 비어있습니다.",
+                "timestamp": datetime.now().isoformat()
+            }
+        
         # 간단한 키워드 기반 응답
-        lower_message = message.lower()
+        lower_message = user_message.lower()
         
         if "교통" in lower_message or "traffic" in lower_message:
             response = "교통 데이터는 대시보드의 '분석' 탭에서 확인하실 수 있습니다. 특정 교차로를 클릭하시면 해당 지점의 상세한 교통량 정보를 볼 수 있어요."
@@ -789,4 +798,4 @@ def run_server(host: str = "0.0.0.0", port: int = 8008, debug: bool = False):
 
 if __name__ == "__main__":
     # 개발 서버 실행
-    run_server(debug=True)
+    run_server(debug=False)

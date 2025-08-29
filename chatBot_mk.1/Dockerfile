@@ -20,5 +20,5 @@ COPY . .
 # 포트 노출
 EXPOSE 8008
 
-# 서버 실행 (테스트 버전)
-CMD ["python", "test_server.py"]
+# 서버 실행 (실제 API 서버)
+CMD ["python", "-m", "api.endpoints"]

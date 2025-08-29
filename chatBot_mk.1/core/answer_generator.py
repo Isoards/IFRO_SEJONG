@@ -436,6 +436,21 @@ class AnswerGenerator:
         한국어에 최적화된 프롬프트를 사용합니다.
         """
         return {
+            "greeting": """당신은 친근하고 반갑게 인사하는 AI 어시스턴트입니다.
+
+사용자의 인사말에 대해 따뜻하고 친근하게 응답해주세요.
+
+사용자 메시지: {question}
+
+인사 응답 규칙:
+1. 반드시 한국어로만 답변하세요
+2. 따뜻하고 친근한 톤으로 응답하세요
+3. 사용자의 인사에 맞는 적절한 응답을 해주세요
+5. 1-2문장으로 간결하게 답변하세요
+6. 시간대에 따른 적절한 인사를 포함할 수 있습니다
+
+답변:""",
+
             "basic": """당신은 한국어 문서를 기반으로 질문에 답변하는 전문가입니다.
 
 주어진 문서 내용을 정확히 읽고 질문에 답변해주세요.
@@ -550,8 +565,11 @@ class AnswerGenerator:
                 logger.info(f"캐시된 답변 사용: {time.time() - start_time:.3f}초")
                 return cached_answer
         
-        # 2. 컨텍스트 구성
-        context = self._build_context(relevant_chunks)
+        # 2. 컨텍스트 구성 (인사말이 아닌 경우에만)
+        if analyzed_question.question_type.value != "greeting":
+            context = self._build_context(relevant_chunks)
+        else:
+            context = ""  # 인사말의 경우 컨텍스트 불필요
         
         # 3. 프롬프트 선택 및 구성
         prompt = self._build_prompt(
@@ -685,6 +703,12 @@ class AnswerGenerator:
             return self.prompt_templates[template_key].format(
                 conversation_history=history_text,
                 context=context,
+                question=question
+            )
+        
+        # 인사말인 경우 특별 처리
+        if question_type.value == "greeting":
+            return self.prompt_templates["greeting"].format(
                 question=question
             )
         

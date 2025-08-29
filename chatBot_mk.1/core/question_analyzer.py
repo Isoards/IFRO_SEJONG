@@ -28,6 +28,7 @@ from utils.keyword_enhancer import KeywordEnhancer
 
 class QuestionType(Enum):
     """질문 유형 분류"""
+    GREETING = "greeting"            # 인사말 (안녕, 반갑, 하이 등)
     FACTUAL = "factual"              # 사실 질문 (무엇, 언제, 어디서)
     CONCEPTUAL = "conceptual"        # 개념 질문 (어떻게, 왜)
     COMPARATIVE = "comparative"      # 비교 질문 (차이점, 유사점)
@@ -232,6 +233,56 @@ class QuestionAnalyzer:
         
         return analyzed
     
+    def _is_greeting(self, question: str) -> bool:
+        """
+        인사말인지 확인
+        
+        Args:
+            question: 확인할 질문
+            
+        Returns:
+            인사말 여부
+        """
+        # 인사말 패턴들
+        greeting_patterns = [
+            r'안녕',
+            r'반갑',
+            r'하이',
+            r'hi',
+            r'hello',
+            r'좋은\s*(아침|점심|저녁|하루)',
+            r'만나서\s*반가워',
+            r'반가워',
+            r'인사',
+            r'오랜만',
+            r'오래간만',
+            r'잘\s*지내',
+            r'어떻게\s*지내',
+            r'안녕하세요',
+            r'안녕하십니까',
+            r'반갑습니다',
+            r'반가워요',
+            r'하이하이',
+            r'헬로',
+            r'헬로우'
+        ]
+        
+        question_lower = question.lower().strip()
+        
+        # 패턴 매칭
+        for pattern in greeting_patterns:
+            if re.search(pattern, question_lower, re.IGNORECASE):
+                return True
+        
+        # 단순한 인사말 확인 (2단어 이하)
+        words = question_lower.split()
+        if len(words) <= 2:
+            simple_greetings = ['안녕', '하이', 'hi', 'hello', '반가워', '반갑다']
+            if any(word in simple_greetings for word in words):
+                return True
+        
+        return False
+    
     def _enhance_analysis_with_expressions(self, analyzed: AnalyzedQuestion, 
                                          expression_enhancer) -> AnalyzedQuestion:
         """표현을 활용한 분석 강화"""
@@ -420,6 +471,10 @@ class QuestionAnalyzer:
         Returns:
             질문 유형
         """
+        # 먼저 인사말인지 확인
+        if self._is_greeting(question):
+            return QuestionType.GREETING
+        
         question_lower = question.lower()
         
         # 각 유형별 패턴 매칭 점수 계산
