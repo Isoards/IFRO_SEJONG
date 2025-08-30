@@ -217,3 +217,105 @@ class ServiceErrorSchema(Schema):
     message: str
     code: str
     details: dict = {}
+
+# 정책제안 관련 스키마들
+class CoordinatesSchema(Schema):
+    """좌표 스키마"""
+    lat: float
+    lng: float
+
+class ProposalAttachmentSchema(Schema):
+    """정책제안 첨부파일 스키마"""
+    id: int
+    file_name: str
+    file_url: str
+    file_size: int
+    uploaded_at: datetime
+
+class PolicyProposalSchema(Schema):
+    """정책제안 상세 스키마"""
+    id: int
+    title: str
+    description: str
+    category: str
+    priority: str
+    status: str
+    location: Optional[str] = None
+    intersection_id: Optional[int] = None
+    intersection_name: Optional[str] = None
+    coordinates: Optional[CoordinatesSchema] = None
+    submitted_by: int
+    submitted_by_name: str
+    submitted_by_email: str
+    created_at: datetime
+    updated_at: datetime
+    admin_response: Optional[str] = None
+    admin_response_date: Optional[datetime] = None
+    admin_response_by: Optional[str] = None
+    attachments: List[ProposalAttachmentSchema] = []
+    tags: List[str] = []
+    votes_count: int = 0
+    views_count: int = 0
+
+class CreateProposalRequestSchema(Schema):
+    """정책제안 생성 요청 스키마"""
+    title: str = Field(..., min_length=5, max_length=200, description="제목 (5-200자)")
+    description: str = Field(..., min_length=20, max_length=2000, description="내용 (20-2000자)")
+    category: str = Field(..., description="카테고리")
+    priority: str = Field(default="medium", description="우선순위")
+    location: Optional[str] = Field(None, max_length=500, description="위치 설명")
+    intersection_id: Optional[int] = Field(None, description="관련 교차로 ID")
+    coordinates: Optional[CoordinatesSchema] = Field(None, description="좌표")
+    tags: Optional[List[str]] = Field(default=[], description="태그 목록")
+
+class UpdateProposalRequestSchema(Schema):
+    """정책제안 수정 요청 스키마 (제안자용)"""
+    title: Optional[str] = Field(None, min_length=5, max_length=200, description="제목")
+    description: Optional[str] = Field(None, min_length=20, max_length=2000, description="내용")
+    category: Optional[str] = Field(None, description="카테고리")
+    priority: Optional[str] = Field(None, description="우선순위")
+    location: Optional[str] = Field(None, max_length=500, description="위치 설명")
+    intersection_id: Optional[int] = Field(None, description="관련 교차로 ID")
+    coordinates: Optional[CoordinatesSchema] = Field(None, description="좌표")
+    tags: Optional[List[str]] = Field(None, description="태그 목록")
+
+class UpdateProposalStatusRequestSchema(Schema):
+    """정책제안 상태 업데이트 요청 스키마 (관리자용)"""
+    status: str = Field(..., description="상태")
+    admin_response: Optional[str] = Field(None, description="관리자 답변")
+
+class ProposalListResponseSchema(Schema):
+    """정책제안 목록 응답 스키마"""
+    results: List[PolicyProposalSchema]
+    count: int
+    next: Optional[str] = None
+    previous: Optional[str] = None
+
+class ProposalVoteRequestSchema(Schema):
+    """정책제안 투표 요청 스키마"""
+    vote_type: str = Field(..., description="투표 타입 (up/down)")
+
+class ProposalVoteResponseSchema(Schema):
+    """정책제안 투표 응답 스키마"""
+    votes_count: int
+    user_vote: Optional[str] = None
+
+class ProposalStatsSchema(Schema):
+    """정책제안 통계 스키마"""
+    total_proposals: int
+    pending_proposals: int
+    completed_proposals: int
+    proposals_by_category: dict
+    proposals_by_status: dict
+    monthly_proposals: List[dict]
+
+class ProposalByCategorySchema(Schema):
+    """카테고리별 정책제안 수 스키마"""
+    category: str
+    count: int
+
+class ProposalByIntersectionSchema(Schema):
+    """교차로별 정책제안 수 스키마"""
+    intersection_id: int
+    intersection_name: str
+    count: int
