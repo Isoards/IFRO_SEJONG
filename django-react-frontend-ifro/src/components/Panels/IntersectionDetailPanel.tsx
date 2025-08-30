@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Star } from "lucide-react";
+import { X, Star, Plus } from "lucide-react";
 import {
   Intersection,
   ApiTrafficData,
@@ -14,6 +14,8 @@ import { PDFGenerationStatus } from "../PDF/PDFGenerationStatus";
 import { AIEnhancedPDFButton } from "../Dashboard/AIEnhancedPDFButton";
 import { PDFTemplate } from "../PDF/PDFTemplate";
 import { getIntersectionReportData } from "../../api/intersections";
+import { IntersectionProposalSection } from "./IntersectionProposalSection";
+import CreateProposalForm from "../PolicyProposals/CreateProposalForm";
 
 interface IntersectionDetailPanelProps {
   intersection: Intersection;
@@ -45,6 +47,8 @@ export const IntersectionDetailPanel: React.FC<
     null
   );
   const [isLoadingReportData, setIsLoadingReportData] = useState(false);
+  const [showCreateProposal, setShowCreateProposal] = useState(false);
+  const [proposalRefreshFunction, setProposalRefreshFunction] = useState<(() => void) | null>(null);
 
   // 컴포넌트 마운트 시 실제 데이터 가져오기
   React.useEffect(() => {
@@ -171,6 +175,22 @@ export const IntersectionDetailPanel: React.FC<
     await generatePDF(dataToUse, templateRef.current);
   };
 
+  const handleCreateProposal = () => {
+    setShowCreateProposal(true);
+  };
+
+  const handleCloseCreateProposal = () => {
+    setShowCreateProposal(false);
+  };
+
+  const handleProposalSuccess = () => {
+    setShowCreateProposal(false);
+    // 정책제안 목록 새로고침
+    if (proposalRefreshFunction) {
+      proposalRefreshFunction();
+    }
+  };
+
   return (
     <div className="h-full w-full max-w-2xl mx-auto p-4 pt-3 bg-white relative overflow-y-auto">
       <div className="flex items-center justify-between mb-4">
@@ -180,6 +200,14 @@ export const IntersectionDetailPanel: React.FC<
           </h2>
         </div>
         <div className="flex items-center space-x-1 ml-4">
+          <button
+            onClick={handleCreateProposal}
+            className="inline-flex items-center justify-center h-8 px-3 bg-green-600/50 hover:bg-green-600 text-white transition-all duration-300 rounded-md text-xs font-medium"
+            title="정책제안 작성"
+          >
+            <Plus size={14} className="mr-1" />
+            정책제안
+          </button>
           {isSupported && (
             <>
               <AIEnhancedPDFButton
@@ -265,6 +293,12 @@ export const IntersectionDetailPanel: React.FC<
             </span>
           </div>
         </div>
+
+        {/* 정책제안 섹션 */}
+        <IntersectionProposalSection 
+          intersection={intersection}
+          onRefresh={setProposalRefreshFunction}
+        />
       </div>
 
       {/* PDF Template (Hidden) */}
@@ -277,6 +311,32 @@ export const IntersectionDetailPanel: React.FC<
           )}
         </div>
       </div>
+
+      {/* 정책제안 작성 모달 */}
+      {showCreateProposal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto m-4">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">
+                정책제안 작성 - {intersection.name}
+              </h2>
+              <button
+                onClick={handleCloseCreateProposal}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X size={20} className="text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6">
+              <CreateProposalForm
+                preselectedIntersectionId={intersection.id}
+                onClose={handleCloseCreateProposal}
+                onSuccess={handleProposalSuccess}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

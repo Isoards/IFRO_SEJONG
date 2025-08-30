@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   PolicyProposal,
   ProposalCategory,
@@ -47,6 +47,7 @@ const STATUS_COLORS: Record<ProposalStatus, string> = {
 
 const ProposalList: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [proposals, setProposals] = useState<PolicyProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -61,6 +62,24 @@ const ProposalList: React.FC = () => {
     priority: undefined,
     search: "",
   });
+
+  // URL 파라미터에서 필터 설정
+  useEffect(() => {
+    const intersectionId = searchParams.get("intersection_id");
+    const category = searchParams.get("category") as ProposalCategory;
+    const status = searchParams.get("status") as ProposalStatus;
+    const priority = searchParams.get("priority") as ProposalPriority;
+    const search = searchParams.get("search");
+
+    setFilters(prev => ({
+      ...prev,
+      intersection_id: intersectionId ? parseInt(intersectionId) : undefined,
+      category: category || undefined,
+      status: status || undefined,
+      priority: priority || undefined,
+      search: search || "",
+    }));
+  }, [searchParams]);
 
   // 현재 사용자 정보 로드
   useEffect(() => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ProposalCategory,
   ProposalPriority,
@@ -29,8 +29,19 @@ const PRIORITY_OPTIONS: {
   { value: "urgent", label: "긴급", color: "text-red-600" },
 ];
 
-const CreateProposalForm: React.FC = () => {
+interface CreateProposalFormProps {
+  preselectedIntersectionId?: number;
+  onClose?: () => void;
+  onSuccess?: () => void;
+}
+
+const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
+  preselectedIntersectionId,
+  onClose,
+  onSuccess,
+}) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [intersections, setIntersections] = useState<Intersection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<CreateProposalRequest>({
@@ -57,6 +68,24 @@ const CreateProposalForm: React.FC = () => {
     };
     loadIntersections();
   }, []);
+
+  // URL 파라미터에서 교차로 ID 확인 및 설정
+  useEffect(() => {
+    const intersectionIdParam = searchParams.get("intersection_id");
+    const intersectionIdToUse = preselectedIntersectionId || (intersectionIdParam ? parseInt(intersectionIdParam) : null);
+    
+    if (intersectionIdToUse && intersections.length > 0) {
+      const selectedIntersection = intersections.find(i => i.id === intersectionIdToUse);
+      
+      if (selectedIntersection) {
+        setFormData(prev => ({
+          ...prev,
+          intersection_id: intersectionIdToUse,
+          location: selectedIntersection.name,
+        }));
+      }
+    }
+  }, [searchParams, intersections, preselectedIntersectionId]);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -92,7 +121,11 @@ const CreateProposalForm: React.FC = () => {
     try {
       await createProposal(formData);
       alert("정책제안이 성공적으로 등록되었습니다!");
-      navigate("/proposals");
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        navigate("/proposals");
+      }
     } catch (error) {
       console.error("정책제안 등록 실패:", error);
       alert("정책제안 등록에 실패했습니다. 다시 시도해주세요.");
@@ -325,7 +358,7 @@ const CreateProposalForm: React.FC = () => {
         <div className="flex gap-4 pt-4">
           <button
             type="button"
-            onClick={() => navigate("/proposals")}
+            onClick={onClose || (() => navigate("/proposals"))}
             className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
           >
             취소
