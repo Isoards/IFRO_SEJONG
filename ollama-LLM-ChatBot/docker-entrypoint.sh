@@ -6,7 +6,7 @@ echo "🚀 IFRO 챗봇 서버 시작 중..."
 # 환경 변수 설정
 export PYTHONPATH=/app
 export MODEL_TYPE=${MODEL_TYPE:-ollama}
-export MODEL_NAME=${MODEL_NAME:-mistral:latest}
+export MODEL_NAME=${MODEL_NAME:-qwen2:1.5b}
 export EMBEDDING_MODEL=${EMBEDDING_MODEL:-jhgan/ko-sroberta-multitask}
 
 # 로그 디렉토리 생성
@@ -161,7 +161,7 @@ def download_ollama_model(model_name):
         print(f'❌ 모델 다운로드 중 오류: {e}')
         return False
 
-model_name = os.getenv('MODEL_NAME', 'mistral:latest')
+model_name = os.getenv('MODEL_NAME', 'qwen2:1.5b')
 if not download_ollama_model(model_name):
     sys.exit(1)
 "

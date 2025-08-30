@@ -119,7 +119,7 @@ def main():
     
     # 환경 변수에서 설정 가져오기
     model_type = os.getenv("MODEL_TYPE", "ollama")
-    model_name = os.getenv("MODEL_NAME", "mistral:latest")
+    model_name = os.getenv("MODEL_NAME", "qwen2:1.5b")
     embedding_model = os.getenv("EMBEDDING_MODEL", "jhgan/ko-sroberta-multitask")
     
     # Ollama 모델 자동 다운로드

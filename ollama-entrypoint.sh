@@ -34,26 +34,26 @@ echo "=== 현재 모델 목록 확인 ==="
 ollama list
 
 # 필요한 모델이 없으면 다운로드
-if ! ollama list | grep -q "mistral:latest"; then
-    echo "=== mistral:latest 모델 다운로드 시작 ==="
-    ollama pull mistral:latest
+if ! ollama list | grep -q "qwen2:1.5b"; then
+    echo "=== qwen2:1.5b 모델 다운로드 시작 ==="
+    ollama pull qwen2:1.5b
     ollama pull sqlcoder:7b
     
     # 다운로드 완료 확인
     echo "모델 다운로드 완료 확인 중..."
-    if ollama list | grep -q "mistral:latest"; then
-        echo "✅ mistral:latest 모델 다운로드 완료!"
+    if ollama list | grep -q "qwen2:1.5b"; then
+        echo "✅ qwen2:1.5b 모델 다운로드 완료!"
     else
         echo "❌ 오류: 모델 다운로드가 실패했습니다!"
         exit 1
     fi
 else
-    echo "✅ mistral:latest 모델이 이미 존재합니다!"
+    echo "✅ qwen2:1.5b 모델이 이미 존재합니다!"
 fi
 
 # 모델이 실제로 사용 가능한지 테스트
 echo "=== 모델 사용 가능성 테스트 ==="
-test_response=$(ollama run mistral:latest "Hello" 2>/dev/null | head -1)
+test_response=$(ollama run qwen2:1.5b "Hello" 2>/dev/null | head -1)
 if [ -n "$test_response" ]; then
     echo "✅ 모델 테스트 성공: $test_response"
 else
