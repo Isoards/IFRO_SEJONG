@@ -257,19 +257,56 @@ class QuestionAnalyzer:
         # 6. 개체명 추출
         entities = self._extract_entities(enhanced_question)
         
-        # 7. 질문 의도 분석
-        intent = self._analyze_intent(enhanced_question, question_type)
+        # 7. 질문 의도 분석 (의도 분류기 사용)
+        intent_result = None
+        if IntentClassifier is not None:
+            try:
+                # 의도 분류기 초기화 (아직 초기화되지 않은 경우)
+                if not hasattr(self, 'intent_classifier') or self.intent_classifier is None:
+                    self.intent_classifier = IntentClassifier()
+                
+                # 의도 분류 수행
+                intent_result = self.intent_classifier.classify_intent(enhanced_question)
+                intent = intent_result.intent.value
+                
+                # 메타데이터에 의도 분류 정보 추가
+                intent_metadata = {
+                    "intent_confidence": intent_result.confidence,
+                    "intent_classifier_used": intent_result.classifier_used,
+                    "intent_processing_time": intent_result.processing_time
+                }
+            except Exception as e:
+                logger.warning(f"의도 분류기 사용 실패, 기본 의도 분석 사용: {e}")
+                intent = self._analyze_intent(enhanced_question, question_type)
+                intent_result = None
+                intent_metadata = {}
+        else:
+            # 의도 분류기가 없는 경우 기본 의도 분석 사용
+            intent = self._analyze_intent(enhanced_question, question_type)
+            intent_metadata = {}
         
         # 8. 컨텍스트 키워드 추출
         context_keywords = []
         if use_conversation_context and self.conversation_history:
             context_keywords = self._extract_context_keywords(enhanced_question)
         
-        # 9. SQL 필요 여부 및 의도 분석
-        requires_sql, sql_intent = self._analyze_sql_requirements(enhanced_question, question_type)
+        # 9. SQL 필요 여부 및 의도 분석 (의도 분류 결과 활용)
+        if intent_result is not None:
+            requires_sql, sql_intent = self._analyze_sql_requirements_with_intent(enhanced_question, question_type, intent_result)
+        else:
+            requires_sql, sql_intent = self._analyze_sql_requirements(enhanced_question, question_type)
         
         # 10. 임베딩 생성
         embedding = self.embedding_model.encode(enhanced_question)
+        
+        # 메타데이터에 의도 분류 정보 추가
+        metadata = {
+            "analysis_timestamp": datetime.now().isoformat(),
+            "has_context": len(context_keywords) > 0,
+            "continuity_type": continuity_result.continuity_type.value if continuity_result else "none",
+            "overlap_score": continuity_result.overlap_score if continuity_result else 0.0
+        }
+        metadata.update(intent_metadata)
         
         analyzed_question = AnalyzedQuestion(
             original_question=question,
@@ -285,12 +322,7 @@ class QuestionAnalyzer:
             core_elements=core_elements,
             enhanced_question=enhanced_question,
             continuity_result=continuity_result,
-            metadata={
-                "analysis_timestamp": datetime.now().isoformat(),
-                "has_context": len(context_keywords) > 0,
-                "continuity_type": continuity_result.continuity_type.value if continuity_result else "none",
-                "overlap_score": continuity_result.overlap_score if continuity_result else 0.0
-            }
+            metadata=metadata
         )
         
         logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개, 연속성: {continuity_result.continuity_type.value if continuity_result else 'none'}")
@@ -999,9 +1031,56 @@ class QuestionAnalyzer:
         except Exception as e:
             logger.error(f"대화 기록 로드 실패: {e}")
     
+    def _analyze_sql_requirements_with_intent(self, question: str, question_type: QuestionType, intent_result: IntentResult) -> Tuple[bool, Optional[str]]:
+        """
+        의도 분류 결과를 활용한 SQL 필요 여부 분석 (개선된 버전)
+        
+        Args:
+            question: 처리된 질문
+            question_type: 질문 유형
+            intent_result: 의도 분류 결과
+            
+        Returns:
+            (SQL 필요 여부, SQL 의도)
+        """
+        requires_sql = False
+        sql_intent = None
+        
+        # 1. 의도 기반 SQL 필요 여부 판단
+        sql_required_intents = [
+            IntentType.DB_QUERY,
+            IntentType.DATA_ANALYSIS,
+            IntentType.STATISTICAL_QUERY,
+            IntentType.RANKING_INQUIRY
+        ]
+        
+        if intent_result.intent in sql_required_intents:
+            requires_sql = True
+            sql_intent = 'SELECT'
+        
+        # 2. 질문 유형 기반 보완 판단
+        if question_type in [QuestionType.QUANTITATIVE, QuestionType.DATABASE_QUERY]:
+            requires_sql = True
+            sql_intent = 'SELECT'
+        
+        # 3. 특수 케이스: 장소 이동 요청은 SQL 불필요
+        if intent_result.intent == IntentType.LOCATION_MOVEMENT or question_type == QuestionType.LOCATION_MOVEMENT:
+            requires_sql = False
+            sql_intent = None
+        
+        # 4. 신뢰도 기반 조정
+        if intent_result.confidence < 0.6:
+            # 신뢰도가 낮은 경우 기존 로직으로 보완
+            fallback_requires_sql, fallback_sql_intent = self._analyze_sql_requirements(question, question_type)
+            if not requires_sql and fallback_requires_sql:
+                requires_sql = fallback_requires_sql
+                sql_intent = fallback_sql_intent
+        
+        return requires_sql, sql_intent
+    
     def _analyze_sql_requirements(self, question: str, question_type: QuestionType) -> Tuple[bool, Optional[str]]:
         """
-        SQL 필요 여부 및 의도 분석 (개선된 버전)
+        SQL 필요 여부 및 의도 분석 (보완용 - 기존 로직)
         
         Args:
             question: 처리된 질문
@@ -1097,6 +1176,37 @@ class QuestionAnalyzer:
                     sql_intent = 'SELECT'
         
         return requires_sql, sql_intent
+    
+    def get_intent_classification_stats(self) -> Dict[str, Any]:
+        """
+        의도 분류 통계 반환
+        
+        Returns:
+            의도 분류 통계 정보
+        """
+        return self.intent_classifier.get_classification_stats()
+    
+    def add_intent_training_example(self, question: str, intent: IntentType):
+        """
+        의도 분류기 학습 예시 추가
+        
+        Args:
+            question: 학습할 질문
+            intent: 정답 의도
+        """
+        self.intent_classifier.add_training_example(question, intent)
+    
+    def retrain_intent_classifier(self):
+        """의도 분류기 재학습"""
+        self.intent_classifier.retrain_classifiers()
+    
+    def save_intent_classifier(self, file_path: str):
+        """의도 분류기 저장"""
+        self.intent_classifier.save_classifier(file_path)
+    
+    def load_intent_classifier(self, file_path: str):
+        """의도 분류기 로드"""
+        self.intent_classifier.load_classifier(file_path)
     
     def get_current_context(self) -> ConversationContext:
         """

@@ -26,6 +26,7 @@ from core.answer_generator import AnswerGenerator, Answer, ModelType, Generation
 from core.evaluator import PDFQAEvaluator, SystemEvaluation
 from core.sql_generator import SQLGenerator, DatabaseSchema, SQLQuery
 from core.dual_pipeline_processor import DualPipelineProcessor, DualPipelineResult
+from utils.chatbot_logger import chatbot_logger, QuestionType
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +429,36 @@ async def ask_question(
                 if result.sql_result and result.sql_result.sql_query:
                     sql_query = result.sql_result.sql_query.query
                 
+                # Dual Pipeline API 로깅
+                try:
+                    pipeline_type = result.metadata.get("pipeline_type", "unknown")
+                    if pipeline_type == "sql_query":
+                        question_type = QuestionType.SQL
+                    elif pipeline_type == "document_search":
+                        question_type = QuestionType.PDF
+                    else:
+                        question_type = QuestionType.HYBRID
+                    
+                    chatbot_logger.log_question(
+                        user_question=request.question,
+                        question_type=question_type,
+                        intent=result.analyzed_question.intent,
+                        keywords=result.analyzed_question.keywords,
+                        processing_time=result.total_processing_time,
+                        confidence_score=result.confidence_score,
+                        generated_answer=result.final_answer,
+                        generated_sql=sql_query,
+                        model_name="dual_pipeline",
+                        additional_info={
+                            "pdf_id": request.pdf_id,
+                            "user_id": request.user_id,
+                            "pipeline_type": pipeline_type,
+                            "context": result.metadata.get("context", "general")
+                        }
+                    )
+                except Exception as log_error:
+                    logger.warning(f"Dual Pipeline API 로깅 중 오류 발생: {log_error}")
+                
                 return QuestionResponse(
                     answer=result.final_answer,
                     confidence_score=result.confidence_score,
@@ -503,6 +534,29 @@ async def ask_question(
             
             logger.info(f"질문 처리 완료: {analyzed_question.question_type.value}, 캐시: {from_cache}")
             
+            # API 로깅
+            try:
+                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
+                chatbot_logger.log_question(
+                    user_question=request.question,
+                    question_type=question_type,
+                    intent=analyzed_question.intent,
+                    keywords=analyzed_question.keywords,
+                    processing_time=generation_time,
+                    confidence_score=confidence_score,
+                    generated_answer=answer_content,
+                    used_chunks=used_chunks,
+                    model_name=model_name,
+                    additional_info={
+                        "pdf_id": request.pdf_id,
+                        "user_id": request.user_id,
+                        "from_cache": from_cache,
+                        "pipeline_type": "document_search"
+                    }
+                )
+            except Exception as log_error:
+                logger.warning(f"API 로깅 중 오류 발생: {log_error}")
+            
             return QuestionResponse(
                 answer=answer_content,
                 confidence_score=confidence_score,
@@ -518,6 +572,16 @@ async def ask_question(
         logger.error(f"질문 처리 실패: {e}")
         import traceback
         logger.error(f"상세 오류: {traceback.format_exc()}")
+        
+        # 오류 로깅
+        try:
+            chatbot_logger.log_error(
+                user_question=request.question,
+                error_message=str(e),
+                question_type=QuestionType.UNKNOWN
+            )
+        except Exception as log_error:
+            logger.warning(f"오류 로깅 중 문제 발생: {log_error}")
         
         # 오류 발생 시에도 기본 응답 반환
         return QuestionResponse(
@@ -714,6 +778,29 @@ async def delete_pdf(pdf_id: str):
 async def health_check():
     """헬스 체크"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+@app.get("/logs/statistics")
+async def get_log_statistics():
+    """로그 통계 조회"""
+    try:
+        stats = chatbot_logger.get_statistics()
+        return {
+            "status": "success",
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"로그 통계 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"로그 통계 조회 실패: {str(e)}")
+
+@app.get("/logs/clear")
+async def clear_logs():
+    """로그 파일 초기화"""
+    try:
+        chatbot_logger.clear_logs()
+        return {"message": "모든 로그 파일이 초기화되었습니다."}
+    except Exception as e:
+        logger.error(f"로그 초기화 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"로그 초기화 실패: {str(e)}")
 
 # 대화 이력 관리 엔드포인트들
 

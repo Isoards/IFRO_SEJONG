@@ -18,8 +18,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 애플리케이션 코드 복사
 COPY . .
 
-# 데이터 디렉토리 생성
-RUN mkdir -p /app/data /app/vector_store
+# 엔트리포인트 스크립트 실행 권한 부여
+RUN chmod +x docker-entrypoint.sh
+
+# 필요한 디렉토리 생성
+RUN mkdir -p /app/data /app/vector_store /app/logs /app/models
 
 # 포트 노출
 EXPOSE 8008
@@ -29,6 +32,7 @@ ENV PYTHONPATH=/app
 ENV MODEL_TYPE=ollama
 ENV MODEL_NAME=mistral:latest
 ENV EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+ENV OLLAMA_HOST=http://ollama:11434
 
-# 서버 실행 (run_server.py 사용)
-CMD ["python", "run_server.py"]
+# 엔트리포인트 스크립트 실행
+ENTRYPOINT ["./docker-entrypoint.sh"]
