@@ -23,6 +23,7 @@ import {
 import { getIncidents } from "../../api/incidents";
 
 import { ChatBotButton } from "../common/ChatBotButton";
+import ProposalButton from "../common/ProposalButton";
 import { debugLog } from "../../utils/debugUtils";
 
 export default function Dashboard() {
@@ -228,14 +229,14 @@ export default function Dashboard() {
 
   // 즐겨찾기 토글 함수
   const handleToggleFavorite = useCallback(async (intersectionId: number) => {
-    const token = localStorage.getItem('access');
+    const token = localStorage.getItem("access");
 
     if (token) {
       // 로그인된 경우: 백엔드 API 호출 후 응답에 따라 로컬 상태 업데이트
       try {
         const response = await toggleIntersectionFavorite(intersectionId);
 
-        setFavoriteIntersections(prev => {
+        setFavoriteIntersections((prev) => {
           if (response.is_favorite) {
             // 즐겨찾기 추가
             if (!prev.includes(intersectionId)) {
@@ -244,18 +245,20 @@ export default function Dashboard() {
             return prev;
           } else {
             // 즐겨찾기 제거
-            return prev.filter(id => id !== intersectionId);
+            return prev.filter((id) => id !== intersectionId);
           }
         });
 
-        console.log(`Backend favorite toggled for intersection ${intersectionId}: ${response.is_favorite}`);
+        console.log(
+          `Backend favorite toggled for intersection ${intersectionId}: ${response.is_favorite}`
+        );
       } catch (error) {
-        console.error('Failed to sync favorite with backend:', error);
+        console.error("Failed to sync favorite with backend:", error);
         // 백엔드 오류 시 로컬 상태만 토글 (fallback)
-        setFavoriteIntersections(prev => {
+        setFavoriteIntersections((prev) => {
           const isCurrentlyFavorite = prev.includes(intersectionId);
           if (isCurrentlyFavorite) {
-            return prev.filter(id => id !== intersectionId);
+            return prev.filter((id) => id !== intersectionId);
           } else {
             return [...prev, intersectionId];
           }
@@ -263,13 +266,17 @@ export default function Dashboard() {
       }
     } else {
       // 로그인하지 않은 경우: 로컬 상태만 토글
-      setFavoriteIntersections(prev => {
+      setFavoriteIntersections((prev) => {
         const isCurrentlyFavorite = prev.includes(intersectionId);
         if (isCurrentlyFavorite) {
-          console.log(`Local favorite removed for intersection ${intersectionId} (not logged in)`);
-          return prev.filter(id => id !== intersectionId);
+          console.log(
+            `Local favorite removed for intersection ${intersectionId} (not logged in)`
+          );
+          return prev.filter((id) => id !== intersectionId);
         } else {
-          console.log(`Local favorite added for intersection ${intersectionId} (not logged in)`);
+          console.log(
+            `Local favorite added for intersection ${intersectionId} (not logged in)`
+          );
           return [...prev, intersectionId];
         }
       });
@@ -499,9 +506,9 @@ export default function Dashboard() {
         setTrafficStat(
           stat
             ? {
-              average_speed: stat.average_speed ?? null,
-              total_volume: stat.total_volume ?? null,
-            }
+                average_speed: stat.average_speed ?? null,
+                total_volume: stat.total_volume ?? null,
+              }
             : { average_speed: null, total_volume: null }
         );
       };
@@ -522,9 +529,9 @@ export default function Dashboard() {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((point1.latitude * Math.PI) / 180) *
-      Math.cos((point2.latitude * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+        Math.cos((point2.latitude * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
@@ -777,8 +784,8 @@ export default function Dashboard() {
                         (selectedPoints.length === 0
                           ? t("map.clickFirstPoint")
                           : selectedPoints.length === 1
-                            ? t("map.clickSecondPoint")
-                            : t("map.selectTwoPointsDesc"))}
+                          ? t("map.clickSecondPoint")
+                          : t("map.selectTwoPointsDesc"))}
                       {activeTrafficView === "incidents" &&
                         t("dashboard.selectIncident")}
                     </p>
@@ -792,10 +799,11 @@ export default function Dashboard() {
             selectedIntersection && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${showIntersectionPanel
+                ${
+                  showIntersectionPanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                  }`}
+                }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
@@ -829,10 +837,11 @@ export default function Dashboard() {
             selectedPoints.length === 2 && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${showRoutePanel
+                ${
+                  showRoutePanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                  }`}
+                }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
@@ -866,10 +875,11 @@ export default function Dashboard() {
             selectedIncident && (
               <div
                 className={`fixed top-0 right-0 h-full z-50 flex justify-center items-center transition-all duration-300 ease-in-out bg-white/90
-                ${showIncidentPanel
+                ${
+                  showIncidentPanel
                     ? "translate-x-0 opacity-100"
                     : "translate-x-full opacity-0"
-                  }`}
+                }`}
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
@@ -896,6 +906,9 @@ export default function Dashboard() {
 
       {/* AI 챗봇 플로팅 버튼 */}
       <ChatBotButton />
+
+      {/* 정책제안 플로팅 버튼 */}
+      <ProposalButton />
     </div>
   );
 }
