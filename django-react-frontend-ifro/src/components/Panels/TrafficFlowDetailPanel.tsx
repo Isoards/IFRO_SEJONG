@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Intersection, FavoriteFlow } from "../../types/global.types";
 import { Star } from "lucide-react";
+import { addTrafficFlowFavorite, removeTrafficFlowFavorite } from "../../api/intersections";
 
 interface TrafficFlowDetailPanelProps {
   selectedPoints: Intersection[];
@@ -36,27 +37,50 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
     );
 
   // 플로우를 즐겨찾기에 추가하는 함수
-  const handleAddFlowToFavorites = () => {
-    if (onAddFlowToFavorites && selectedPoints.length === 2) {
+  const handleAddFlowToFavorites = async () => {
+    if (selectedPoints.length === 2) {
       const [from, to] = selectedPoints;
 
-      const flow: FavoriteFlow = {
-        id: Date.now(), // 임시 ID (실제로는 서버에서 생성)
-        fromIntersectionId: from.id,
-        toIntersectionId: to.id,
-        fromIntersectionName: from.name,
-        toIntersectionName: to.name,
-        distance: calculateDistance(from, to),
-        travelTime: calculateTravelTime(from, to),
-        dateTime: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        flowData: {
-          averageVolume: Math.floor(Math.random() * 1000) + 500, // 임시 데이터
-          averageSpeed: Math.floor(Math.random() * 20) + 30, // 임시 데이터
-          trafficFlow: Math.floor(Math.random() * 100) + 50, // 임시 데이터
-        },
-      };
-      onAddFlowToFavorites(flow);
+      try {
+        if (isCurrentFlowFavorited) {
+          // 즐겨찾기 제거
+          console.log(`즐겨찾기 제거 시도: ${from.id} → ${to.id}`);
+          const result = await removeTrafficFlowFavorite(from.id, to.id);
+          console.log(`교통 흐름 즐겨찾기 제거 완료:`, result);
+          console.log(`경로: ${from.name} → ${to.name}`);
+        } else {
+          // 즐겨찾기 추가
+          const routeName = `${from.name} → ${to.name}`;
+          console.log(`즐겨찾기 추가 시도: ${from.id} → ${to.id}, 이름: ${routeName}`);
+          const result = await addTrafficFlowFavorite(from.id, to.id, routeName);
+          console.log(`교통 흐름 즐겨찾기 추가 완료:`, result);
+          console.log(`경로: ${routeName}`);
+        }
+
+        // 로컬 상태도 업데이트 (Dashboard의 함수 호출)
+        if (onAddFlowToFavorites) {
+          const flow: FavoriteFlow = {
+            id: Date.now(), // 임시 ID (실제로는 서버에서 생성)
+            fromIntersectionId: from.id,
+            toIntersectionId: to.id,
+            fromIntersectionName: from.name,
+            toIntersectionName: to.name,
+            distance: calculateDistance(from, to),
+            travelTime: calculateTravelTime(from, to),
+            dateTime: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            flowData: {
+              averageVolume: Math.floor(Math.random() * 1000) + 500, // 임시 데이터
+              averageSpeed: Math.floor(Math.random() * 20) + 30, // 임시 데이터
+              trafficFlow: Math.floor(Math.random() * 100) + 50, // 임시 데이터
+            },
+          };
+          onAddFlowToFavorites(flow);
+        }
+      } catch (error) {
+        console.error('교통 흐름 즐겨찾기 처리 중 오류:', error);
+        alert('즐겨찾기 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+      }
     }
   };
 
@@ -87,7 +111,7 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
           </div>
           {/* 버튼 영역 */}
           <div className="flex items-center space-x-2 ml-4">
-            {onAddFlowToFavorites && selectedPoints.length === 2 && (
+            {selectedPoints.length === 2 && (
               <button
                 onClick={handleAddFlowToFavorites}
                 className={`inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${

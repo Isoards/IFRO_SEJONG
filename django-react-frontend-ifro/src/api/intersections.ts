@@ -1,7 +1,7 @@
 import api from "./axios";
-import { 
-  Intersection, 
-  TrafficInterpretationRequest, 
+import {
+  Intersection,
+  TrafficInterpretationRequest,
   TrafficInterpretationResponse,
   ReportData,
   ApiTrafficData,
@@ -74,19 +74,19 @@ export const generateTrafficInterpretation = async (
   maxRetries: number = 3
 ): Promise<TrafficInterpretationResponse> => {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await api.post("traffic/generate-interpretation", requestData);
       return response.data;
     } catch (error: any) {
       lastError = error;
-      
+
       // 재시도하지 않을 오류 유형들
       if (error.response?.status === 400 || error.response?.status === 401 || error.response?.status === 403) {
         throw new Error(`API 요청 오류: ${error.response?.data?.message || error.message}`);
       }
-      
+
       // 마지막 시도가 아닌 경우 잠시 대기 후 재시도
       if (attempt < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // 지수 백오프, 최대 5초
@@ -95,7 +95,7 @@ export const generateTrafficInterpretation = async (
       }
     }
   }
-  
+
   // 모든 재시도 실패 시
   throw new Error(`교통 해석 생성 실패 (${maxRetries}회 시도): ${lastError?.message || '알 수 없는 오류'}`);
 };
@@ -134,22 +134,22 @@ export const generateAITrafficAnalysis = async (
 ): Promise<AIAnalysisResponse> => {
   try {
     const response = await api.post(`traffic/intersections/${intersectionId}/ai-analysis`, null, {
-      params: { 
+      params: {
         time_period: timePeriod,
         language: language
       },
       timeout: 60000 // 60초 타임아웃
     });
-    
+
     // 응답 데이터 검증
     if (!response.data || !response.data.analysis) {
       throw new Error('AI 분석 응답 데이터가 올바르지 않습니다.');
     }
-    
+
     return response.data;
   } catch (error: any) {
     console.error('AI Analysis API Error:', error);
-    
+
     if (error.response?.status === 404) {
       throw new Error('교차로를 찾을 수 없습니다.');
     } else if (error.response?.status === 400) {
@@ -161,7 +161,7 @@ export const generateAITrafficAnalysis = async (
     } else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       throw new Error('AI 분석 요청 시간이 초과되었습니다. 다시 시도해주세요.');
     }
-    
+
     throw new Error(`AI 분석 생성 실패: ${error.response?.data?.message || error.message}`);
   }
 }
@@ -175,7 +175,7 @@ export const getIntersectionReportData = async (
     const params: any = {};
     if (datetime) params.datetime_str = datetime;
     if (language) params.language = language;
-    
+
     const response = await api.get(
       `/traffic/intersections/${intersectionId}/report-data`,
       { params }
@@ -238,6 +238,35 @@ export const getTrafficFlowFavoritesDetailed = async () => {
 
 export const getTrafficFlowSummary = async () => {
   const response = await api.get('/traffic/admin/traffic-flow-summary');
+  return response.data;
+};
+
+// 교통 흐름 즐겨찾기 추가/제거 API
+export const addTrafficFlowFavorite = async (
+  startIntersectionId: number,
+  endIntersectionId: number,
+  favoriteName?: string
+) => {
+  const response = await api.post('/traffic/traffic-flow/favorite', null, {
+    params: {
+      start_intersection_id: startIntersectionId,
+      end_intersection_id: endIntersectionId,
+      favorite_name: favoriteName || `Route ${startIntersectionId} → ${endIntersectionId}`
+    }
+  });
+  return response.data;
+};
+
+export const removeTrafficFlowFavorite = async (
+  startIntersectionId: number,
+  endIntersectionId: number
+) => {
+  const response = await api.delete('/traffic/traffic-flow/favorite', {
+    params: {
+      start_intersection_id: startIntersectionId,
+      end_intersection_id: endIntersectionId
+    }
+  });
   return response.data;
 };
 
