@@ -36,7 +36,7 @@ class QuestionRequest(BaseModel):
     pdf_id: str = Field("", description="PDF 문서 식별자")
     user_id: str = Field("", description="사용자 식별자")
     use_conversation_context: bool = Field(True, description="이전 대화 컨텍스트 사용 여부")
-    max_chunks: int = Field(5, description="검색할 최대 청크 수")
+    max_chunks: int = Field(10, description="검색할 최대 청크 수")
 
 class QuestionResponse(BaseModel):
     """질문 응답 모델"""
@@ -45,7 +45,7 @@ class QuestionResponse(BaseModel):
     used_chunks: List[str] = Field(..., description="사용된 문서 청크 ID들")
     generation_time: float = Field(..., description="답변 생성 시간 (초)")
     question_type: str = Field(..., description="질문 유형")
-    model_name: str = Field(..., description="사용된 모델 이름")
+    llm_model_name: str = Field(..., description="사용된 모델 이름")
     pipeline_type: str = Field("basic", description="사용된 파이프라인 타입")
     sql_query: Optional[str] = Field(None, description="생성된 SQL 쿼리")
 
@@ -60,7 +60,7 @@ class PDFUploadResponse(BaseModel):
 class SystemStatusResponse(BaseModel):
     """시스템 상태 응답 모델"""
     status: str = Field(..., description="시스템 상태")
-    model_loaded: bool = Field(..., description="모델 로드 상태")
+    llm_model_loaded: bool = Field(..., description="모델 로드 상태")
     total_pdfs: int = Field(..., description="등록된 PDF 수")
     total_chunks: int = Field(..., description="총 청크 수")
     memory_usage: Dict[str, Any] = Field(..., description="메모리 사용량")
@@ -134,6 +134,112 @@ def get_query_router() -> QueryRouter:
     if query_router is None:
         query_router = QueryRouter()
     return query_router
+
+def initialize_system():
+    """시스템 초기화 및 자동 PDF 업로드"""
+    global pdf_processor, vector_store, question_analyzer, answer_generator, sql_generator, query_router
+    
+    try:
+        logger.info("시스템 초기화 시작...")
+        
+        # 컴포넌트들 초기화
+        pdf_processor = PDFProcessor()
+        vector_store = HybridVectorStore()
+        question_analyzer = QuestionAnalyzer()
+        answer_generator = AnswerGenerator()
+        sql_generator = SQLGenerator()
+        query_router = QueryRouter()
+        
+        logger.info("컴포넌트 초기화 완료")
+        
+        # 자동 PDF 업로드
+        logger.info("=" * 60)
+        logger.info("data 폴더의 PDF 파일들을 벡터 저장소에 업로드합니다...")
+        logger.info("=" * 60)
+        auto_upload_result = auto_upload_pdfs_sync()
+        logger.info(f"자동 업로드 완료: {auto_upload_result}")
+        logger.info("=" * 60)
+        logger.info("PDF 업로드 완료!")
+        logger.info("=" * 60)
+        
+    except Exception as e:
+        logger.error(f"시스템 초기화 실패: {e}")
+
+def auto_upload_pdfs_sync():
+    """동기적으로 PDF 파일들을 자동 업로드"""
+    try:
+        import os
+        
+        # data 폴더와 data/pdfs 폴더 모두 확인
+        data_folders = ["./data", "./data/pdfs"]
+        pdf_files = []
+        
+        for data_folder in data_folders:
+            if not os.path.exists(data_folder):
+                logger.warning(f"{data_folder} 폴더가 존재하지 않습니다.")
+                continue
+            
+            # 재귀적으로 PDF 파일 찾기
+            for root, dirs, files in os.walk(data_folder):
+                for file in files:
+                    if file.lower().endswith('.pdf'):
+                        pdf_path = os.path.join(root, file)
+                        pdf_files.append(pdf_path)
+        
+        if not pdf_files:
+            logger.info("data 폴더에서 PDF 파일을 찾을 수 없습니다.")
+            return {"message": "업로드할 PDF 파일이 없습니다.", "uploaded_count": 0}
+        
+        logger.info(f"data 폴더에서 {len(pdf_files)}개의 PDF 파일을 발견했습니다.")
+        
+        uploaded_count = 0
+        skipped_count = 0
+        failed_count = 0
+        
+        for pdf_path in pdf_files:
+            try:
+                # 이미 처리된 PDF인지 확인
+                pdf_id = os.path.basename(pdf_path)
+                if pdf_id in pdf_metadata:
+                    logger.info(f"이미 처리된 PDF 건너뛰기: {pdf_id}")
+                    skipped_count += 1
+                    continue
+                
+                logger.info(f"PDF 처리 중: {pdf_id}")
+                
+                # PDF 처리
+                chunks, metadata = pdf_processor.process_pdf(pdf_path)
+                vector_store.add_chunks(chunks)
+                
+                # 메타데이터 저장
+                pdf_metadata[pdf_id] = {
+                    "filename": pdf_id,
+                    "total_pages": len(chunks),
+                    "upload_time": datetime.now().isoformat(),
+                    "total_chunks": len(chunks),
+                    "file_size": os.path.getsize(pdf_path)
+                }
+                
+                uploaded_count += 1
+                logger.info(f"✓ PDF 처리 완료: {pdf_id} ({len(chunks)}개 청크)")
+                
+            except Exception as e:
+                logger.error(f"PDF 처리 실패 {pdf_path}: {e}")
+                failed_count += 1
+        
+        logger.info(f"PDF 처리 완료: {uploaded_count}개 처리됨, {skipped_count}개 건너뜀, {failed_count}개 오류")
+        
+        return {
+            "message": f"자동 업로드 완료: {uploaded_count}개 성공, {skipped_count}개 건너뜀, {failed_count}개 실패",
+            "uploaded_count": uploaded_count,
+            "skipped_count": skipped_count,
+            "failed_count": failed_count,
+            "total_files": len(pdf_files)
+        }
+        
+    except Exception as e:
+        logger.error(f"자동 업로드 실패: {e}")
+        return {"error": str(e)}
 
 # API 엔드포인트들
 @app.get("/", response_model=Dict[str, str])
@@ -222,7 +328,7 @@ async def ask_question(
                 used_chunks=[],
                 generation_time=0.001,
                 question_type="greeting",
-                model_name="greeting_template",
+                llm_model_name="greeting_template",
                 pipeline_type="greeting",
                 sql_query=None
             )
@@ -261,7 +367,7 @@ async def ask_question(
                             used_chunks=[],
                             generation_time=sql_result.execution_time,
                             question_type="sql_query",
-                            model_name=sql_result.model_name,
+                            llm_model_name=sql_result.model_name,
                             pipeline_type="sql",
                             sql_query=sql_result.query
                         )
@@ -287,31 +393,55 @@ async def ask_question(
             use_conversation_context=request.use_conversation_context
         )
         
-        # 2. 관련 문서 검색
+        # 2. 관련 문서 검색 (유사도 임계값 적용)
         query_embedding = analyzed_question.embedding
         relevant_chunks = vector_store.search(
             query_embedding,
-            k=request.max_chunks
+            top_k=request.max_chunks,
+            similarity_threshold=0.05  # 매우 낮은 임계값으로 모든 관련 문서 검색
         )
         
-        # 3. 답변 생성
-        answer = answer_generator.generate_answer(
-            analyzed_question,
-            relevant_chunks,
-            conversation_history=None,
-            pdf_id=request.pdf_id
-        )
+        # 디버깅: 검색 결과 로깅
+        logger.info(f"검색된 청크 수: {len(relevant_chunks)}")
+        for i, (chunk, score) in enumerate(relevant_chunks[:5]):
+            logger.info(f"  청크 {i+1}: {chunk.chunk_id} (유사도: {score:.3f})")
+            logger.info(f"    내용: {chunk.content[:200]}...")
+        
+        # 검색 결과가 없을 때 경고
+        if not relevant_chunks:
+            logger.warning("⚠️ 검색된 관련 청크가 없습니다!")
+        else:
+            logger.info(f"✅ {len(relevant_chunks)}개의 관련 청크를 찾았습니다.")
+        
+        # 3. 컨텍스트 검증 및 답변 생성
+        if not relevant_chunks:
+            logger.warning("검색된 관련 청크가 없어 기본 답변을 생성합니다.")
+            answer = Answer(
+                content="죄송합니다. 문서에서 해당 내용을 찾을 수 없습니다. 다른 키워드로 질문해보시거나, 더 구체적으로 질문해주세요.",
+                confidence_score=0.1,
+                used_chunks=[],
+                generation_time=0.001,
+                model_name="fallback"
+            )
+        else:
+            # 컨텍스트 내용 로깅
+            context_content = "\n".join([chunk.content[:100] + "..." for chunk, _ in relevant_chunks[:3]])
+            logger.info(f"📄 컨텍스트 내용 (일부):\n{context_content}")
+            
+            answer = answer_generator.generate_answer(
+                analyzed_question,
+                relevant_chunks,
+                conversation_history=None,
+                pdf_id=request.pdf_id
+            )
         
         # 4. 대화 히스토리에 추가
-        conversation_item = ConversationItem(
+        question_analyzer.add_conversation_item(
             question=request.question,
             answer=answer.content,
-            timestamp=datetime.now(),
-            question_type=analyzed_question.question_type,
-            relevant_chunks=answer.used_chunks,
+            used_chunks=answer.used_chunks,
             confidence_score=answer.confidence_score
         )
-        question_analyzer.add_conversation_item(conversation_item)
         
         # 5. API 로깅
         try:
@@ -322,7 +452,7 @@ async def ask_question(
                 pipeline_type=route_result.route.value,
                 generation_time=answer.generation_time,
                 confidence_score=answer.confidence_score,
-                model_name=answer.model_name,
+                llm_model_name=answer.model_name,
                 user_id=request.user_id
             )
         except Exception as log_error:
@@ -334,7 +464,7 @@ async def ask_question(
             used_chunks=answer.used_chunks,
             generation_time=answer.generation_time,
             question_type=analyzed_question.question_type.value,
-            model_name=answer.model_name,
+            llm_model_name=answer.model_name,
             pipeline_type=route_result.route.value,
             sql_query=None
         )
@@ -369,11 +499,16 @@ async def get_system_status():
         
         # PDF 및 청크 수
         total_pdfs = len(pdf_metadata)
-        total_chunks = sum(len(chunks) for chunks in vector_store.get_all_chunks()) if vector_store else 0
+        # 벡터 저장소에서 청크 수 확인 (get_all_chunks 메서드가 없으므로 다른 방법 사용)
+        total_chunks = 0
+        if vector_store and hasattr(vector_store, 'chunks'):
+            total_chunks = len(vector_store.chunks)
+        elif vector_store and hasattr(vector_store, 'faiss_store') and hasattr(vector_store.faiss_store, 'chunks'):
+            total_chunks = len(vector_store.faiss_store.chunks)
         
         return SystemStatusResponse(
             status="running",
-            model_loaded=model_loaded,
+            llm_model_loaded=model_loaded,
             total_pdfs=total_pdfs,
             total_chunks=total_chunks,
             memory_usage=memory_usage
@@ -437,5 +572,98 @@ async def test_routing(
         logger.error(f"라우팅 테스트 실패: {e}")
         raise HTTPException(status_code=500, detail=f"라우팅 테스트 실패: {str(e)}")
 
+@app.get("/pdfs")
+async def get_pdf_list():
+    """등록된 PDF 목록 조회"""
+    try:
+        pdfs = []
+        for pdf_id, metadata in pdf_metadata.items():
+            pdfs.append({
+                "pdf_id": pdf_id,
+                "filename": metadata.get("filename", "Unknown"),
+                "upload_time": metadata.get("upload_time", ""),
+                "total_pages": metadata.get("total_pages", 0),
+                "total_chunks": metadata.get("total_chunks", 0),
+                "file_size": metadata.get("file_size", 0)
+            })
+        
+        return {"pdfs": pdfs}
+        
+    except Exception as e:
+        logger.error(f"PDF 목록 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF 목록 조회 실패: {str(e)}")
+
+@app.post("/auto-upload")
+async def auto_upload_pdfs():
+    """data 폴더의 PDF 파일들을 자동으로 업로드"""
+    try:
+        import os
+        from pathlib import Path
+        
+        # data 폴더와 data/pdfs 폴더 모두 확인
+        data_folders = ["./data", "./data/pdfs"]
+        pdf_files = []
+        
+        for data_folder in data_folders:
+            if not os.path.exists(data_folder):
+                logger.warning(f"{data_folder} 폴더가 존재하지 않습니다.")
+                continue
+            
+            # 재귀적으로 PDF 파일 찾기
+            for root, dirs, files in os.walk(data_folder):
+                for file in files:
+                    if file.lower().endswith('.pdf'):
+                        pdf_path = os.path.join(root, file)
+                        pdf_files.append(pdf_path)
+        
+        if not pdf_files:
+            return {"message": "업로드할 PDF 파일이 없습니다.", "uploaded_count": 0}
+        
+        logger.info(f"자동 업로드 시작: {len(pdf_files)}개의 PDF 파일")
+        
+        uploaded_count = 0
+        failed_count = 0
+        
+        for pdf_path in pdf_files:
+            try:
+                # 이미 처리된 PDF인지 확인
+                pdf_id = os.path.basename(pdf_path)
+                if pdf_id in pdf_metadata:
+                    logger.info(f"이미 처리된 PDF 건너뛰기: {pdf_id}")
+                    continue
+                
+                # PDF 처리
+                chunks, metadata = pdf_processor.process_pdf(pdf_path)
+                vector_store.add_chunks(chunks)
+                
+                # 메타데이터 저장
+                pdf_metadata[pdf_id] = {
+                    "filename": pdf_id,
+                    "total_pages": len(chunks),
+                    "upload_time": datetime.now().isoformat(),
+                    "total_chunks": len(chunks),
+                    "file_size": os.path.getsize(pdf_path)
+                }
+                
+                uploaded_count += 1
+                logger.info(f"PDF 자동 업로드 완료: {pdf_id} ({len(chunks)}개 청크)")
+                
+            except Exception as e:
+                logger.error(f"PDF 자동 업로드 실패 {pdf_path}: {e}")
+                failed_count += 1
+        
+        return {
+            "message": f"자동 업로드 완료: {uploaded_count}개 성공, {failed_count}개 실패",
+            "uploaded_count": uploaded_count,
+            "failed_count": failed_count,
+            "total_files": len(pdf_files)
+        }
+        
+    except Exception as e:
+        logger.error(f"자동 업로드 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"자동 업로드 실패: {str(e)}")
+
 if __name__ == "__main__":
+    # 서버 시작 전 시스템 초기화
+    initialize_system()
     uvicorn.run(app, host="0.0.0.0", port=8008)

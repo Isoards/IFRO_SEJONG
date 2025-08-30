@@ -101,49 +101,82 @@ class QuestionAnalyzer:
     
     def analyze_question(self, question: str, use_conversation_context: bool = True) -> AnalyzedQuestion:
         """질문 분석 (최적화)"""
-        start_time = datetime.now()
+        import time
+        total_start_time = time.time()
         
         # 1. 기본 전처리
+        preprocess_start = time.time()
         processed_question = self._preprocess_question(question)
+        preprocess_time = time.time() - preprocess_start
         
         # 2. 질문 유형 분류
+        classify_start = time.time()
         question_type = self._classify_question_type(processed_question)
+        classify_time = time.time() - classify_start
         
         # 3. 키워드 추출
+        keyword_start = time.time()
         keywords = self._extract_keywords(processed_question)
+        keyword_time = time.time() - keyword_start
         
         # 4. 개체명 추출
+        entity_start = time.time()
         entities = self._extract_entities(processed_question)
+        entity_time = time.time() - entity_start
         
         # 5. 의도 분석
+        intent_start = time.time()
         intent = self._analyze_intent(processed_question, question_type)
+        intent_time = time.time() - intent_start
         
         # 6. 컨텍스트 키워드 (단순화)
+        context_start = time.time()
         context_keywords = []
         if use_conversation_context and self.conversation_history:
             context_keywords = self._extract_context_keywords()
+        context_time = time.time() - context_start
         
         # 7. SQL 요구사항 확인
+        sql_start = time.time()
         requires_sql, sql_intent = self._check_sql_requirement(question_type, keywords)
+        sql_time = time.time() - sql_start
         
-        # 8. 임베딩 생성
+        # 8. 임베딩 생성 (가장 오래 걸릴 수 있는 부분)
+        embedding_start = time.time()
         embedding = None
         if self.embedding_model:
             try:
                 embedding = self.embedding_model.encode([processed_question])[0]
             except Exception as e:
                 logger.warning(f"임베딩 생성 실패: {e}")
+        embedding_time = time.time() - embedding_start
         
         # 9. 향상된 질문 생성 (단순화)
+        enhance_start = time.time()
         enhanced_question = self._enhance_question(processed_question, context_keywords)
+        enhance_time = time.time() - enhance_start
         
         # 10. 메타데이터 생성
+        metadata_start = time.time()
+        total_time = time.time() - total_start_time
         metadata = {
-            "processing_time": (datetime.now() - start_time).total_seconds(),
+            "processing_time": total_time,
             "question_length": len(question),
             "keywords_count": len(keywords),
-            "entities_count": len(entities)
+            "entities_count": len(entities),
+            "timing_breakdown": {
+                "preprocess": preprocess_time,
+                "classify": classify_time,
+                "keyword_extract": keyword_time,
+                "entity_extract": entity_time,
+                "intent_analysis": intent_time,
+                "context_keywords": context_time,
+                "sql_check": sql_time,
+                "embedding": embedding_time,
+                "enhance": enhance_time
+            }
         }
+        metadata_time = time.time() - metadata_start
         
         analyzed_question = AnalyzedQuestion(
             original_question=question,
@@ -159,6 +192,8 @@ class QuestionAnalyzer:
             enhanced_question=enhanced_question,
             metadata=metadata
         )
+        
+        print(f"  🔍 분석 세부: 전처리({preprocess_time:.3f}s) | 분류({classify_time:.3f}s) | 키워드({keyword_time:.3f}s) | 임베딩({embedding_time:.3f}s) | 기타({(entity_time+intent_time+context_time+sql_time+enhance_time+metadata_time):.3f}s)")
         
         logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개")
         return analyzed_question
@@ -264,13 +299,7 @@ class QuestionAnalyzer:
         
         return enhanced
     
-    def add_conversation_item(self, item: ConversationItem):
-        """대화 항목 추가"""
-        self.conversation_history.append(item)
-        
-        # 히스토리 크기 제한 (최근 10개만 유지)
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
+
     
     def get_conversation_summary(self) -> Dict:
         """대화 요약 반환"""
@@ -284,3 +313,37 @@ class QuestionAnalyzer:
         """대화 히스토리 초기화"""
         self.conversation_history.clear()
         logger.info("대화 히스토리 초기화 완료")
+    
+    def get_conversation_context(self, max_items: int = 3) -> List[Dict]:
+        """대화 컨텍스트 반환"""
+        if not self.conversation_history:
+            return []
+        
+        # 최근 대화 항목들을 딕셔너리 형태로 변환
+        context = []
+        for item in self.conversation_history[-max_items:]:
+            context.append({
+                "question": item.question,
+                "answer": item.answer,
+                "timestamp": item.timestamp.isoformat(),
+                "question_type": item.question_type.value,
+                "confidence_score": item.confidence_score
+            })
+        
+        return context
+    
+    def add_conversation_item(self, question: str, answer: str, used_chunks: List[str], confidence_score: float):
+        """대화 항목 추가 (단순화된 버전)"""
+        item = ConversationItem(
+            question=question,
+            answer=answer,
+            timestamp=datetime.now(),
+            question_type=QuestionType.UNKNOWN,  # 기본값
+            relevant_chunks=used_chunks,
+            confidence_score=confidence_score
+        )
+        self.conversation_history.append(item)
+        
+        # 히스토리 크기 제한 (최근 10개만 유지)
+        if len(self.conversation_history) > 10:
+            self.conversation_history = self.conversation_history[-10:]
