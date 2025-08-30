@@ -19,11 +19,14 @@ from django.urls import path
 from ninja_extra import NinjaExtraAPI
 from traffic.views import router as traffic_router, secure_router as secure_traffic_router
 from user_auth.views import router as auth_router
+from chatbot_proxy.views import router as chatbot_router
 
 api = NinjaExtraAPI()
 api.add_router("/traffic/", traffic_router)
 api.add_router("/auth/", auth_router)
 api.add_router("/secure/traffic/", secure_traffic_router)
+api.add_router("/chatbot/", chatbot_router)
+# 정책제안 API는 traffic 라우터에 포함되어 있음
 
 urlpatterns = [
     path('admin/', admin.site.urls),
