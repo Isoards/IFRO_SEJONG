@@ -15,7 +15,7 @@ import {
   getTrafficFlowFavoritesStats,
   getTrafficFlowSummary,
   getTopViewedIntersections
-} from "../../api/intersections";
+} from "../../../api/intersections";
 import {
   AdminStats,
   TopArea,
@@ -23,7 +23,7 @@ import {
   TrafficFlowFavoriteStats,
   TrafficFlowSummary,
   TopViewedIntersection
-} from "../../types/global.types";
+} from "../../../types/global.types";
 import SejongHeatmap from "./SejongHeatmap";
 
 // 일별 조회수 데이터 타입
@@ -651,7 +651,7 @@ const AdminDashboard = () => {
                       AI 리포트 데이터가 없습니다.
                     </div>
                   ) : (
-                    adminStats.top_ai_report_areas.map((area, index) => (
+                    adminStats.top_ai_report_areas.map((area: TopArea, index: number) => (
                       <div
                         key={index}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"

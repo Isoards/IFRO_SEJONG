@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import GoogleMapWrapper from "./GoogleMapWrapper";
-import { getTopViewedIntersections, getHeatmapData } from "../../api/intersections";
-import { TopViewedIntersection, HeatmapDataPoint } from "../../types/global.types";
+import { getTopViewedIntersections, getHeatmapData } from "../../../api/intersections";
+import { TopViewedIntersection, HeatmapDataPoint } from "../../../types/global.types";
 
 interface SejongHeatmapProps {
     className?: string;
