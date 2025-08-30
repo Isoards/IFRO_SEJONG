@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Intersection, FavoriteFlow } from "../../types/global.types";
 import { Star } from "lucide-react";
-import { addTrafficFlowFavorite, removeTrafficFlowFavorite } from "../../api/intersections";
+import { addTrafficFlowFavorite, removeTrafficFlowFavorite, recordTrafficFlowAccess } from "../../api/intersections";
 
 interface TrafficFlowDetailPanelProps {
   selectedPoints: Intersection[];
@@ -26,6 +26,34 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
   favoriteFlows = [],
 }) => {
   const { t } = useTranslation();
+
+  // 중복 호출 방지를 위한 ref (세션 동안 기록된 경로들을 저장)
+  const accessRecordedRef = React.useRef<Set<string>>(new Set());
+
+  // 교통 흐름 경로 접근 기록 (컴포넌트가 마운트되고 두 교차로가 선택되었을 때)
+  React.useEffect(() => {
+    if (selectedPoints.length === 2) {
+      const [from, to] = selectedPoints;
+      const routeKey = `${from.id}-${to.id}`;
+      
+      // 이미 기록된 경로인지 확인 (중복 방지)
+      if (accessRecordedRef.current.has(routeKey)) {
+        console.log(`이미 기록된 경로입니다: ${routeKey}`);
+        return;
+      }
+      
+      // 접근 기록 API 호출
+      console.log(`새로운 경로 접근 기록 시작: ${routeKey}`);
+      recordTrafficFlowAccess(from.id, to.id)
+        .then((result) => {
+          console.log(`교통 흐름 경로 접근 기록 완료: ${from.name} → ${to.name}`, result);
+          accessRecordedRef.current.add(routeKey); // 기록 완료 표시
+        })
+        .catch((error) => {
+          console.error('교통 흐름 접근 기록 중 오류:', error);
+        });
+    }
+  }, [selectedPoints]);
 
   // 현재 플로우가 즐겨찾기에 있는지 확인
   const isCurrentFlowFavorited =

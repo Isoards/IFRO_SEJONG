@@ -270,6 +270,20 @@ export const removeTrafficFlowFavorite = async (
   return response.data;
 };
 
+// 교통 흐름 경로 접근 기록 API
+export const recordTrafficFlowAccess = async (
+  startIntersectionId: number, 
+  endIntersectionId: number
+) => {
+  const response = await api.post('/traffic/traffic-flow/access', null, {
+    params: {
+      start_intersection_id: startIntersectionId,
+      end_intersection_id: endIntersectionId
+    }
+  });
+  return response.data;
+};
+
 // 호환성을 위한 별칭 함수들
 export const getIntersectionFavoriteStatus = getFavoriteStatus;
 export const toggleIntersectionFavorite = toggleFavorite;
