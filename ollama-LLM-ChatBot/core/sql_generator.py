@@ -9,6 +9,7 @@ import os
 import json
 import sqlparse
 import time
+import pymysql
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -58,6 +59,7 @@ class SQLQuery:
     validation_passed: bool = False
     error_message: Optional[str] = None
     metadata: Optional[Dict] = None
+    is_valid: bool = False # 추가된 필드
 
 class SQLGenerator:
     """
@@ -91,7 +93,18 @@ class SQLGenerator:
         self.max_retries = 3
         self.validation_enabled = True
         
+        # 데이터베이스 연결 설정
+        self.db_config = {
+            'host': os.getenv('MYSQL_HOST', 'db'),
+            'user': os.getenv('MYSQL_USER', 'root'),
+            'password': os.getenv('MYSQL_PASSWORD', '1234'),
+            'database': os.getenv('MYSQL_DATABASE', 'traffic'),
+            'charset': 'utf8mb4',
+            'port': int(os.getenv('MYSQL_PORT', 3306))
+        }
+        
         logger.info(f"SQL Generator 초기화: {model_name}")
+        logger.info(f"데이터베이스 연결 설정: {self.db_config['host']}:{self.db_config['port']}/{self.db_config['database']}")
     
     def generate_sql(self, 
                     question: str, 
@@ -147,22 +160,202 @@ class SQLGenerator:
         sql_query = SQLQuery(
             query=cleaned_sql,
             query_type=self._detect_query_type(cleaned_sql),
-            confidence_score=0.8 if validation_result['valid'] else 0.3,
+            confidence_score=validation_result.get('confidence', 0.8),
             execution_time=execution_time,
             model_name=self.model_name,
             validation_passed=validation_result['valid'],
             error_message=validation_result.get('error'),
-            metadata={
-                'retry_count': retry_count,
-                'original_sql': raw_sql
-            }
+            is_valid=validation_result['valid']  # 검증 결과에 따라 유효성 설정
         )
         
-        # 캐시 저장
+        # 캐시에 저장
         if self.cache_enabled:
             self.query_cache[cache_key] = sql_query
         
+        logger.info(f"SQL 생성 완료: {sql_query.query_type}, 유효성: {sql_query.is_valid}")
         return sql_query
+
+    def execute_sql(self, sql_query: SQLQuery) -> Dict[str, Any]:
+        """
+        SQL 쿼리를 실제 데이터베이스에서 실행
+        
+        Args:
+            sql_query: 실행할 SQL 쿼리 객체
+            
+        Returns:
+            실행 결과 딕셔너리
+        """
+        if not sql_query.is_valid:
+            return {
+                'success': False,
+                'error': 'SQL 쿼리가 유효하지 않습니다.',
+                'data': None
+            }
+        
+        start_time = time.time()
+        
+        try:
+            # 데이터베이스 연결
+            connection = pymysql.connect(**self.db_config)
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            logger.info(f"SQL 실행: {sql_query.query}")
+            
+            # 쿼리 실행
+            cursor.execute(sql_query.query)
+            
+            # 쿼리 타입에 따른 결과 처리
+            if sql_query.query_type == 'SELECT':
+                # SELECT 쿼리: 결과 반환
+                results = cursor.fetchall()
+                
+                # 결과를 리스트로 변환 (datetime 객체 처리)
+                processed_results = []
+                for row in results:
+                    processed_row = {}
+                    for key, value in row.items():
+                        if hasattr(value, 'isoformat'):  # datetime 객체
+                            processed_row[key] = value.isoformat()
+                        else:
+                            processed_row[key] = value
+                    processed_results.append(processed_row)
+                
+                execution_time = time.time() - start_time
+                
+                return {
+                    'success': True,
+                    'data': processed_results,
+                    'row_count': len(processed_results),
+                    'execution_time': execution_time,
+                    'query_type': 'SELECT'
+                }
+                
+            else:
+                # INSERT, UPDATE, DELETE 쿼리: 영향받은 행 수 반환
+                affected_rows = cursor.rowcount
+                connection.commit()
+                
+                execution_time = time.time() - start_time
+                
+                return {
+                    'success': True,
+                    'data': None,
+                    'affected_rows': affected_rows,
+                    'execution_time': execution_time,
+                    'query_type': sql_query.query_type
+                }
+                
+        except pymysql.Error as e:
+            logger.error(f"데이터베이스 오류: {e}")
+            return {
+                'success': False,
+                'error': f'데이터베이스 오류: {str(e)}',
+                'data': None,
+                'execution_time': time.time() - start_time
+            }
+            
+        except Exception as e:
+            logger.error(f"SQL 실행 중 예상치 못한 오류: {e}")
+            return {
+                'success': False,
+                'error': f'실행 오류: {str(e)}',
+                'data': None,
+                'execution_time': time.time() - start_time
+            }
+            
+        finally:
+            try:
+                if 'cursor' in locals():
+                    cursor.close()
+                if 'connection' in locals():
+                    connection.close()
+            except Exception as e:
+                logger.warning(f"데이터베이스 연결 종료 중 오류: {e}")
+
+    def test_database_connection(self) -> Dict[str, Any]:
+        """
+        데이터베이스 연결 테스트
+        
+        Returns:
+            연결 테스트 결과
+        """
+        try:
+            connection = pymysql.connect(**self.db_config)
+            cursor = connection.cursor()
+            
+            # 간단한 쿼리 실행
+            cursor.execute("SELECT 1 as test")
+            result = cursor.fetchone()
+            
+            cursor.close()
+            connection.close()
+            
+            return {
+                'success': True,
+                'message': '데이터베이스 연결 성공',
+                'test_result': result
+            }
+            
+        except Exception as e:
+            logger.error(f"데이터베이스 연결 테스트 실패: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def get_database_schema(self) -> List[Dict[str, Any]]:
+        """
+        현재 데이터베이스의 테이블 스키마 정보 조회
+        
+        Returns:
+            테이블 스키마 정보 리스트
+        """
+        try:
+            connection = pymysql.connect(**self.db_config)
+            cursor = connection.cursor()
+            
+            # 테이블 목록 조회
+            cursor.execute("SHOW TABLES")
+            tables = cursor.fetchall()
+            
+            schema_info = []
+            for table in tables:
+                table_name = table[0]
+                
+                # 컬럼 정보 조회
+                cursor.execute(f"DESCRIBE {table_name}")
+                columns = cursor.fetchall()
+                
+                # 샘플 데이터 조회 (최대 3행)
+                try:
+                    cursor.execute(f"SELECT * FROM {table_name} LIMIT 3")
+                    sample_data = cursor.fetchall()
+                except:
+                    sample_data = []
+                
+                schema_info.append({
+                    'table_name': table_name,
+                    'columns': [
+                        {
+                            'name': col[0],
+                            'type': col[1],
+                            'null': col[2],
+                            'key': col[3],
+                            'default': col[4],
+                            'extra': col[5]
+                        } for col in columns
+                    ],
+                    'sample_data': sample_data
+                })
+            
+            cursor.close()
+            connection.close()
+            
+            return schema_info
+            
+        except Exception as e:
+            logger.error(f"스키마 정보 조회 실패: {e}")
+            return []
     
     def _create_sql_prompt(self, 
                           question: str, 

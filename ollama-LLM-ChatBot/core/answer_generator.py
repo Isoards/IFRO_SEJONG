@@ -143,46 +143,9 @@ class OllamaInterface(LocalLLMInterface):
             
             if self.model_name not in model_names:
                 logger.warning(f"모델 {self.model_name}이 설치되지 않았습니다.")
-                logger.info(f"모델을 자동으로 다운로드합니다: ollama pull {self.model_name}")
-                
-                try:
-                    # 모델 자동 다운로드
-                    import subprocess
-                    import time
-                    
-                    # Docker 환경에서 ollama pull 명령어 실행
-                    result = subprocess.run(
-                        ["docker", "exec", "ollama", "ollama", "pull", self.model_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=600  # 10분 타임아웃
-                    )
-                    
-                    if result.returncode == 0:
-                        logger.info(f"모델 다운로드 완료: {self.model_name}")
-                        # 다운로드 후 다시 모델 목록 확인
-                        time.sleep(5)
-                        models = self.client.list()
-                        model_names = []
-                        if 'models' in models:
-                            for model in models['models']:
-                                if 'name' in model:
-                                    model_names.append(model['name'])
-                                elif 'model' in model:
-                                    model_names.append(model['model'])
-                        
-                        if self.model_name in model_names:
-                            logger.info(f"모델 확인 완료: {self.model_name}")
-                        else:
-                            logger.error(f"모델 다운로드 후에도 확인되지 않음: {self.model_name}")
-                            return False
-                    else:
-                        logger.error(f"모델 다운로드 실패: {result.stderr}")
-                        return False
-                        
-                except Exception as e:
-                    logger.error(f"모델 다운로드 중 오류: {e}")
-                    return False
+                logger.info(f"사용 가능한 모델: {model_names}")
+                logger.info(f"모델을 수동으로 설치하세요: ollama pull {self.model_name}")
+                return False
             
             self.is_loaded = True
             logger.info(f"Ollama 모델 로드 완료: {self.model_name}")
@@ -411,9 +374,8 @@ class AnswerGenerator:
     """
     
     def __init__(self, model_type: ModelType = ModelType.OLLAMA, 
-                 model_name: str = "llama2:7b",
-                 generation_config: GenerationConfig = None,
-                 enable_conversation_cache: bool = True):
+                 model_name: str = "mistral:latest",
+                 generation_config: GenerationConfig = None):
         """
         AnswerGenerator 초기화
         
@@ -421,10 +383,8 @@ class AnswerGenerator:
             model_type: 사용할 모델 타입
             model_name: 모델 이름 또는 경로
             generation_config: 생성 설정
-            enable_conversation_cache: 대화 이력 캐시 사용 여부
         """
         self.model_type = model_type
-        self.enable_conversation_cache = enable_conversation_cache
         
         # 한국어 생성에 최적화된 기본 설정
         if generation_config is None:
@@ -438,11 +398,11 @@ class AnswerGenerator:
         else:
             self.generation_config = generation_config
         
-        # 대화 이력 로거 초기화
-        if enable_conversation_cache:
-            self.conversation_logger = ConversationLogger()
-        else:
-            self.conversation_logger = None
+        # 대화 이력 로거 초기화 (캐시 기능 제거)
+        self.conversation_logger = None
+        
+        # 대화 캐시 활성화 여부
+        self.enable_conversation_cache = False
         
         # 모델 인터페이스 초기화
         if model_type == ModelType.OLLAMA:
@@ -460,7 +420,7 @@ class AnswerGenerator:
         # 모델 로드 상태
         self.is_loaded = False
         
-        logger.info(f"AnswerGenerator 초기화: {model_type.value}, 캐시: {enable_conversation_cache}")
+        logger.info(f"AnswerGenerator 초기화: {model_type.value}")
     
     def load_model(self) -> bool:
         """모델 로드"""
@@ -471,113 +431,75 @@ class AnswerGenerator:
     
     def _load_prompt_templates(self) -> Dict[str, str]:
         """
-        프롬프트 템플릿 로드
+        프롬프트 템플릿 로드 (최적화된 버전)
         
         각 질문 유형과 상황에 맞는 프롬프트 템플릿을 정의합니다.
-        한국어에 최적화된 프롬프트를 사용합니다.
+        한국어에 최적화된 간소한 프롬프트를 사용합니다.
         """
         return {
-            "greeting": """당신은 친근하고 도움이 되는 AI 어시스턴트입니다.
-
-사용자의 인사말에 대해 자연스럽고 따뜻하게 응답해주세요.
+            "greeting": """친근한 AI 어시스턴트입니다.
 
 사용자: {question}
 
-응답 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 자연스럽고 친근한 톤으로 응답하세요
-3. 사용자의 인사에 맞는 적절한 응답을 해주세요
-4. 1-2문장으로 간결하게 답변하세요
-5. 시간대에 따른 적절한 인사를 포함할 수 있습니다
-6. "안녕하세요", "반갑습니다", "도움이 필요하시면 언제든 말씀해주세요" 등의 표현을 사용하세요
+규칙: 한국어로만, 친근하게, 1-2문장으로 답변하세요.
 
 답변:""",
 
-            "basic": """당신은 한국어 문서를 기반으로 질문에 답변하는 전문가입니다.
+            "basic": """문서 기반 질문 답변 전문가입니다.
 
-주어진 문서 내용을 정확히 읽고 질문에 답변해주세요.
-
-문서 내용:
+문서:
 {context}
 
 질문: {question}
 
-답변 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 문서에 명시된 정보만을 사용하세요
-3. 구체적인 숫자, 이름, 날짜 등이 있다면 정확히 포함하세요
-4. 문서에 없는 내용은 "문서에서 해당 정보를 찾을 수 없습니다"라고 답변하세요
-5. 2-4문장으로 간결하고 명확하게 답변하세요
-6. 반드시 완전한 문장으로 끝내세요
-7. 답변은 자연스럽고 이해하기 쉽게 작성하세요
-8. 필요시 문서의 구체적인 내용을 인용하세요
+규칙: 한국어만, 문서 내용만 사용, 2-3문장으로 간결하게 답변하세요.
 
 답변:""",
 
-            "with_context": """당신은 한국어 문서를 기반으로 질문에 답변하는 전문가입니다.
+            "with_context": """문서 기반 질문 답변 전문가입니다.
 
-이전 대화 내용:
+이전 대화:
 {conversation_history}
 
-현재 문서 내용:
+문서:
 {context}
 
 질문: {question}
 
-답변 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 문서에 명시된 정보만을 사용하세요
-3. 이전 대화와 자연스럽게 연결되도록 답변하세요
-4. 구체적인 정보가 있다면 정확히 포함하세요
-5. 2-4문장으로 간결하게 답변하세요
+규칙: 한국어만, 문서 내용만 사용, 2-3문장으로 답변하세요.
 
 답변:""",
 
-            "comparative": """당신은 한국어 문서를 기반으로 비교 분석을 수행하는 전문가입니다.
+            "comparative": """문서 기반 비교 분석 전문가입니다.
 
-문서 내용:
+문서:
 {context}
 
 질문: {question}
 
-답변 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 문서 내용을 바탕으로 비교 분석을 수행하세요
-3. 차이점과 유사점을 명확히 구분하여 설명하세요
-4. 구체적인 근거를 제시하세요
-5. 3-5문장으로 자세히 답변하세요
+규칙: 한국어만, 비교 분석, 2-3문장으로 답변하세요.
 
 답변:""",
 
-            "procedural": """당신은 한국어 문서를 기반으로 절차를 설명하는 전문가입니다.
+            "procedural": """문서 기반 절차 설명 전문가입니다.
 
-문서 내용:
+문서:
 {context}
 
 질문: {question}
 
-답변 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 문서 내용을 바탕으로 단계별로 설명하세요
-3. 각 단계를 명확히 구분하고 순서대로 정리하세요
-4. 구체적인 방법이나 절차를 포함하세요
-5. 3-5문장으로 자세히 답변하세요
+규칙: 한국어만, 단계별 설명, 2-3문장으로 답변하세요.
 
 답변:""",
 
-            "clarification": """당신은 한국어 문서를 기반으로 추가 설명을 제공하는 전문가입니다.
+            "clarification": """문서 기반 명확화 전문가입니다.
 
-문서 내용:
+문서:
 {context}
 
 질문: {question}
 
-답변 규칙:
-1. 반드시 한국어로만 답변하세요
-2. 문서 내용을 바탕으로 더 구체적이고 자세한 설명을 제공하세요
-3. 기술적인 용어가 있다면 쉽게 풀어서 설명하세요
-4. 관련된 추가 정보나 배경 지식을 포함하세요
-5. 3-5문장으로 자세히 답변하세요
+규칙: 한국어만, 명확한 설명, 2-3문장으로 답변하세요.
 
 답변:"""
         }
@@ -1528,7 +1450,7 @@ if __name__ == "__main__":
     if OLLAMA_AVAILABLE:
         generator = AnswerGenerator(
             model_type=ModelType.OLLAMA,
-            model_name="llama2:7b",
+            model_name="mistral:latest",
             generation_config=config
         )
         print("Ollama 인터페이스 초기화 완료")

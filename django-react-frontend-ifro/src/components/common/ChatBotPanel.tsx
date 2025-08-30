@@ -1,13 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Minimize2, Info, AlertCircle, Database, Zap } from "lucide-react";
+import { Send, Bot, User, Minimize2, Info, AlertCircle } from "lucide-react";
 import { 
   sendAIChatMessage, 
   testChatConnection, 
   checkAIServiceStatus,
-  getAvailablePDFs,
-  getChatCacheInfo,
-  clearChatCache,
-  findSimilarCachedQuestions
+  getAvailablePDFs
 } from "../../api/chat";
 
 interface Message {
@@ -20,7 +17,6 @@ interface Message {
     question_type?: string;
     generation_time?: number;
     model_name?: string;
-    from_cache?: boolean;
   };
 }
 
@@ -56,20 +52,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     total_chunks: number;
   }>>([]);
   const [showInfo, setShowInfo] = useState(false);
-  const [cacheInfo, setCacheInfo] = useState<{
-    totalEntries: number;
-    sizeInKB: number;
-    oldestEntry: string;
-    newestEntry: string;
-    hitRate: number;
-  }>({
-    totalEntries: 0,
-    sizeInKB: 0,
-    oldestEntry: '없음',
-    newestEntry: '없음',
-    hitRate: 0
-  });
-  const [useCache, setUseCache] = useState(true);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -98,9 +80,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
       // 사용 가능한 PDF 목록 조회
       getAvailablePDFs().then(setAvailablePdfs);
       
-      // 캐시 정보 업데이트
-      setCacheInfo(getChatCacheInfo());
-      
       // 챗봇 연결 테스트
       testChatConnection();
       
@@ -109,7 +88,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
         const welcomeMessage: Message = {
           id: "1",
           content: aiStatus.ai_available && aiStatus.model_loaded
-            ? "안녕하세요! IFRO 교통 분석 AI 어시스턴트입니다. 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n어떤 것이든 물어보세요!"
+            ? "안녕하세요! IFRO 교통 분석 AI 어시스턴트입니다. 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n어떤 것이든 물어보세요!"
             : "안녕하세요! IFRO 교통 분석 어시스턴트입니다. 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.",
           sender: "bot",
           timestamp: new Date(),
@@ -134,12 +113,11 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     setIsLoading(true);
 
     try {
-      // AI 기반 챗봇 API 호출 (캐시 사용)
+      // AI 기반 챗봇 API 호출
       const response = await sendAIChatMessage(
         userMessage.content, 
         selectedPdfId, 
-        true, // 대화 컨텍스트 사용
-        useCache // 캐시 사용 여부
+        true // 대화 컨텍스트 사용
       );
       
       const botResponse: Message = {
@@ -151,15 +129,11 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           confidence_score: response.confidence_score,
           question_type: response.question_type,
           generation_time: response.generation_time,
-          model_name: response.model_name,
-          from_cache: response.from_cache
+          model_name: response.model_name
         }
       };
 
       setMessages((prev) => [...prev, botResponse]);
-      
-      // 캐시 정보 업데이트
-      setCacheInfo(getChatCacheInfo());
     } catch (error) {
       console.error("AI 응답 생성 중 오류:", error);
       const errorResponse: Message = {
@@ -179,20 +153,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
       e.preventDefault();
       handleSendMessage();
     }
-  };
-
-  const handleClearCache = () => {
-    const removedCount = clearChatCache(selectedPdfId);
-    setCacheInfo(getChatCacheInfo());
-    
-    // 사용자에게 알림
-    const notificationMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      content: `캐시가 정리되었습니다. ${removedCount}개의 항목이 제거되었습니다.`,
-      sender: "bot",
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, notificationMessage]);
   };
 
   const getStatusColor = () => {
@@ -229,13 +189,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
             <div className="flex items-center space-x-1 text-xs">
               <div className={`w-2 h-2 rounded-full ${getStatusColor().replace('text-', 'bg-')}`}></div>
               <span className={getStatusColor()}>{getStatusText()}</span>
-              {useCache && (
-                <>
-                  <span className="text-gray-400">•</span>
-                  <Zap size={10} className="text-yellow-500" />
-                  <span className="text-yellow-600">캐시 활성화</span>
-                </>
-              )}
             </div>
           </div>
         </div>
@@ -274,54 +227,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
             <div className="flex justify-between">
               <span>문서 청크:</span>
               <span>{aiStatus.total_chunks}개</span>
-            </div>
-            
-            {/* 캐시 정보 */}
-            <div className="border-t pt-2 mt-2">
-              <div className="flex items-center space-x-1 mb-1">
-                <Database size={10} className="text-blue-500" />
-                <span className="font-medium">캐시 정보</span>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span>캐시된 답변:</span>
-                  <span>{cacheInfo.totalEntries}개</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>캐시 크기:</span>
-                  <span>{cacheInfo.sizeInKB}KB</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>캐시 히트율:</span>
-                  <span>{cacheInfo.hitRate}%</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>최신 캐시:</span>
-                  <span className="text-xs">{cacheInfo.newestEntry}</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* 캐시 제어 */}
-            <div className="border-t pt-2 mt-2">
-              <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-1">
-                  <input
-                    type="checkbox"
-                    checked={useCache}
-                    onChange={(e) => setUseCache(e.target.checked)}
-                    className="w-3 h-3"
-                  />
-                  <span>캐시 사용</span>
-                </label>
-                <button
-                  onClick={handleClearCache}
-                  className="text-xs text-red-600 hover:text-red-800"
-                  title="현재 PDF 캐시 정리"
-                >
-                  캐시 정리
-                </button>
-              </div>
             </div>
             
             {availablePdfs.length > 0 && (
@@ -407,12 +312,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                       {message.metadata.model_name && (
                         <span>모델: {message.metadata.model_name}</span>
                       )}
-                      {message.metadata.from_cache && (
-                        <div className="flex items-center space-x-1 text-yellow-600">
-                          <Zap size={10} />
-                          <span>캐시됨</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -441,7 +340,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                     ></div>
                   </div>
                   <span className="text-sm text-gray-600">
-                    {useCache ? "AI가 생각 중... (캐시 확인 중)" : "AI가 생각 중..."}
+                    AI가 생각 중...
                   </span>
                 </div>
               </div>
@@ -488,12 +387,6 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
               <div className="flex items-center space-x-1 text-xs text-yellow-600">
                 <AlertCircle size={12} />
                 <span>기본 모드</span>
-              </div>
-            )}
-            {useCache && (
-              <div className="flex items-center space-x-1 text-xs text-yellow-600">
-                <Zap size={12} />
-                <span>캐시 활성화</span>
               </div>
             )}
           </div>
