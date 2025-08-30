@@ -10,6 +10,8 @@ import json
 import sqlparse
 import time
 import pymysql
+import asyncio
+import concurrent.futures
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -29,6 +31,20 @@ try:
 except ImportError:
     LLAMA_CPP_AVAILABLE = False
     logging.warning("llama-cpp-python 라이브러리를 찾을 수 없습니다.")
+
+try:
+    from .fast_cache import get_sql_cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    CACHE_AVAILABLE = False
+    logging.warning("캐시 모듈을 찾을 수 없습니다.")
+
+try:
+    from .sql_element_extractor import SQLElementExtractor, ExtractedSQLElements
+    ELEMENT_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    ELEMENT_EXTRACTOR_AVAILABLE = False
+    logging.warning("SQL 요소 추출기를 찾을 수 없습니다.")
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +102,22 @@ class SQLGenerator:
         """
         self.model_type = model_type
         self.model_name = model_name
-        self.cache_enabled = cache_enabled
-        self.query_cache = {} if cache_enabled else None
+        self.cache_enabled = cache_enabled and CACHE_AVAILABLE
+        self.query_cache = get_sql_cache() if self.cache_enabled else None
         
         # SQL 검증을 위한 설정
         self.max_retries = 3
         self.validation_enabled = True
+        
+        # 규칙 기반 SQL 요소 추출기 초기화
+        self.element_extractor = None
+        if ELEMENT_EXTRACTOR_AVAILABLE:
+            try:
+                self.element_extractor = SQLElementExtractor()
+                logger.info("✅ 규칙 기반 SQL 요소 추출기 초기화 완료")
+            except Exception as e:
+                logger.warning(f"SQL 요소 추출기 초기화 실패: {e}")
+                self.element_extractor = None
         
         # 데이터베이스 연결 설정
         self.db_config = {
@@ -106,6 +132,55 @@ class SQLGenerator:
         logger.info(f"SQL Generator 초기화: {model_name}")
         logger.info(f"데이터베이스 연결 설정: {self.db_config['host']}:{self.db_config['port']}/{self.db_config['database']}")
     
+    def generate_sql_parallel(self,
+                             questions: List[str],
+                             schema: DatabaseSchema,
+                             few_shot_examples: List[Dict[str, str]] = None) -> List[SQLQuery]:
+        """
+        여러 질문에 대해 병렬로 SQL 생성
+        
+        Args:
+            questions: 자연어 질문들
+            schema: 데이터베이스 스키마
+            few_shot_examples: Few-shot 예시들
+            
+        Returns:
+            생성된 SQL 쿼리들
+        """
+        start_time = time.time()
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # 각 질문에 대해 병렬로 SQL 생성
+            future_to_question = {
+                executor.submit(self.generate_sql, question, schema, few_shot_examples): question
+                for question in questions
+            }
+            
+            results = []
+            for future in concurrent.futures.as_completed(future_to_question):
+                question = future_to_question[future]
+                try:
+                    sql_query = future.result()
+                    results.append(sql_query)
+                except Exception as e:
+                    logger.error(f"SQL 생성 실패 - 질문: {question}, 오류: {e}")
+                    # 실패한 경우 기본 오류 쿼리 반환
+                    error_query = SQLQuery(
+                        query="-- SQL 생성 실패",
+                        query_type="ERROR",
+                        confidence_score=0.0,
+                        execution_time=0.0,
+                        model_name=self.model_name,
+                        validation_passed=False,
+                        error_message=str(e),
+                        is_valid=False
+                    )
+                    results.append(error_query)
+        
+        total_time = time.time() - start_time
+        logger.info(f"병렬 SQL 생성 완료: {len(questions)}개 질문, {total_time:.2f}초")
+        return results
+
     def generate_sql(self, 
                     question: str, 
                     schema: DatabaseSchema,
@@ -123,11 +198,51 @@ class SQLGenerator:
         """
         start_time = time.time()
         
-        # 캐시 확인
-        cache_key = self._generate_cache_key(question, schema)
-        if self.cache_enabled and cache_key in self.query_cache:
-            logger.info("캐시된 SQL 쿼리 사용")
-            return self.query_cache[cache_key]
+        # 캐시 확인 (빠른 SQL 응답)
+        if self.cache_enabled and self.query_cache:
+            schema_key = f"{schema.table_name}_{len(schema.columns)}"
+            cached_sql = self.query_cache.get(question, schema_key)
+            if cached_sql:
+                logger.info(f"캐시된 SQL 쿼리 사용: {time.time() - start_time:.3f}초")
+                return cached_sql
+        
+        # 규칙 기반 빠른 SQL 생성 (우선 시도)
+        if self.element_extractor:
+            try:
+                elements = self.element_extractor.extract_elements(question)
+                if elements.confidence > 0.7:  # 신뢰도가 높은 경우 규칙 기반 사용
+                    fast_sql = self.element_extractor.generate_sql(elements)
+                    
+                    # 빠른 검증
+                    validation_result = self._validate_sql(fast_sql)
+                    if validation_result['valid']:
+                        execution_time = time.time() - start_time
+                        
+                        sql_query = SQLQuery(
+                            query=fast_sql,
+                            query_type=elements.query_type.value,
+                            confidence_score=elements.confidence,
+                            execution_time=execution_time,
+                            model_name=f"{self.model_name}_rule_based",
+                            validation_passed=True,
+                            is_valid=True,
+                            metadata={"method": "rule_based", "elements": elements}
+                        )
+                        
+                        # 캐시에 저장
+                        if self.cache_enabled and self.query_cache:
+                            self.query_cache.put(question, sql_query, schema_key)
+                        
+                        logger.info(f"🚀 규칙 기반 빠른 SQL 생성: {execution_time:.3f}초, 신뢰도: {elements.confidence:.2f}")
+                        return sql_query
+                    else:
+                        logger.debug(f"규칙 기반 SQL 검증 실패, LLM으로 폴백: {validation_result['error']}")
+                else:
+                    logger.debug(f"규칙 기반 신뢰도 낮음 ({elements.confidence:.2f}), LLM으로 폴백")
+            except Exception as e:
+                logger.warning(f"규칙 기반 SQL 생성 실패, LLM으로 폴백: {e}")
+        
+        # LLM 기반 SQL 생성 (폴백)
         
         # 프롬프트 생성
         prompt = self._create_sql_prompt(question, schema, few_shot_examples)
@@ -168,9 +283,10 @@ class SQLGenerator:
             is_valid=validation_result['valid']  # 검증 결과에 따라 유효성 설정
         )
         
-        # 캐시에 저장
-        if self.cache_enabled:
-            self.query_cache[cache_key] = sql_query
+        # 캐시에 저장 (빠른 후속 SQL 생성을 위해)
+        if self.cache_enabled and self.query_cache and sql_query.is_valid:
+            schema_key = f"{schema.table_name}_{len(schema.columns)}"
+            self.query_cache.put(question, sql_query, schema_key)
         
         logger.info(f"SQL 생성 완료: {sql_query.query_type}, 유효성: {sql_query.is_valid}")
         return sql_query
