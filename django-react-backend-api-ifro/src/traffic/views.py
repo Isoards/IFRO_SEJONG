@@ -1502,6 +1502,102 @@ def remove_traffic_flow_favorite(request, start_intersection_id: int, end_inters
                 
     except Exception as e:
         raise HttpError(500, f"교통 흐름 즐겨찾기 제거 중 오류가 발생했습니다: {str(e)}")
+
+# 교통 흐름 경로 접근 기록 API
+@router.post("/traffic-flow/access", response=dict)
+def record_traffic_flow_access(request, start_intersection_id: int, end_intersection_id: int):
+    """교통 흐름 경로 접근 기록 (사용자가 경로를 조회할 때마다 호출)"""
+    try:
+        from django.db import connection
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        five_seconds_ago = now - timedelta(seconds=5)
+        
+        with connection.cursor() as cursor:
+            # 기존 데이터가 있는지 확인 (last_accessed도 함께 조회)
+            cursor.execute("""
+                SELECT id, total_accesses, last_accessed FROM traffic_trafficflowanalysisfavorite 
+                WHERE start_intersection_id = %s AND end_intersection_id = %s
+            """, [start_intersection_id, end_intersection_id])
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                flow_id, current_accesses, last_accessed = existing
+                
+                # 최근 5초 이내에 접근했다면 중복으로 간주하고 카운트 증가하지 않음
+                if last_accessed:
+                    # timezone-aware datetime으로 변환
+                    if timezone.is_naive(last_accessed):
+                        last_accessed = timezone.make_aware(last_accessed)
+                    if last_accessed > five_seconds_ago:
+                        return {
+                            'success': True,
+                            'message': '최근 접근으로 인해 중복 기록을 방지했습니다.',
+                            'flow_id': flow_id,
+                            'total_accesses': current_accesses,
+                            'duplicate_prevented': True
+                        }
+                
+                # 5초 이상 지났으면 정상적으로 카운트 증가
+                cursor.execute("""
+                    UPDATE traffic_trafficflowanalysisfavorite 
+                    SET total_accesses = total_accesses + 1,
+                        last_accessed = %s,
+                        popularity_score = total_favorites * 2 + (total_accesses + 1),
+                        updated_at = %s
+                    WHERE id = %s
+                """, [now, now, flow_id])
+                
+                return {
+                    'success': True,
+                    'message': '교통 흐름 접근이 기록되었습니다.',
+                    'flow_id': flow_id,
+                    'total_accesses': current_accesses + 1
+                }
+            else:
+                # 새로운 데이터 삽입 (중복 키 처리 포함)
+                cursor.execute("""
+                    INSERT INTO traffic_trafficflowanalysisfavorite 
+                    (start_intersection_id, end_intersection_id, total_favorites, total_accesses, 
+                     unique_users, last_accessed, popularity_score, created_at, updated_at)
+                    VALUES (%s, %s, 0, 1, 1, %s, 1, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                    total_accesses = CASE 
+                        WHEN last_accessed > %s THEN total_accesses 
+                        ELSE total_accesses + 1 
+                    END,
+                    last_accessed = CASE 
+                        WHEN last_accessed > %s THEN last_accessed 
+                        ELSE VALUES(last_accessed) 
+                    END,
+                    popularity_score = total_favorites * 2 + total_accesses,
+                    updated_at = VALUES(updated_at)
+                """, [
+                    start_intersection_id, end_intersection_id, now, now, now,
+                    five_seconds_ago, five_seconds_ago
+                ])
+                
+                # 영향받은 행의 ID 가져오기
+                cursor.execute("""
+                    SELECT id, total_accesses FROM traffic_trafficflowanalysisfavorite 
+                    WHERE start_intersection_id = %s AND end_intersection_id = %s
+                """, [start_intersection_id, end_intersection_id])
+                
+                result = cursor.fetchone()
+                flow_id, total_accesses = result
+                
+                return {
+                    'success': True,
+                    'message': '교통 흐름 경로 접근이 기록되었습니다.',
+                    'flow_id': flow_id,
+                    'total_accesses': total_accesses
+                }
+                
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 접근 기록 중 오류가 발생했습니다: {str(e)}")
 # 관리자 통계 API들
 @router.get("/admin/stats", response=AdminStatsSchema)
 def get_admin_stats(request):
