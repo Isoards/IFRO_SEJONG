@@ -69,6 +69,7 @@ const ProposalDetail: React.FC = () => {
       loadProposal();
       loadCurrentUser();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadCurrentUser = async () => {

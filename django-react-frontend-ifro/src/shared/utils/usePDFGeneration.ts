@@ -61,6 +61,7 @@ export const usePDFGeneration = (options: UsePDFGenerationOptions = {}) => {
         options.memoryOptions || {}
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - initialize only once
 
   const generatePDF = useCallback(async (

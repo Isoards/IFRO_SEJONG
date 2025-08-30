@@ -102,7 +102,7 @@ export const GoogleMapWrapper: React.FC<GoogleMapWrapperProps> = (props) => {
     };
 
     loadGoogleMaps();
-  }, [i18n.language]);
+  }, [i18n.language, t]);
 
   if (isLoading) {
     return (

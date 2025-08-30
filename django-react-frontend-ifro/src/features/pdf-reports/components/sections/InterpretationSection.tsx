@@ -84,7 +84,7 @@ export const InterpretationSection: React.FC<InterpretationSectionProps> = ({
           }
           
           // 리스트 항목 추가
-          const listContent = trimmedLine.replace(/^[\*\-]\s*/, '');
+          const listContent = trimmedLine.replace(/^[*-]\s*/, '');
           elements.push(
             <div key={`li-${lineIndex}`} className="flex items-start space-x-2 mb-2 ml-4">
               <span className="flex-shrink-0 w-2 h-2 bg-indigo-400 rounded-full mt-2"></span>

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { chatCache, CachedResponse } from '../utils/chatCache';
+import { chatCache } from '../utils/chatCache';
 
 // 환경변수에서 백엔드 API URL 가져오기 (기본값: localhost:8000)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';

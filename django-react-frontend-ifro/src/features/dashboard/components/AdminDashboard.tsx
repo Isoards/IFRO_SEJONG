@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from "react";
 import {
   getAdminStats,
-  getAdminIntersections,
   getTrafficFlowFavoritesStats,
   getTrafficFlowSummary
 } from "../../../shared/services/intersections";
 import {
   AdminStats,
   TopArea,
-  IntersectionStats,
   TrafficFlowFavoriteStats,
   TrafficFlowSummary
 } from "../../../shared/types/global.types";
 
 const AdminDashboard = () => {
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-  const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
   const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
   const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,7 +85,6 @@ const AdminDashboard = () => {
           total_favorites: 0,
           total_ai_reports: 0
         });
-        setIntersectionStats([]);
       } finally {
         setLoading(false);
       }

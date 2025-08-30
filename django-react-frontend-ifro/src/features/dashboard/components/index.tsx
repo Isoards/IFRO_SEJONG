@@ -17,7 +17,6 @@ import {
   getIntersectionTrafficStat,
   getLatestIntersectionTrafficData,
   recordIntersectionView,
-  getUserFavoriteIntersections,
   toggleIntersectionFavorite,
 } from "../../../shared/services/intersections";
 import { getIncidents } from "../../../shared/services/incidents";
@@ -49,6 +48,7 @@ export default function Dashboard() {
   const [trafficChartData, setTrafficChartData] = useState<any[]>([]); // 2. 차트 데이터 상태 추가
 
   // 교차로 간 통행량 데이터 상태
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [intersectionTrafficData, setIntersectionTrafficData] = useState<
     Array<{
       source: Intersection;

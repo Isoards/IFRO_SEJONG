@@ -6,8 +6,7 @@ import {
   checkAIServiceStatus,
   getAvailablePDFs,
   getChatCacheInfo,
-  clearChatCache,
-  findSimilarCachedQuestions
+  clearChatCache
 } from "../../../shared/services/chat";
 
 interface Message {
@@ -117,7 +116,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
         setMessages([welcomeMessage]);
       }
     }
-  }, [isOpen, aiStatus.ai_available, aiStatus.model_loaded]);
+  }, [isOpen, aiStatus.ai_available, aiStatus.model_loaded, messages.length]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
