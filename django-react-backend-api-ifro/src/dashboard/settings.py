@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     # internal
     'user_auth',
     'traffic',
+    'chatbot_proxy',
 ]
 
 MIDDLEWARE = [

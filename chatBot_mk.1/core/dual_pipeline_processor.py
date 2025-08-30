@@ -7,6 +7,7 @@ Dual Pipeline을 구현합니다.
 
 import time
 import logging
+import re
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -102,75 +103,134 @@ class DualPipelineProcessor:
         
         logger.info("Dual Pipeline Processor 초기화 완료 (다중 표현 지원)")
     
-    def process_question_with_expressions(self, question: str, 
-                                        conversation_history: Optional[List] = None) -> DualPipelineResult:
+    def process_question(self, question: str, 
+                        conversation_history: Optional[List] = None,
+                        use_context: bool = True) -> DualPipelineResult:
         """
-        다중 표현을 고려한 질문 처리
+        질문 처리 (기본 메서드)
         
         Args:
             question: 사용자 질문
             conversation_history: 대화 히스토리
+            use_context: 컨텍스트 사용 여부
             
         Returns:
             처리 결과
         """
-        start_time = time.time()
+        return self.process_question_with_expressions(question, conversation_history, use_context)
+    
+    def process_question_with_expressions(self, question: str, 
+                                        conversation_history: Optional[List] = None,
+                                        use_context: bool = True) -> DualPipelineResult:
+        """
+        다중 표현을 고려한 질문 처리 (오류 처리 개선)
         
-        # 1. 다중 표현을 고려한 질문 분석
-        analyzed_question = self.question_analyzer.analyze_question_with_expressions(
-            question, conversation_history, self.expression_enhancer
-        )
-        
-        # 2. 컨텍스트 결정
-        context = analyzed_question.metadata.get("context", "general") if analyzed_question.metadata else "general"
-        
-        # 3. 파이프라인 분기 결정
-        pipeline_type = self._determine_pipeline_type_with_expressions(analyzed_question, context)
-        
-        # 4. 파이프라인별 처리
-        document_result = None
-        sql_result = None
-        
-        if pipeline_type in [PipelineType.DOCUMENT_SEARCH, PipelineType.HYBRID]:
-            document_result = self._process_document_search_with_expressions(
-                analyzed_question, context
+        Args:
+            question: 사용자 질문
+            conversation_history: 대화 히스토리
+            use_context: 컨텍스트 사용 여부
+            
+        Returns:
+            처리 결과
+        """
+        try:
+            start_time = time.time()
+            
+            # 1. 다중 표현을 고려한 질문 분석
+            analyzed_question = self.question_analyzer.analyze_question_with_expressions(
+                question, conversation_history, self.expression_enhancer
+            )
+            
+            # 2. 컨텍스트 결정
+            context = analyzed_question.metadata.get("context", "general") if analyzed_question.metadata else "general"
+            
+            # 3. 파이프라인 분기 결정
+            pipeline_type = self._determine_pipeline_type_with_expressions(analyzed_question, context)
+            
+            # 4. 파이프라인별 처리
+            document_result = None
+            sql_result = None
+            
+            try:
+                if pipeline_type in [PipelineType.DOCUMENT_SEARCH, PipelineType.HYBRID]:
+                    document_result = self._process_document_search_with_expressions(
+                        analyzed_question, context
+                    )
+            except Exception as doc_error:
+                logger.error(f"문서 검색 처리 중 오류: {doc_error}")
+                document_result = None
+            
+            try:
+                if pipeline_type in [PipelineType.SQL_QUERY, PipelineType.HYBRID]:
+                    sql_result = self._process_sql_query_with_expressions(
+                        analyzed_question, context
+                    )
+            except Exception as sql_error:
+                logger.error(f"SQL 쿼리 처리 중 오류: {sql_error}")
+                sql_result = None
+            
+            # 5. 결과 통합
+            final_answer = self._combine_results_with_expressions(
+                document_result, sql_result, analyzed_question, context
+            )
+            
+            # 6. 피드백 업데이트 (오류가 있어도 계속 진행)
+            try:
+                self._update_expression_feedback(question, analyzed_question, context)
+            except Exception as feedback_error:
+                logger.warning(f"피드백 업데이트 중 오류: {feedback_error}")
+            
+            total_time = time.time() - start_time
+            
+            return DualPipelineResult(
+                question=question,
+                analyzed_question=analyzed_question,
+                final_answer=final_answer,
+                confidence_score=self._calculate_confidence_with_expressions(
+                    document_result, sql_result, analyzed_question
+                ),
+                total_processing_time=total_time,
+                document_result=document_result,
+                sql_result=sql_result,
+                metadata={
+                    "pipeline_type": pipeline_type.value,
+                    "context": context,
+                    "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
+                }
             )
         
-        if pipeline_type in [PipelineType.SQL_QUERY, PipelineType.HYBRID]:
-            sql_result = self._process_sql_query_with_expressions(
-                analyzed_question, context
+        except Exception as e:
+            logger.error(f"Dual Pipeline 처리 중 오류: {e}")
+            # 오류 발생 시 기본 응답 반환
+            return DualPipelineResult(
+                question=question,
+                analyzed_question=AnalyzedQuestion(
+                    original_question=question,
+                    processed_question=question,
+                    question_type=QuestionType.FACTUAL,
+                    keywords=[],
+                    entities=[],
+                    intent="error",
+                    context_keywords=[],
+                    requires_sql=False,
+                    sql_intent=None
+                ),
+                final_answer="죄송합니다. 질문을 처리하는 중 오류가 발생했습니다. 일반 파이프라인으로 다시 시도해주세요.",
+                confidence_score=0.0,
+                total_processing_time=0.0,
+                document_result=None,
+                sql_result=None,
+                metadata={
+                    "pipeline_type": "error",
+                    "context": "general",
+                    "expressions_used": [],
+                    "error": str(e)
+                }
             )
-        
-        # 5. 결과 통합
-        final_answer = self._combine_results_with_expressions(
-            document_result, sql_result, analyzed_question, context
-        )
-        
-        # 6. 피드백 업데이트
-        self._update_expression_feedback(question, analyzed_question, context)
-        
-        total_time = time.time() - start_time
-        
-        return DualPipelineResult(
-            question=question,
-            analyzed_question=analyzed_question,
-            final_answer=final_answer,
-            confidence_score=self._calculate_confidence_with_expressions(
-                document_result, sql_result, analyzed_question
-            ),
-            total_processing_time=total_time,
-            document_result=document_result,
-            sql_result=sql_result,
-            metadata={
-                "pipeline_type": pipeline_type.value,
-                "context": context,
-                "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
-            }
-        )
     
     def _determine_pipeline_type(self, analyzed_question: AnalyzedQuestion) -> PipelineType:
         """
-        파이프라인 타입 결정
+        파이프라인 타입 결정 (개선된 버전)
         
         Args:
             analyzed_question: 분석된 질문
@@ -178,16 +238,47 @@ class DualPipelineProcessor:
         Returns:
             파이프라인 타입
         """
-        # SQL이 필요한 경우
-        if analyzed_question.requires_sql and self.database_schema:
-            # 문서 검색도 함께 필요한 경우 (하이브리드)
+        question_lower = analyzed_question.original_question.lower()
+        
+        # 1. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
+        location_movement_patterns = [
+            r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+            r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+            r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+            r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+            r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+        ]
+        
+        is_location_movement = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
+        
+        # 2. 정량적 질문 패턴 확인 (SQL 필요)
+        quantitative_patterns = [
+            r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+            r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+            r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+            r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+            r'count', r'sum', r'avg', r'max', r'min', r'total',
+            r'통계', r'집계', r'분석', r'데이터\s*분석'
+        ]
+        
+        is_quantitative = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
+        
+        # 3. 파이프라인 타입 결정
+        if is_location_movement:
+            # 장소 이동 요청은 문서 검색만 필요
+            return PipelineType.DOCUMENT_SEARCH
+        elif is_quantitative and self.database_schema:
+            # 정량적 질문은 SQL 필요
+            return PipelineType.SQL_QUERY
+        elif analyzed_question.requires_sql and self.database_schema:
+            # SQL이 필요한 경우
             if analyzed_question.question_type in [QuestionType.CONCEPTUAL, QuestionType.ANALYTICAL]:
                 return PipelineType.HYBRID
             else:
                 return PipelineType.SQL_QUERY
-        
-        # 문서 검색만 필요한 경우
-        return PipelineType.DOCUMENT_SEARCH
+        else:
+            # 문서 검색만 필요한 경우
+            return PipelineType.DOCUMENT_SEARCH
     
     def _process_document_pipeline(self, analyzed_question: AnalyzedQuestion) -> PipelineResult:
         """
@@ -353,19 +444,48 @@ class DualPipelineProcessor:
     
     def _determine_pipeline_type_with_expressions(self, analyzed_question: AnalyzedQuestion, 
                                                 context: str) -> PipelineType:
-        """표현을 고려한 파이프라인 타입 결정"""
-        # 기본 파이프라인 결정
-        base_type = self._determine_pipeline_type(analyzed_question)
+        """표현을 고려한 파이프라인 타입 결정 (개선된 버전)"""
+        question_lower = analyzed_question.original_question.lower()
         
-        # 컨텍스트별 파이프라인 조정
-        if context == "database" and analyzed_question.requires_sql:
+        # 1. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
+        location_movement_patterns = [
+            r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+            r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+            r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+            r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+            r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+        ]
+        
+        is_location_movement = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
+        
+        # 2. 정량적 질문 패턴 확인 (SQL 필요)
+        quantitative_patterns = [
+            r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+            r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+            r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+            r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+            r'count', r'sum', r'avg', r'max', r'min', r'total',
+            r'통계', r'집계', r'분석', r'데이터\s*분석'
+        ]
+        
+        is_quantitative = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
+        
+        # 3. 표현 기반 파이프라인 조정
+        if is_location_movement:
+            # 장소 이동 요청은 문서 검색만 필요
+            return PipelineType.DOCUMENT_SEARCH
+        elif is_quantitative and self.database_schema:
+            # 정량적 질문은 SQL 필요
             return PipelineType.SQL_QUERY
-        elif context == "traffic" and "사고" in analyzed_question.original_question.lower():
+        elif context == "database" and analyzed_question.requires_sql:
+            return PipelineType.SQL_QUERY
+        elif context == "traffic" and "사고" in question_lower:
             return PipelineType.HYBRID  # 교통사고는 문서와 데이터 모두 필요
         elif context == "general" and len(analyzed_question.metadata.get("expressions", [])) > 2:
             return PipelineType.HYBRID  # 다양한 표현이 있으면 하이브리드
-        
-        return base_type
+        else:
+            # 기본 파이프라인 결정
+            return self._determine_pipeline_type(analyzed_question)
     
     def _process_document_search_with_expressions(self, analyzed_question: AnalyzedQuestion, 
                                                 context: str) -> PipelineResult:
@@ -388,7 +508,7 @@ class DualPipelineProcessor:
         answer = self.answer_generator.generate_answer_from_chunks(
             analyzed_question.processed_question,
             [chunk for chunk, _ in relevant_chunks],
-            model_type=ModelType.GEMINI
+            model_type=ModelType.OLLAMA
         )
         
         processing_time = time.time() - start_time
@@ -405,6 +525,26 @@ class DualPipelineProcessor:
                 "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
             }
         )
+    
+    def _calculate_document_confidence(self, relevant_chunks: List[Tuple[TextChunk, float]]) -> float:
+        """문서 검색 결과의 신뢰도 계산"""
+        if not relevant_chunks:
+            return 0.0
+        
+        # 상위 3개 청크의 평균 유사도 점수 사용
+        top_scores = [score for _, score in relevant_chunks[:3]]
+        avg_score = sum(top_scores) / len(top_scores)
+        
+        # 점수를 0.0-1.0 범위로 정규화
+        confidence = min(avg_score, 1.0)
+        
+        # 청크 수에 따른 보정
+        if len(relevant_chunks) >= 3:
+            confidence *= 1.1  # 충분한 컨텍스트가 있으면 신뢰도 증가
+        elif len(relevant_chunks) == 1:
+            confidence *= 0.8  # 단일 청크만 있으면 신뢰도 감소
+        
+        return min(confidence, 1.0)
     
     def _process_sql_query_with_expressions(self, analyzed_question: AnalyzedQuestion, 
                                           context: str) -> PipelineResult:
@@ -435,7 +575,7 @@ class DualPipelineProcessor:
                 answer = self.answer_generator.generate_answer_from_sql_result(
                     analyzed_question.processed_question,
                     result,
-                    model_type=ModelType.GEMINI
+                    model_type=ModelType.OLLAMA
                 )
             except Exception as e:
                 logger.error(f"SQL 실행 오류: {e}")
@@ -470,28 +610,52 @@ class DualPipelineProcessor:
                                         sql_result: Optional[PipelineResult],
                                         analyzed_question: AnalyzedQuestion,
                                         context: str) -> str:
-        """표현을 고려한 결과 통합"""
-        if document_result and sql_result:
-            # 하이브리드 결과 통합
-            doc_answer = document_result.answer.content
-            sql_answer = sql_result.answer.content
+        """표현을 고려한 결과 통합 (오류 처리 개선)"""
+        try:
+            if document_result and sql_result:
+                # 하이브리드 결과 통합
+                doc_answer = document_result.answer.content if document_result.answer else "문서 정보를 찾을 수 없습니다."
+                sql_answer = sql_result.answer.content if sql_result.answer else "데이터베이스 정보를 찾을 수 없습니다."
+                
+                # 컨텍스트별 통합 전략
+                if context == "traffic":
+                    combined = f"{sql_answer}\n\n추가 정보: {doc_answer}"
+                elif context == "database":
+                    combined = f"{sql_answer}\n\n관련 문서: {doc_answer}"
+                else:
+                    combined = f"{sql_answer}\n\n{doc_answer}"
+                
+                return combined
             
-            # 컨텍스트별 통합 전략
-            if context == "traffic":
-                combined = f"{sql_answer}\n\n추가 정보: {doc_answer}"
-            elif context == "database":
-                combined = f"{sql_answer}\n\n관련 문서: {doc_answer}"
+            elif document_result and document_result.answer:
+                return document_result.answer.content
+            elif sql_result and sql_result.answer:
+                return sql_result.answer.content
+            elif document_result:
+                return "문서를 검색했지만 적절한 답변을 생성할 수 없습니다."
+            elif sql_result:
+                return "SQL 쿼리는 생성되었지만 실행 결과를 가져올 수 없습니다."
             else:
-                combined = f"{sql_answer}\n\n{doc_answer}"
-            
-            return combined
+                return "죄송합니다. 적절한 답변을 찾을 수 없습니다."
         
+        except Exception as e:
+            logger.error(f"결과 통합 중 오류 발생: {e}")
+            return "죄송합니다. 답변을 생성하는 중 오류가 발생했습니다."
+    
+    def _calculate_confidence(self, document_result: Optional[PipelineResult],
+                            sql_result: Optional[PipelineResult]) -> float:
+        """기본 신뢰도 계산"""
+        if document_result and sql_result:
+            # 하이브리드 결과: 두 결과의 가중 평균
+            doc_confidence = document_result.confidence_score
+            sql_confidence = sql_result.confidence_score
+            return (doc_confidence * 0.6 + sql_confidence * 0.4)
         elif document_result:
-            return document_result.answer.content
+            return document_result.confidence_score
         elif sql_result:
-            return sql_result.answer.content
+            return sql_result.confidence_score
         else:
-            return "죄송합니다. 적절한 답변을 찾을 수 없습니다."
+            return 0.0
     
     def _calculate_confidence_with_expressions(self, document_result: Optional[PipelineResult],
                                              sql_result: Optional[PipelineResult],

@@ -41,6 +41,8 @@ class QuestionType(Enum):
     FOLLOW_UP = "follow_up"         # 후속 질문 (이전 답변 관련)
     CLARIFICATION = "clarification"  # 명확화 질문 (구체적 설명 요구)
     DATABASE_QUERY = "database_query"  # 데이터베이스 질의 (SQL 생성 필요)
+    QUANTITATIVE = "quantitative"    # 정량적 질문 (얼마나, 몇 개, 통행량 등)
+    LOCATION_MOVEMENT = "location_movement"  # 장소 이동 요청 (조치원으로 이동 등)
 
 @dataclass
 class ConversationItem:
@@ -122,7 +124,7 @@ class QuestionAnalyzer:
         # 현재 대화 컨텍스트
         self.current_context = ConversationContext()
         
-        # 질문 유형 분류를 위한 패턴
+        # 질문 유형 분류를 위한 패턴 (개선된 버전)
         self.question_patterns = {
             QuestionType.FACTUAL: [
                 r'무엇', r'뭐', r'언제', r'어디', r'누구', r'몇', r'얼마',
@@ -152,11 +154,44 @@ class QuestionAnalyzer:
                 r'구체적으로', r'자세히', r'정확히', r'명확히', r'구체적',
                 r'상세히', r'더 자세히', r'보다 구체적'
             ],
+            QuestionType.QUANTITATIVE: [
+                # 정량적 질문 패턴 (우선순위 높음)
+                r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+                r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+                r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+                r'얼마나\s*많', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+                r'count', r'sum', r'avg', r'max', r'min', r'total',
+                r'통계', r'집계', r'분석', r'데이터\s*분석'
+            ],
+            QuestionType.LOCATION_MOVEMENT: [
+                # 장소 이동 요청 패턴
+                r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+                r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+                r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+                r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+                r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+            ],
             QuestionType.DATABASE_QUERY: [
-                r'데이터', r'테이블', r'조회', r'검색', r'찾기', r'가져오기',
-                r'추출', r'통계', r'개수', r'합계', r'평균', r'최대', r'최소',
-                r'정렬', r'필터', r'조건', r'where', r'select', r'insert',
-                r'update', r'delete', r'from', r'join', r'group by', r'order by'
+                # 데이터베이스 관련 키워드
+                r'데이터', r'테이블', r'레코드', r'행', r'컬럼', r'필드', r'DB', r'데이터베이스',
+                # 조회 관련 키워드
+                r'조회', r'검색', r'찾기', r'가져오기', r'추출', r'보기', r'확인', r'출력',
+                r'리스트', r'목록', r'데이터 목록', r'정보 조회',
+                # 통계 관련 키워드
+                r'통계', r'집계', r'분석', r'개수', r'합계', r'평균', r'최대', r'최소', r'총계', r'갯수',
+                r'count', r'sum', r'avg', r'max', r'min', r'total',
+                # 필터링/정렬 관련
+                r'정렬', r'필터', r'조건', r'where', r'order by', r'group by',
+                r'순서', r'기준', r'기간', r'날짜', r'시간', r'기준',
+                # SQL 키워드
+                r'select', r'insert', r'update', r'delete', r'from', r'join',
+                r'where', r'group by', r'order by', r'limit', r'offset',
+                # 교통 관련 데이터 키워드
+                r'교통량', r'교차로', r'사고', r'인시던트', r'교통사고', r'교통 흐름',
+                r'평균속도', r'총 교통량', r'혼잡도', r'교통상황',
+                # 특정 패턴
+                r'얼마나', r'어떤', r'어디서', r'언제', r'누가',
+                r'가장 많이', r'가장 적게', r'평균적으로', r'대부분'
             ]
         }
         
@@ -514,7 +549,7 @@ class QuestionAnalyzer:
     
     def _classify_question_type(self, question: str) -> QuestionType:
         """
-        질문 유형 분류
+        질문 유형 분류 (개선된 버전)
         
         Args:
             question: 전처리된 질문
@@ -528,18 +563,33 @@ class QuestionAnalyzer:
         
         question_lower = question.lower()
         
-        # 각 유형별 패턴 매칭 점수 계산
+        # 우선순위가 높은 유형들을 먼저 확인
+        priority_types = [
+            QuestionType.LOCATION_MOVEMENT,  # 장소 이동 요청 (최우선)
+            QuestionType.QUANTITATIVE,       # 정량적 질문 (우선)
+            QuestionType.DATABASE_QUERY      # 데이터베이스 질의
+        ]
+        
+        for q_type in priority_types:
+            if q_type in self.question_patterns:
+                patterns = self.question_patterns[q_type]
+                for pattern in patterns:
+                    if re.search(pattern, question_lower):
+                        return q_type
+        
+        # 나머지 유형들에 대해 점수 계산
         type_scores = {}
         
         for q_type, patterns in self.question_patterns.items():
-            score = 0
-            for pattern in patterns:
-                if re.search(pattern, question_lower):
-                    score += 1
-            type_scores[q_type] = score
+            if q_type not in priority_types:  # 이미 확인한 우선순위 유형 제외
+                score = 0
+                for pattern in patterns:
+                    if re.search(pattern, question_lower):
+                        score += 1
+                type_scores[q_type] = score
         
         # 가장 높은 점수의 유형 반환
-        if max(type_scores.values()) > 0:
+        if type_scores and max(type_scores.values()) > 0:
             return max(type_scores, key=type_scores.get)
         
         # 기본값: FACTUAL
@@ -951,7 +1001,7 @@ class QuestionAnalyzer:
     
     def _analyze_sql_requirements(self, question: str, question_type: QuestionType) -> Tuple[bool, Optional[str]]:
         """
-        SQL 필요 여부 및 의도 분석
+        SQL 필요 여부 및 의도 분석 (개선된 버전)
         
         Args:
             question: 처리된 질문
@@ -962,29 +1012,89 @@ class QuestionAnalyzer:
         """
         requires_sql = False
         sql_intent = None
+        question_lower = question.lower()
         
-        # 데이터베이스 질의 유형인 경우
-        if question_type == QuestionType.DATABASE_QUERY:
+        # 1. 정량적 질문 패턴 (통행량, 개수, 수치 등)
+        quantitative_patterns = [
+            r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+            r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+            r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+            r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+            r'count', r'sum', r'avg', r'max', r'min', r'total',
+            r'통계', r'집계', r'분석', r'데이터\s*분석'
+        ]
+        
+        # 2. 장소 이동 요청 패턴
+        location_movement_patterns = [
+            r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+            r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+            r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+            r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+            r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+        ]
+        
+        # 3. 질문 유형별 SQL 필요 여부 판단
+        if question_type == QuestionType.LOCATION_MOVEMENT:
+            # 장소 이동 요청은 SQL 불필요
+            requires_sql = False
+            sql_intent = None
+        elif question_type == QuestionType.QUANTITATIVE:
+            # 정량적 질문은 SQL 필요
+            requires_sql = True
+            sql_intent = 'SELECT'
+        elif question_type == QuestionType.DATABASE_QUERY:
             requires_sql = True
             
-            # SQL 의도 분석
-            question_lower = question.lower()
+            # SQL 의도 분석 (더 정확한 패턴 매칭)
+            select_keywords = ['조회', '검색', '찾기', '가져오기', '추출', '개수', '합계', '평균', '최대', '최소', 
+                             '보기', '확인', '출력', '리스트', '목록', '얼마나', '몇 개', '어떤', '어디서', '언제']
+            insert_keywords = ['추가', '삽입', '등록', '생성', '입력', '저장']
+            update_keywords = ['수정', '변경', '업데이트', '갱신', '편집']
+            delete_keywords = ['삭제', '제거', '지우기', '제거']
             
-            if any(word in question_lower for word in ['조회', '검색', '찾기', '가져오기', '추출', '개수', '합계', '평균', '최대', '최소']):
+            if any(word in question_lower for word in select_keywords):
                 sql_intent = 'SELECT'
-            elif any(word in question_lower for word in ['추가', '삽입', '등록', '생성']):
+            elif any(word in question_lower for word in insert_keywords):
                 sql_intent = 'INSERT'
-            elif any(word in question_lower for word in ['수정', '변경', '업데이트', '갱신']):
+            elif any(word in question_lower for word in update_keywords):
                 sql_intent = 'UPDATE'
-            elif any(word in question_lower for word in ['삭제', '제거', '지우기']):
+            elif any(word in question_lower for word in delete_keywords):
                 sql_intent = 'DELETE'
             else:
                 sql_intent = 'SELECT'  # 기본값
         
-        # 일반 질문이지만 데이터 관련 키워드가 포함된 경우
-        elif any(word in question.lower() for word in ['데이터', '테이블', '레코드', '행', '컬럼', '필드']):
-            requires_sql = True
-            sql_intent = 'SELECT'
+        # 4. 일반 질문이지만 정량적 질문인 경우 SQL 필요
+        else:
+            # 정량적 질문 패턴 확인
+            quantitative_match = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
+            
+            # 장소 이동 요청 패턴 확인 (SQL 불필요)
+            location_movement_match = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
+            
+            # 데이터베이스 관련 키워드
+            db_keywords = ['데이터', '테이블', '레코드', '행', '컬럼', '필드', 'db', '데이터베이스']
+            
+            # 교통 관련 데이터 키워드
+            traffic_keywords = ['교통량', '교차로', '사고', '인시던트', '교통사고', '교통 흐름', 
+                              '평균속도', '총 교통량', '혼잡도', '교통상황']
+            
+            # 통계 관련 키워드
+            stats_keywords = ['통계', '개수', '합계', '평균', '최대', '최소', '총계', '갯수', 'count', 'sum', 'avg', 'max', 'min']
+            
+            # 특정 질문 패턴
+            sql_patterns = ['얼마나', '몇 개', '어떤', '어디서', '언제', '누가', '가장 많이', '가장 적게', '평균적으로', '대부분']
+            
+            # 장소 이동 요청이 아닌 경우에만 SQL 필요 여부 판단
+            if not location_movement_match:
+                # 정량적 질문이거나 SQL이 필요한 키워드가 2개 이상 포함된 경우
+                matching_keywords = 0
+                for keywords in [db_keywords, traffic_keywords, stats_keywords, sql_patterns]:
+                    if any(word in question_lower for word in keywords):
+                        matching_keywords += 1
+                
+                if quantitative_match or matching_keywords >= 2:
+                    requires_sql = True
+                    sql_intent = 'SELECT'
         
         return requires_sql, sql_intent
     

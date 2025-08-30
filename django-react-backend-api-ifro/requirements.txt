@@ -12,3 +12,4 @@ mysqlclient
 pymysql
 dotenv
 requests
+httpx
