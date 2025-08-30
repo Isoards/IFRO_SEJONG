@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   PolicyProposal,
   ProposalCategory,
@@ -13,44 +14,58 @@ import {
   getProposalStats,
 } from "../../../shared/services/proposals";
 
-const CATEGORY_LABELS: Record<ProposalCategory, string> = {
-  traffic_signal: "신호등 관련",
-  road_safety: "도로 안전",
-  traffic_flow: "교통 흐름",
-  infrastructure: "인프라 개선",
-  policy: "교통 정책",
-  other: "기타",
-};
-
-const STATUS_LABELS: Record<ProposalStatus, string> = {
-  pending: "대기 중",
-  under_review: "검토 중",
-  in_progress: "진행 중",
-  completed: "완료",
-  rejected: "반려",
-};
-
-const PRIORITY_LABELS: Record<
-  ProposalPriority,
-  { label: string; color: string }
-> = {
-  low: { label: "낮음", color: "text-green-600 bg-green-100" },
-  medium: { label: "보통", color: "text-yellow-600 bg-yellow-100" },
-  high: { label: "높음", color: "text-orange-600 bg-orange-100" },
-  urgent: { label: "긴급", color: "text-red-600 bg-red-100" },
-};
-
-const STATUS_COLORS: Record<ProposalStatus, string> = {
-  pending: "text-gray-600 bg-gray-100",
-  under_review: "text-blue-600 bg-blue-100",
-  in_progress: "text-purple-600 bg-purple-100",
-  completed: "text-green-600 bg-green-100",
-  rejected: "text-red-600 bg-red-100",
-};
-
 const AdminProposalManagement: React.FC = () => {
+  const { t } = useTranslation();
+
+  const CATEGORY_LABELS: Record<ProposalCategory, string> = {
+    traffic_signal: t("policy.categories.trafficSignal") || "신호등 관련",
+    road_safety: t("policy.categories.roadSafety") || "도로 안전",
+    traffic_flow: t("policy.categories.trafficFlow") || "교통 흐름",
+    infrastructure: t("policy.categories.infrastructure") || "인프라 개선",
+    policy: t("policy.categories.policy") || "교통 정책",
+    other: t("policy.categories.other") || "기타",
+  };
+
+  const STATUS_LABELS: Record<ProposalStatus, string> = {
+    pending: t("policy.statuses.pending") || "대기 중",
+    under_review: t("policy.statuses.underReview") || "검토 중",
+    in_progress: t("policy.statuses.inProgress") || "진행 중",
+    completed: t("policy.statuses.completed") || "완료",
+    rejected: t("policy.statuses.rejected") || "반려",
+  };
+
+  const PRIORITY_LABELS: Record<
+    ProposalPriority,
+    { label: string; color: string }
+  > = {
+    low: {
+      label: t("policy.priorities.low") || "낮음",
+      color: "text-green-600 bg-green-100",
+    },
+    medium: {
+      label: t("policy.priorities.medium") || "보통",
+      color: "text-yellow-600 bg-yellow-100",
+    },
+    high: {
+      label: t("policy.priorities.high") || "높음",
+      color: "text-orange-600 bg-orange-100",
+    },
+    urgent: {
+      label: t("policy.priorities.urgent") || "긴급",
+      color: "text-red-600 bg-red-100",
+    },
+  };
+
+  const STATUS_COLORS: Record<ProposalStatus, string> = {
+    pending: "text-gray-600 bg-gray-100",
+    under_review: "text-blue-600 bg-blue-100",
+    in_progress: "text-purple-600 bg-purple-100",
+    completed: "text-green-600 bg-green-100",
+    rejected: "text-red-600 bg-red-100",
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [currentUser, setCurrentUser] = useState<any>({ role: 'admin' }); // Mock admin user
+  const [currentUser, setCurrentUser] = useState<any>({ role: "admin" }); // Mock admin user
   const [proposals, setProposals] = useState<PolicyProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -86,7 +101,7 @@ const AdminProposalManagement: React.FC = () => {
       loadProposals();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, filters, currentUser]);  // 통계 데이터 로드
+  }, [currentPage, filters, currentUser]); // 통계 데이터 로드
   useEffect(() => {
     if (currentUser) {
       loadStats();

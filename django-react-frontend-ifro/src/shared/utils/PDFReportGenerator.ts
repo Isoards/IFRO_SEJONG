@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { debugLog } from "./debugUtils";
 import { ReportData, PDFConfig, PDFGenerationStatus } from '../types/global.types';
 import {
   createPDFInstance,
@@ -133,7 +134,7 @@ export class PDFReportGenerator {
           throw new Error('Image data too short, likely corrupt');
         }
         
-        console.log('Successfully generated image data, length:', imageData.length);
+        debugLog('Successfully generated image data, length:', imageData.length);
         
       } catch (error) {
         console.warn('Failed to generate image data, using fallback:', error);
@@ -180,33 +181,33 @@ export class PDFReportGenerator {
       const canvasHeight = canvas.height || 1;
       const canvasAspectRatio = canvasWidth / canvasHeight;
       
-      console.log('PDF dimensions:', { pdfWidth, pdfHeight });
-      console.log('Canvas dimensions:', { canvasWidth, canvasHeight });
-      console.log('Canvas aspect ratio:', canvasAspectRatio);
+      debugLog('PDF dimensions:', { pdfWidth, pdfHeight });
+      debugLog('Canvas dimensions:', { canvasWidth, canvasHeight });
+      debugLog('Canvas aspect ratio:', canvasAspectRatio);
 
       // Calculate image dimensions maintaining aspect ratio
       const imgWidth = availableWidth;
       const imgHeight = imgWidth / canvasAspectRatio;
       
-      console.log('Calculated image size:', { imgWidth, imgHeight });
-      console.log('Available height per page:', availableHeight);
+      debugLog('Calculated image size:', { imgWidth, imgHeight });
+      debugLog('Available height per page:', availableHeight);
 
       // Check if content fits in one page
       if (imgHeight <= availableHeight) {
         // Content fits in one page
-        console.log('Content fits in one page');
+        debugLog('Content fits in one page');
         pdf.addImage(imageData, 'PNG', marginX, marginY, imgWidth, imgHeight);
       } else {
         // Content needs multiple pages - clean split without overlap
-        console.log('Content needs multiple pages');
+        debugLog('Content needs multiple pages');
         
         const pagesNeeded = Math.ceil(imgHeight / availableHeight);
-        console.log('Pages needed:', pagesNeeded);
+        debugLog('Pages needed:', pagesNeeded);
         
         for (let pageIndex = 0; pageIndex < pagesNeeded; pageIndex++) {
           if (pageIndex > 0) {
             pdf.addPage(); // Add new page
-            console.log(`Added page ${pageIndex + 1}`);
+            debugLog(`Added page ${pageIndex + 1}`);
           }
           
           // Calculate the portion of the image for this page (clean split)
@@ -215,7 +216,7 @@ export class PDFReportGenerator {
           const sourceHeight = Math.min(availableHeight * (canvasHeight / imgHeight), remainingCanvasHeight);
           const displayHeight = sourceHeight * (imgHeight / canvasHeight);
           
-          console.log(`Page ${pageIndex + 1}:`, { 
+          debugLog(`Page ${pageIndex + 1}:`, { 
             sourceY: Math.round(sourceY), 
             sourceHeight: Math.round(sourceHeight), 
             displayHeight: Math.round(displayHeight),

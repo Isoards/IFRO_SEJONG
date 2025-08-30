@@ -1,9 +1,16 @@
 // Performance monitoring utilities
+import { debugLog } from "./debugUtils";
+
 export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
   private metrics: Map<string, number> = new Map();
+  private isEnabled: boolean;
 
-  private constructor() {}
+  private constructor() {
+    this.isEnabled =
+      process.env.NODE_ENV === "development" &&
+      process.env.REACT_APP_ENABLE_PERFORMANCE_MONITORING !== "false";
+  }
 
   public static getInstance(): PerformanceMonitor {
     if (!PerformanceMonitor.instance) {
@@ -13,23 +20,24 @@ export class PerformanceMonitor {
   }
 
   public startTimer(label: string): void {
+    if (!this.isEnabled) return;
     this.metrics.set(label, performance.now());
   }
 
   public endTimer(label: string): number {
+    if (!this.isEnabled) return 0;
+
     const startTime = this.metrics.get(label);
     if (!startTime) {
       console.warn(`Timer '${label}' was not started`);
       return 0;
     }
-    
+
     const duration = performance.now() - startTime;
     this.metrics.delete(label);
-    
-    if (process.env.REACT_APP_ENABLE_PERFORMANCE_MONITORING === 'true') {
-      console.log(`⏱️ ${label}: ${duration.toFixed(2)}ms`);
-    }
-    
+
+    debugLog(`⏱️ ${label}: ${duration.toFixed(2)}ms`);
+
     return duration;
   }
 
@@ -49,17 +57,15 @@ export class PerformanceMonitor {
   }
 
   public reportWebVitals(): void {
-    if ('PerformanceObserver' in window) {
-      const observer = new PerformanceObserver((list) => {
-        list.getEntries().forEach((entry) => {
-          if (process.env.REACT_APP_ENABLE_PERFORMANCE_MONITORING === 'true') {
-            console.log(`📊 ${entry.name}: ${entry.duration?.toFixed(2) || 'N/A'}ms`);
-          }
-        });
-      });
+    if (!this.isEnabled || !("PerformanceObserver" in window)) return;
 
-      observer.observe({ entryTypes: ['measure', 'navigation'] });
-    }
+    const observer = new PerformanceObserver((list) => {
+      list.getEntries().forEach((entry) => {
+        debugLog(`📊 ${entry.name}: ${entry.duration?.toFixed(2) || "N/A"}ms`);
+      });
+    });
+
+    observer.observe({ entryTypes: ["measure", "navigation"] });
   }
 }
 

@@ -7,7 +7,10 @@ import {
   Intersection,
   PolicyProposal,
 } from "../../../shared/types/global.types";
-import { getProposal, updateProposal } from "../../../shared/services/proposals";
+import {
+  getProposal,
+  updateProposal,
+} from "../../../shared/services/proposals";
 import { getTrafficIntersections } from "../../../shared/services/intersections";
 import { getCurrentUser } from "../../../shared/services/user";
 

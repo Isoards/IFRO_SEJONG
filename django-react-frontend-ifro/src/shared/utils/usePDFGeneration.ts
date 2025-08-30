@@ -1,6 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { PDFGenerationStatus, ReportData, PDFConfig } from '../types/global.types';
-import { PDFReportGenerator } from './PDFReportGenerator';
+import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  PDFGenerationStatus,
+  ReportData,
+  PDFConfig,
+} from "../types/global.types";
+import { PDFReportGenerator } from "./PDFReportGenerator";
 
 interface RetryOptions {
   maxRetries: number;
@@ -64,52 +68,60 @@ export const usePDFGeneration = (options: UsePDFGenerationOptions = {}) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - initialize only once
 
-  const generatePDF = useCallback(async (
-    reportData: ReportData,
-    templateElement: HTMLElement
-  ) => {
-    try {
-      if (!generatorRef.current) {
-        throw new Error('PDF generator not initialized');
-      }
-      await generatorRef.current.generateReport(reportData, templateElement);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setStatus(prev => ({
-        ...prev,
-        isGenerating: false,
-        error: errorMessage,
-      }));
+  const generatePDF = useCallback(
+    async (reportData: ReportData, templateElement: HTMLElement) => {
+      try {
+        if (!generatorRef.current) {
+          throw new Error("PDF generator not initialized");
+        }
+        await generatorRef.current.generateReport(reportData, templateElement);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error occurred";
+        setStatus((prev) => ({
+          ...prev,
+          isGenerating: false,
+          error: errorMessage,
+        }));
 
-      if (onErrorRef.current) {
-        onErrorRef.current(errorMessage);
+        if (onErrorRef.current) {
+          onErrorRef.current(errorMessage);
+        }
       }
-    }
-  }, []);
+    },
+    []
+  );
 
-  const generatePreview = useCallback(async (
-    reportData: ReportData,
-    templateElement: HTMLElement
-  ): Promise<string | null> => {
-    try {
-      if (!generatorRef.current) {
-        throw new Error('PDF generator not initialized');
+  const generatePreview = useCallback(
+    async (
+      reportData: ReportData,
+      templateElement: HTMLElement
+    ): Promise<string | null> => {
+      try {
+        if (!generatorRef.current) {
+          throw new Error("PDF generator not initialized");
+        }
+        return await generatorRef.current.generatePreview(
+          reportData,
+          templateElement
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error occurred";
+        setStatus((prev) => ({
+          ...prev,
+          error: errorMessage,
+        }));
+
+        if (onErrorRef.current) {
+          onErrorRef.current(errorMessage);
+        }
+
+        return null;
       }
-      return await generatorRef.current.generatePreview(reportData, templateElement);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      setStatus(prev => ({
-        ...prev,
-        error: errorMessage,
-      }));
-
-      if (onErrorRef.current) {
-        onErrorRef.current(errorMessage);
-      }
-
-      return null;
-    }
-  }, []);
+    },
+    []
+  );
 
   const resetStatus = useCallback(() => {
     setStatus({
@@ -126,17 +138,23 @@ export const usePDFGeneration = (options: UsePDFGenerationOptions = {}) => {
     }
   }, []);
 
-  const updateRetryOptions = useCallback((newRetryOptions: Partial<RetryOptions>) => {
-    if (generatorRef.current) {
-      generatorRef.current.updateRetryOptions(newRetryOptions);
-    }
-  }, []);
+  const updateRetryOptions = useCallback(
+    (newRetryOptions: Partial<RetryOptions>) => {
+      if (generatorRef.current) {
+        generatorRef.current.updateRetryOptions(newRetryOptions);
+      }
+    },
+    []
+  );
 
-  const updateMemoryOptions = useCallback((newMemoryOptions: Partial<MemoryOptimizationOptions>) => {
-    if (generatorRef.current) {
-      generatorRef.current.updateMemoryOptions(newMemoryOptions);
-    }
-  }, []);
+  const updateMemoryOptions = useCallback(
+    (newMemoryOptions: Partial<MemoryOptimizationOptions>) => {
+      if (generatorRef.current) {
+        generatorRef.current.updateMemoryOptions(newMemoryOptions);
+      }
+    },
+    []
+  );
 
   const cancelGeneration = useCallback(() => {
     if (generatorRef.current) {
