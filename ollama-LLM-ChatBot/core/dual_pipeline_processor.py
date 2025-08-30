@@ -17,12 +17,16 @@ from .answer_generator import AnswerGenerator, Answer, ModelType, GenerationConf
 from .sql_generator import SQLGenerator, DatabaseSchema, SQLQuery
 from .vector_store import HybridVectorStore
 from .pdf_processor import TextChunk
-from ..utils.chatbot_logger import chatbot_logger, QuestionType as ChatbotQuestionType
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.chatbot_logger import chatbot_logger, QuestionType as ChatbotQuestionType
 
 logger = logging.getLogger(__name__)
 
 class PipelineType(Enum):
     """파이프라인 타입"""
+    GREETING = "greeting"                # 인사말 처리
     DOCUMENT_SEARCH = "document_search"  # 문서 검색
     SQL_QUERY = "sql_query"              # SQL 질의
     HYBRID = "hybrid"                    # 하이브리드 (둘 다)
@@ -124,7 +128,7 @@ class DualPipelineProcessor:
                                         conversation_history: Optional[List] = None,
                                         use_context: bool = True) -> DualPipelineResult:
         """
-        다중 표현을 고려한 질문 처리 (오류 처리 개선)
+        다중 표현을 고려한 질문 처리 (SQL vs PDF 분류 최적화)
         
         Args:
             question: 사용자 질문
@@ -142,38 +146,88 @@ class DualPipelineProcessor:
                 question, conversation_history, self.expression_enhancer
             )
             
-            # 2. 컨텍스트 결정
+            # 2. SQL vs PDF 분류 (새로운 분류 시스템)
+            classification_result = self.question_analyzer.classify_sql_vs_pdf(
+                question, analyzed_question.embedding
+            )
+            
+            # 3. 컨텍스트 결정
             context = analyzed_question.metadata.get("context", "general") if analyzed_question.metadata else "general"
             
-            # 3. 파이프라인 분기 결정
-            pipeline_type = self._determine_pipeline_type_with_expressions(analyzed_question, context)
-            
-            # 4. 파이프라인별 처리
+            # 4. 분류 결과에 따른 파이프라인 처리
             document_result = None
             sql_result = None
+            greeting_result = None
             
-            try:
-                if pipeline_type in [PipelineType.DOCUMENT_SEARCH, PipelineType.HYBRID]:
-                    document_result = self._process_document_search_with_expressions(
-                        analyzed_question, context
+            # 인사말 처리 (가장 빠름)
+            if analyzed_question.question_type == QuestionType.GREETING:
+                try:
+                    greeting_result = self._process_greeting_pipeline(analyzed_question)
+                    if greeting_result and greeting_result.answer:
+                        total_time = time.time() - start_time
+                        return self._create_result_with_logging(
+                            question, analyzed_question, greeting_result.answer.content,
+                            greeting_result.confidence_score, total_time, 
+                            greeting_result, None, PipelineType.GREETING, context,
+                            classification_result
+                        )
+                except Exception as greeting_error:
+                    logger.error(f"인사말 처리 중 오류: {greeting_error}")
+            
+            # SQL 분류된 경우 SQL 파이프라인만 실행
+            if classification_result["classification"] == "SQL":
+                try:
+                    sql_result = self._process_sql_query_with_expressions(analyzed_question, context)
+                    total_time = time.time() - start_time
+                    return self._create_result_with_logging(
+                        question, analyzed_question, sql_result.answer.content,
+                        sql_result.confidence_score, total_time,
+                        None, sql_result, PipelineType.SQL_QUERY, context,
+                        classification_result
                     )
-            except Exception as doc_error:
-                logger.error(f"문서 검색 처리 중 오류: {doc_error}")
-                document_result = None
+                except Exception as sql_error:
+                    logger.error(f"SQL 쿼리 처리 중 오류: {sql_error}")
+                    # SQL 실패 시 PDF로 폴백
+                    classification_result["classification"] = "PDF"
             
-            try:
-                if pipeline_type in [PipelineType.SQL_QUERY, PipelineType.HYBRID]:
-                    sql_result = self._process_sql_query_with_expressions(
-                        analyzed_question, context
+            # PDF 분류된 경우 PDF 파이프라인만 실행
+            if classification_result["classification"] == "PDF":
+                try:
+                    document_result = self._process_document_search_with_expressions(analyzed_question, context)
+                    total_time = time.time() - start_time
+                    return self._create_result_with_logging(
+                        question, analyzed_question, document_result.answer.content,
+                        document_result.confidence_score, total_time,
+                        document_result, None, PipelineType.DOCUMENT_SEARCH, context,
+                        classification_result
                     )
-            except Exception as sql_error:
-                logger.error(f"SQL 쿼리 처리 중 오류: {sql_error}")
-                sql_result = None
+                except Exception as doc_error:
+                    logger.error(f"문서 검색 처리 중 오류: {doc_error}")
             
-            # 5. 결과 통합
-            final_answer = self._combine_results_with_expressions(
-                document_result, sql_result, analyzed_question, context
-            )
+            # HYBRID 분류된 경우 두 파이프라인 모두 실행
+            if classification_result["classification"] == "HYBRID":
+                try:
+                    sql_result = self._process_sql_query_with_expressions(analyzed_question, context)
+                except Exception as sql_error:
+                    logger.error(f"SQL 쿼리 처리 중 오류: {sql_error}")
+                
+                try:
+                    document_result = self._process_document_search_with_expressions(analyzed_question, context)
+                except Exception as doc_error:
+                    logger.error(f"문서 검색 처리 중 오류: {doc_error}")
+            
+            # 5. 결과 통합 (필요한 경우에만)
+            if document_result and sql_result:
+                # 둘 다 있는 경우에만 통합
+                final_answer = self._combine_results_with_expressions(
+                    document_result, sql_result, analyzed_question, context
+                )
+            elif document_result:
+                final_answer = document_result.answer.content
+            elif sql_result:
+                final_answer = sql_result.answer.content
+            else:
+                final_answer = "죄송합니다. 질문에 대한 답변을 찾을 수 없습니다."
             
             # 6. 피드백 업데이트 (오류가 있어도 계속 진행)
             try:
@@ -183,77 +237,14 @@ class DualPipelineProcessor:
             
             total_time = time.time() - start_time
             
-            # 챗봇 로깅
-            try:
-                # 파이프라인 타입에 따른 질문 유형 결정
-                if pipeline_type == PipelineType.SQL_QUERY:
-                    question_type = ChatbotQuestionType.SQL
-                elif pipeline_type == PipelineType.DOCUMENT_SEARCH:
-                    question_type = ChatbotQuestionType.PDF
-                else:
-                    question_type = ChatbotQuestionType.HYBRID
-                
-                # SQL 결과가 있는 경우 SQL 로깅
-                if sql_result and sql_result.sql_query:
-                    chatbot_logger.log_sql_query(
-                        user_question=question,
-                        generated_sql=sql_result.sql_query.query,
-                        processing_time=sql_result.processing_time,
-                        confidence_score=sql_result.confidence_score,
-                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
-                    )
-                
-                # 문서 검색 결과가 있는 경우 PDF 로깅
-                if document_result and document_result.answer:
-                    chatbot_logger.log_pdf_query(
-                        user_question=question,
-                        generated_answer=document_result.answer.content,
-                        used_chunks=[chunk.content for chunk in document_result.relevant_chunks] if document_result.relevant_chunks else [],
-                        processing_time=document_result.processing_time,
-                        confidence_score=document_result.confidence_score,
-                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
-                    )
-                
-                # 하이브리드 또는 일반 로깅
-                if pipeline_type == PipelineType.HYBRID or (not sql_result and not document_result):
-                    chatbot_logger.log_question(
-                        user_question=question,
-                        question_type=question_type,
-                        intent=analyzed_question.intent,
-                        keywords=analyzed_question.keywords,
-                        processing_time=total_time,
-                        confidence_score=self._calculate_confidence_with_expressions(
-                            document_result, sql_result, analyzed_question
-                        ),
-                        generated_answer=final_answer,
-                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None,
-                        additional_info={
-                            "pipeline_type": pipeline_type.value,
-                            "context": context,
-                            "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
-                        }
-                    )
-                    
-            except Exception as log_error:
-                logger.warning(f"Dual Pipeline 로깅 중 오류 발생: {log_error}")
-            
-            return DualPipelineResult(
-                question=question,
-                analyzed_question=analyzed_question,
-                final_answer=final_answer,
-                confidence_score=self._calculate_confidence_with_expressions(
-                    document_result, sql_result, analyzed_question
-                ),
-                total_processing_time=total_time,
-                document_result=document_result,
-                sql_result=sql_result,
-                metadata={
-                    "pipeline_type": pipeline_type.value,
-                    "context": context,
-                    "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
-                }
+            return self._create_result_with_logging(
+                question, analyzed_question, final_answer,
+                self._calculate_confidence_with_expressions(document_result, sql_result, analyzed_question),
+                total_time, document_result, sql_result, 
+                PipelineType.HYBRID if classification_result["classification"] == "HYBRID" else PipelineType.DOCUMENT_SEARCH,
+                context, classification_result
             )
-        
+            
         except Exception as e:
             logger.error(f"Dual Pipeline 처리 중 오류: {e}")
             
@@ -294,9 +285,85 @@ class DualPipelineProcessor:
                 }
             )
     
+    def _create_result_with_logging(self, question: str, analyzed_question: AnalyzedQuestion,
+                                  final_answer: str, confidence_score: float, total_time: float,
+                                  document_result: Optional[PipelineResult], 
+                                  sql_result: Optional[PipelineResult],
+                                  pipeline_type: PipelineType, context: str,
+                                  classification_result: Dict) -> DualPipelineResult:
+        """로깅과 함께 결과 생성"""
+        # 챗봇 로깅
+        try:
+            # 파이프라인 타입에 따른 질문 유형 결정
+            if pipeline_type == PipelineType.SQL_QUERY:
+                question_type = ChatbotQuestionType.SQL
+            elif pipeline_type == PipelineType.DOCUMENT_SEARCH:
+                question_type = ChatbotQuestionType.PDF
+            else:
+                question_type = ChatbotQuestionType.HYBRID
+            
+            # SQL 결과가 있는 경우 SQL 로깅
+            if sql_result and sql_result.sql_query:
+                chatbot_logger.log_sql_query(
+                    user_question=question,
+                    generated_sql=sql_result.sql_query.query,
+                    processing_time=sql_result.processing_time,
+                    confidence_score=sql_result.confidence_score,
+                    model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
+                )
+            
+            # 문서 검색 결과가 있는 경우 PDF 로깅
+            if document_result and document_result.answer:
+                chatbot_logger.log_pdf_query(
+                    user_question=question,
+                    generated_answer=document_result.answer.content,
+                    used_chunks=[chunk.content for chunk in document_result.relevant_chunks] if document_result.relevant_chunks else [],
+                    processing_time=document_result.processing_time,
+                    confidence_score=document_result.confidence_score,
+                    model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
+                )
+            
+            # 하이브리드 또는 일반 로깅
+            if pipeline_type == PipelineType.HYBRID or (not sql_result and not document_result):
+                chatbot_logger.log_question(
+                    user_question=question,
+                    question_type=question_type,
+                    intent=analyzed_question.intent,
+                    keywords=analyzed_question.keywords,
+                    processing_time=total_time,
+                    confidence_score=confidence_score,
+                    generated_answer=final_answer,
+                    model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None,
+                    additional_info={
+                        "pipeline_type": pipeline_type.value,
+                        "context": context,
+                        "classification": classification_result["classification"],
+                        "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
+                    }
+                )
+                
+        except Exception as log_error:
+            logger.warning(f"Dual Pipeline 로깅 중 오류 발생: {log_error}")
+        
+        return DualPipelineResult(
+            question=question,
+            analyzed_question=analyzed_question,
+            final_answer=final_answer,
+            confidence_score=confidence_score,
+            total_processing_time=total_time,
+            document_result=document_result,
+            sql_result=sql_result,
+            metadata={
+                "pipeline_type": pipeline_type.value,
+                "context": context,
+                "classification": classification_result["classification"],
+                "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
+            }
+        )
+    
     def _determine_pipeline_type(self, analyzed_question: AnalyzedQuestion) -> PipelineType:
         """
-        파이프라인 타입 결정 (개선된 버전)
+        파이프라인 타입 결정 (개선된 버전 - 인사말 처리 추가)
         
         Args:
             analyzed_question: 분석된 질문
@@ -304,9 +371,13 @@ class DualPipelineProcessor:
         Returns:
             파이프라인 타입
         """
+        # 1. 인사말 확인 (가장 우선순위)
+        if analyzed_question.question_type == QuestionType.GREETING:
+            return PipelineType.GREETING
+        
         question_lower = analyzed_question.original_question.lower()
         
-        # 1. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
+        # 2. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
         location_movement_patterns = [
             r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
             r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
@@ -317,7 +388,7 @@ class DualPipelineProcessor:
         
         is_location_movement = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
         
-        # 2. 정량적 질문 패턴 확인 (SQL 필요)
+        # 3. 정량적 질문 패턴 확인 (SQL 필요)
         quantitative_patterns = [
             r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
             r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
@@ -329,7 +400,7 @@ class DualPipelineProcessor:
         
         is_quantitative = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
         
-        # 3. 파이프라인 타입 결정
+        # 4. 파이프라인 타입 결정
         if is_location_movement:
             # 장소 이동 요청은 문서 검색만 필요
             return PipelineType.DOCUMENT_SEARCH
@@ -510,10 +581,14 @@ class DualPipelineProcessor:
     
     def _determine_pipeline_type_with_expressions(self, analyzed_question: AnalyzedQuestion, 
                                                 context: str) -> PipelineType:
-        """표현을 고려한 파이프라인 타입 결정 (개선된 버전)"""
+        """표현을 고려한 파이프라인 타입 결정 (개선된 버전 - 인사말 처리 추가)"""
+        # 1. 인사말 확인 (가장 우선순위)
+        if analyzed_question.question_type == QuestionType.GREETING:
+            return PipelineType.GREETING
+        
         question_lower = analyzed_question.original_question.lower()
         
-        # 1. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
+        # 2. 장소 이동 요청 패턴 확인 (문서 검색만 필요)
         location_movement_patterns = [
             r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
             r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
@@ -524,7 +599,7 @@ class DualPipelineProcessor:
         
         is_location_movement = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
         
-        # 2. 정량적 질문 패턴 확인 (SQL 필요)
+        # 3. 정량적 질문 패턴 확인 (SQL 필요)
         quantitative_patterns = [
             r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
             r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
@@ -536,7 +611,7 @@ class DualPipelineProcessor:
         
         is_quantitative = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
         
-        # 3. 표현 기반 파이프라인 조정
+        # 4. 표현 기반 파이프라인 조정
         if is_location_movement:
             # 장소 이동 요청은 문서 검색만 필요
             return PipelineType.DOCUMENT_SEARCH
@@ -764,3 +839,82 @@ class DualPipelineProcessor:
             "few_shot_examples_count": len(self.few_shot_examples),
             "database_schema_available": self.database_schema is not None
         }
+    
+    def _process_greeting_pipeline(self, analyzed_question: AnalyzedQuestion) -> PipelineResult:
+        """
+        인사말 처리 파이프라인
+        
+        Args:
+            analyzed_question: 분석된 질문
+            
+        Returns:
+            인사말 처리 결과
+        """
+        start_time = time.time()
+        
+        try:
+            # 인사말에 대한 적절한 응답 생성
+            greeting_responses = [
+                "안녕하세요! 교통 데이터 분석 챗봇입니다. 무엇을 도와드릴까요?",
+                "안녕하세요! 교통 관련 질문이나 데이터 분석에 대해 궁금한 점이 있으시면 언제든 말씀해주세요.",
+                "반갑습니다! 교통량, 사고 데이터, 교차로 정보 등에 대해 질문해주세요.",
+                "안녕하세요! 교통 데이터베이스에서 원하시는 정보를 찾아드릴 수 있습니다.",
+                "반갑습니다! 교통 관련 통계나 분석이 필요하시면 말씀해주세요."
+            ]
+            
+            import random
+            selected_response = random.choice(greeting_responses)
+            
+            # 시간대별 맞춤 인사말
+            from datetime import datetime
+            current_hour = datetime.now().hour
+            
+            if 5 <= current_hour < 12:
+                time_greeting = "좋은 아침입니다! "
+            elif 12 <= current_hour < 18:
+                time_greeting = "좋은 오후입니다! "
+            elif 18 <= current_hour < 22:
+                time_greeting = "좋은 저녁입니다! "
+            else:
+                time_greeting = "안녕하세요! "
+            
+            # 최종 인사말 생성
+            final_greeting = time_greeting + selected_response
+            
+            # Answer 객체 생성
+            answer = Answer(
+                content=final_greeting,
+                confidence_score=0.95,  # 인사말은 높은 신뢰도
+                used_chunks=[],  # 인사말은 문서 청크를 사용하지 않음
+                generation_time=time.time() - start_time,
+                model_name="greeting_pipeline",
+                metadata={
+                    "greeting_type": "time_based",
+                    "time_of_day": current_hour,
+                    "original_greeting": analyzed_question.original_question
+                }
+            )
+            
+            processing_time = time.time() - start_time
+            
+            return PipelineResult(
+                pipeline_type=PipelineType.GREETING,
+                answer=answer,
+                relevant_chunks=[],
+                confidence_score=answer.confidence_score,
+                processing_time=processing_time,
+                metadata={
+                    "greeting_type": "time_based",
+                    "time_of_day": current_hour,
+                    "original_greeting": analyzed_question.original_question
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"인사말 처리 파이프라인 실패: {e}")
+            return PipelineResult(
+                pipeline_type=PipelineType.GREETING,
+                confidence_score=0.0,
+                processing_time=time.time() - start_time,
+                metadata={"error": str(e)}
+            )

@@ -89,7 +89,6 @@ services:
       - "8008:8008"
     volumes:
       - ./ollama-LLM-ChatBot:/app
-      - chatbot_data:/app/data
       - chatbot_vector_store:/app/vector_store
       - chatbot_logs:/app/logs
       - chatbot_models:/app/models
@@ -100,8 +99,15 @@ services:
       - MODEL_NAME=mistral:latest
       - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
       - OLLAMA_HOST=http://ollama:11434
+      - MYSQL_DATABASE=traffic
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=1234
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
     depends_on:
       ollama:
+        condition: service_healthy
+      db:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

@@ -29,6 +29,7 @@ from utils.keyword_enhancer import KeywordEnhancer
 # 핵심요소 추출 및 컨텍스트 연속성 관리 모듈 import
 from .core_element_extractor import CoreElementExtractor, ExtractedElements
 from .context_continuity_manager import ContextContinuityManager, ConversationContext, ContinuityResult
+from .intent_classifier import IntentResult, IntentType, IntentClassifier
 
 class QuestionType(Enum):
     """질문 유형 분류"""
@@ -117,6 +118,16 @@ class QuestionAnalyzer:
         
         # 컨텍스트 연속성 관리자 초기화
         self.context_manager = ContextContinuityManager()
+        
+        # 의도 분류기 초기화 (시스템 시작 시 미리 초기화)
+        self.intent_classifier = None
+        try:
+            if IntentClassifier is not None:
+                self.intent_classifier = IntentClassifier()
+                logger.info("✓ 의도 분류기 초기화 완료")
+        except Exception as e:
+            logger.warning(f"의도 분류기 초기화 실패: {e}")
+            self.intent_classifier = None
         
         # 대화 기록 저장
         self.conversation_history: List[ConversationItem] = []
@@ -259,13 +270,9 @@ class QuestionAnalyzer:
         
         # 7. 질문 의도 분석 (의도 분류기 사용)
         intent_result = None
-        if IntentClassifier is not None:
+        if self.intent_classifier is not None:
             try:
-                # 의도 분류기 초기화 (아직 초기화되지 않은 경우)
-                if not hasattr(self, 'intent_classifier') or self.intent_classifier is None:
-                    self.intent_classifier = IntentClassifier()
-                
-                # 의도 분류 수행
+                # 의도 분류 수행 (이미 초기화된 분류기 사용)
                 intent_result = self.intent_classifier.classify_intent(enhanced_question)
                 intent = intent_result.intent.value
                 
@@ -1287,6 +1294,100 @@ class QuestionAnalyzer:
         flow_analysis["average_depth"] = sum(depths) / len(depths) if depths else 0
         
         return flow_analysis
+
+    def classify_sql_vs_pdf(self, question: str, embedding: np.ndarray) -> Dict[str, Any]:
+        """
+        SQL 답변 vs PDF 답변 이진 분류
+        
+        Args:
+            question: 사용자 질문
+            embedding: SBERT 임베딩 벡터
+            
+        Returns:
+            분류 결과 딕셔너리
+        """
+        # 1. 명확한 SQL 지시어 확인
+        sql_indicators = [
+            "통계", "집계", "개수", "합계", "평균", "최대", "최소", "총계",
+            "count", "sum", "avg", "max", "min", "total",
+            "얼마나", "몇 개", "몇 명", "몇 건", "몇 회", "몇 대",
+            "통행량", "교통량", "사고 건수", "발생 건수",
+            "데이터 분석", "데이터 조회", "테이블 조회",
+            "기간별", "월별", "연도별", "지역별"
+        ]
+        
+        # 2. 명확한 PDF 지시어 확인
+        pdf_indicators = [
+            "설명", "방법", "과정", "원인", "결과", "개념", "정의", "의미",
+            "어떻게", "왜", "무엇", "무슨", "어떤", "어디서", "언제",
+            "안전 운전", "교통 규칙", "신호등", "교차로", "도로",
+            "사고 예방", "안전 수칙", "주의사항", "가이드라인"
+        ]
+        
+        # 3. 지시어 기반 점수 계산
+        question_lower = question.lower()
+        sql_score = sum(1 for indicator in sql_indicators if indicator in question_lower)
+        pdf_score = sum(1 for indicator in pdf_indicators if indicator in question_lower)
+        
+        # 4. SBERT 임베딩 기반 유사도 계산
+        sql_examples = [
+            "통계를 보여주세요",
+            "개수를 세어주세요", 
+            "평균을 계산해주세요",
+            "2023년 데이터를 조회해주세요",
+            "지역별 통계를 알려주세요"
+        ]
+        
+        pdf_examples = [
+            "설명해주세요",
+            "방법을 알려주세요", 
+            "개념을 설명해주세요",
+            "원인을 분석해주세요",
+            "안전 운전 방법을 알려주세요"
+        ]
+        
+        # SQL 예시들과의 유사도 계산
+        sql_embeddings = self.embedding_model.encode(sql_examples)
+        sql_similarities = cosine_similarity([embedding], sql_embeddings)[0]
+        max_sql_similarity = np.max(sql_similarities)
+        
+        # PDF 예시들과의 유사도 계산
+        pdf_embeddings = self.embedding_model.encode(pdf_examples)
+        pdf_similarities = cosine_similarity([embedding], pdf_embeddings)[0]
+        max_pdf_similarity = np.max(pdf_similarities)
+        
+        # 5. 종합 점수 계산
+        total_sql_score = sql_score * 0.3 + max_sql_similarity * 0.7
+        total_pdf_score = pdf_score * 0.3 + max_pdf_similarity * 0.7
+        
+        # 6. 분류 결정
+        threshold = 0.6
+        classification = "UNKNOWN"
+        confidence = 0.0
+        
+        if total_sql_score > threshold and total_sql_score > total_pdf_score:
+            classification = "SQL"
+            confidence = total_sql_score
+        elif total_pdf_score > threshold and total_pdf_score > total_sql_score:
+            classification = "PDF"
+            confidence = total_pdf_score
+        elif total_sql_score > 0.4 and total_pdf_score > 0.4:
+            classification = "HYBRID"
+            confidence = (total_sql_score + total_pdf_score) / 2
+        else:
+            classification = "PDF"  # 기본값
+            confidence = max(total_sql_score, total_pdf_score)
+        
+        return {
+            "classification": classification,
+            "confidence": confidence,
+            "sql_score": total_sql_score,
+            "pdf_score": total_pdf_score,
+            "sql_similarity": max_sql_similarity,
+            "pdf_similarity": max_pdf_similarity,
+            "sql_indicators_found": [ind for ind in sql_indicators if ind in question_lower],
+            "pdf_indicators_found": [ind for ind in pdf_indicators if ind in question_lower]
+        }
 
 # 유틸리티 함수들
 def calculate_question_complexity(analyzed_question: AnalyzedQuestion) -> float:

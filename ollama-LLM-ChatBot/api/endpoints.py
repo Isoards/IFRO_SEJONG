@@ -75,7 +75,7 @@ class EvaluationRequest(BaseModel):
 class ModelConfigRequest(BaseModel):
     """모델 설정 요청 모델"""
     model_type: str = Field("ollama", description="모델 타입 (ollama/huggingface/llama_cpp)")
-    model_name: str = Field("llama2:7b", description="모델 이름")
+    model_name: str = Field("mistral:latest", description="모델 이름")
     max_length: int = Field(512, description="최대 생성 길이")
     temperature: float = Field(0.7, description="생성 온도")
     top_p: float = Field(0.9, description="Top-p 샘플링")
@@ -87,6 +87,13 @@ class SystemStatusResponse(BaseModel):
     total_pdfs: int = Field(..., description="등록된 PDF 수")
     total_chunks: int = Field(..., description="총 청크 수")
     memory_usage: Dict[str, Any] = Field(..., description="메모리 사용량")
+    database_connected: bool = Field(..., description="데이터베이스 연결 상태")
+
+class DatabaseStatusResponse(BaseModel):
+    """데이터베이스 상태 응답 모델"""
+    connected: bool = Field(..., description="연결 상태")
+    message: str = Field(..., description="상태 메시지")
+    schema_info: Optional[List[Dict[str, Any]]] = Field(None, description="스키마 정보")
 
 # 전역 객체들 (싱글톤 패턴)
 pdf_processor: Optional[PDFProcessor] = None
@@ -263,29 +270,50 @@ def get_dual_pipeline_processor() -> DualPipelineProcessor:
         sg = get_sql_generator()
         vs = get_vector_store()
         
-        # 샘플 데이터베이스 스키마 (실제로는 설정에서 로드)
-        sample_schema = DatabaseSchema(
-            table_name="users",
-            columns=[
-                {"name": "id", "type": "INTEGER", "description": "사용자 ID"},
-                {"name": "name", "type": "TEXT", "description": "사용자 이름"},
-                {"name": "email", "type": "TEXT", "description": "이메일"},
-                {"name": "created_at", "type": "DATETIME", "description": "가입일"},
-                {"name": "status", "type": "TEXT", "description": "상태"}
-            ],
-            primary_key="id",
-            sample_data=[
-                {"id": 1, "name": "김철수", "email": "kim@example.com", "created_at": "2023-01-01", "status": "active"},
-                {"id": 2, "name": "이영희", "email": "lee@example.com", "created_at": "2023-02-15", "status": "active"}
-            ]
-        )
+        # 실제 데이터베이스 스키마 조회
+        try:
+            schema_info = sg.get_database_schema()
+            if schema_info:
+                # 첫 번째 테이블을 기본 스키마로 사용
+                table_info = schema_info[0]
+                database_schema = DatabaseSchema(
+                    table_name=table_info['table_name'],
+                    columns=[
+                        {
+                            "name": col['name'], 
+                            "type": col['type'], 
+                            "description": f"{col['name']} 컬럼"
+                        } for col in table_info['columns']
+                    ],
+                    sample_data=table_info.get('sample_data', [])
+                )
+            else:
+                # 기본 스키마 사용
+                database_schema = DatabaseSchema(
+                    table_name="traffic_intersection",
+                    columns=[
+                        {"name": "id", "type": "INTEGER", "description": "교차로 ID"},
+                        {"name": "name", "type": "TEXT", "description": "교차로 이름"},
+                        {"name": "location", "type": "TEXT", "description": "위치"}
+                    ]
+                )
+        except Exception as e:
+            logger.warning(f"데이터베이스 스키마 조회 실패, 기본 스키마 사용: {e}")
+            database_schema = DatabaseSchema(
+                table_name="traffic_intersection",
+                columns=[
+                    {"name": "id", "type": "INTEGER", "description": "교차로 ID"},
+                    {"name": "name", "type": "TEXT", "description": "교차로 이름"},
+                    {"name": "location", "type": "TEXT", "description": "위치"}
+                ]
+            )
         
         dual_pipeline_processor = DualPipelineProcessor(
             question_analyzer=qa,
             answer_generator=ag,
             sql_generator=sg,
             vector_store=vs,
-            database_schema=sample_schema
+            database_schema=database_schema
         )
     return dual_pipeline_processor
 
@@ -303,7 +331,8 @@ async def root():
 @app.get("/status", response_model=SystemStatusResponse)
 async def get_system_status(
     vector_store: VectorStoreInterface = Depends(get_vector_store),
-    answer_generator: AnswerGenerator = Depends(get_answer_generator)
+    answer_generator: AnswerGenerator = Depends(get_answer_generator),
+    sql_generator: SQLGenerator = Depends(get_sql_generator)
 ):
     """시스템 상태 조회"""
     import psutil
@@ -312,6 +341,10 @@ async def get_system_status(
     # 메모리 사용량 조회
     process = psutil.Process()
     memory_info = process.memory_info()
+    
+    # 데이터베이스 연결 상태 확인
+    db_status = sql_generator.test_database_connection()
+    database_connected = db_status['success']
     
     return SystemStatusResponse(
         status="running",
@@ -322,8 +355,42 @@ async def get_system_status(
             "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
             "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
             "cpu_percent": psutil.cpu_percent()
-        }
+        },
+        database_connected=database_connected
     )
+
+@app.get("/database/status", response_model=DatabaseStatusResponse)
+async def get_database_status(
+    sql_generator: SQLGenerator = Depends(get_sql_generator)
+):
+    """데이터베이스 상태 조회"""
+    try:
+        # 연결 테스트
+        connection_test = sql_generator.test_database_connection()
+        
+        if connection_test['success']:
+            # 스키마 정보 조회
+            schema_info = sql_generator.get_database_schema()
+            
+            return DatabaseStatusResponse(
+                connected=True,
+                message="데이터베이스 연결 성공",
+                schema_info=schema_info
+            )
+        else:
+            return DatabaseStatusResponse(
+                connected=False,
+                message=f"데이터베이스 연결 실패: {connection_test.get('error', 'Unknown error')}",
+                schema_info=None
+            )
+            
+    except Exception as e:
+        logger.error(f"데이터베이스 상태 조회 실패: {e}")
+        return DatabaseStatusResponse(
+            connected=False,
+            message=f"데이터베이스 상태 조회 중 오류 발생: {str(e)}",
+            schema_info=None
+        )
 
 @app.post("/upload_pdf", response_model=PDFUploadResponse)
 async def upload_pdf(
@@ -397,15 +464,25 @@ async def ask_question(
 ):
     """질문에 대한 답변 생성 (Dual Pipeline 지원)"""
     
+    # 들어오는 데이터만 출력
+    print("=" * 50)
+    print(f"📥 챗봇 서버로 들어온 데이터:")
+    print(f"질문: {request.question}")
+    print(f"PDF ID: {request.pdf_id}")
+    print(f"사용자 ID: {request.user_id}")
+    print(f"대화 컨텍스트: {request.use_conversation_context}")
+    print(f"Dual Pipeline: {request.use_dual_pipeline}")
+    print(f"최대 청크 수: {request.max_chunks}")
+    print("=" * 50)
+    
     # PDF ID가 비어있거나 존재하지 않는 경우 기본 PDF 사용
     if not request.pdf_id or request.pdf_id not in pdf_metadata:
         # 사용 가능한 PDF 중에서 첫 번째 사용
         if pdf_metadata:
             request.pdf_id = list(pdf_metadata.keys())[0]
-            logger.info(f"기본 PDF 사용: {request.pdf_id}")
         else:
             raise HTTPException(status_code=404, detail="사용 가능한 PDF가 없습니다.")
-    
+
     try:
         # Dual Pipeline 사용 여부에 따라 처리 방식 분기
         if request.use_dual_pipeline and dual_pipeline_processor:
@@ -472,11 +549,11 @@ async def ask_question(
             except Exception as dual_error:
                 logger.error(f"Dual Pipeline 처리 실패: {dual_error}")
                 # Dual Pipeline 실패 시 일반 파이프라인으로 폴백
-                logger.info("일반 파이프라인으로 폴백합니다.")
                 request.use_dual_pipeline = False
         
         else:
             # 기존 단일 파이프라인 처리
+            
             # 1. 질문 분석
             analyzed_question = question_analyzer.analyze_question(
                 request.question,
@@ -802,76 +879,7 @@ async def clear_logs():
         logger.error(f"로그 초기화 실패: {e}")
         raise HTTPException(status_code=500, detail=f"로그 초기화 실패: {str(e)}")
 
-# 대화 이력 관리 엔드포인트들
 
-@app.get("/conversation/cache/stats")
-async def get_conversation_cache_stats(
-    answer_generator: AnswerGenerator = Depends(get_answer_generator)
-):
-    """대화 이력 캐시 통계 조회"""
-    try:
-        stats = answer_generator.get_conversation_statistics()
-        return stats
-    except Exception as e:
-        logger.error(f"대화 이력 통계 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
-
-@app.delete("/conversation/cache")
-async def clear_conversation_cache(
-    pdf_id: Optional[str] = None,
-    answer_generator: AnswerGenerator = Depends(get_answer_generator)
-):
-    """대화 이력 캐시 삭제"""
-    try:
-        deleted_count = answer_generator.clear_conversation_cache(pdf_id)
-        return {
-            "message": f"대화 이력 캐시가 삭제되었습니다.",
-            "deleted_count": deleted_count,
-            "pdf_id": pdf_id
-        }
-    except Exception as e:
-        logger.error(f"대화 이력 캐시 삭제 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"캐시 삭제 실패: {str(e)}")
-
-@app.get("/conversation/cache/search")
-async def search_conversation_cache(
-    question: str,
-    threshold: float = 0.7,
-    limit: int = 5,
-    answer_generator: AnswerGenerator = Depends(get_answer_generator)
-):
-    """대화 이력에서 유사한 질문 검색"""
-    try:
-        if not answer_generator.conversation_logger:
-            raise HTTPException(status_code=400, detail="대화 이력 캐시가 비활성화되어 있습니다.")
-        
-        similar_questions = answer_generator.conversation_logger.find_similar_questions(
-            question, threshold=threshold, limit=limit
-        )
-        
-        results = []
-        for log_entry, similarity in similar_questions:
-            results.append({
-                "id": log_entry.id,
-                "question": log_entry.question,
-                "answer": log_entry.answer,
-                "similarity": similarity,
-                "confidence_score": log_entry.confidence_score,
-                "question_type": log_entry.question_type,
-                "timestamp": log_entry.timestamp,
-                "pdf_id": log_entry.pdf_id
-            })
-        
-        return {
-            "search_query": question,
-            "threshold": threshold,
-            "results": results,
-            "total_found": len(results)
-        }
-        
-    except Exception as e:
-        logger.error(f"대화 이력 검색 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"검색 실패: {str(e)}")
 
 # 간단한 챗봇 엔드포인트 (PDF 없이 작동)
 @app.post("/chat")
