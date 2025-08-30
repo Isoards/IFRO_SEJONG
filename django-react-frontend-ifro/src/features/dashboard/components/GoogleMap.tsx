@@ -1090,6 +1090,49 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               maxZoom: 15, // 16에서 15로 낮춤 (더 높은 줌에서도 클러스터링 유지)
               minPoints: 2, // 최소 2개 점으로 클러스터 형성
             }),
+            renderer: {
+              render: ({ count, position }: any) => {
+                // 3단계 클러스터 색상과 투명도
+                let backgroundColor = "#FB3F40"; // FB3F40 기본 색상
+                let textColor = "white";
+                let size = 40;
+                let opacity = 0.2; // 기본 투명도 20%
+
+                if (count >= 100) {
+                  size = 60;
+                  opacity = 0.8; // 큰 클러스터 투명도 100%
+                } else if (count >= 10) {
+                  size = 50;
+                  opacity = 0.5; // 중간 클러스터 투명도 50%
+                }
+
+                return new google.maps.Marker({
+                  position,
+                  icon: {
+                    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
+                      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="${size / 2}" cy="${size / 2}" r="${
+                      size / 2 - 2
+                    }" fill="${backgroundColor}" fill-opacity="${opacity}" />
+                        <text x="${size / 2}" y="${
+                      size / 2 + 1
+                    }" text-anchor="middle" dominant-baseline="middle" 
+                              fill="${textColor}" fill-opacity="0.9" font-family="Arial, sans-serif" 
+                              font-size="${Math.min(
+                                size / 3,
+                                14
+                              )}" font-weight="bold">
+                          ${count}
+                        </text>
+                      </svg>
+                    `)}`,
+                    scaledSize: new google.maps.Size(size, size),
+                    anchor: new google.maps.Point(size / 2, size / 2),
+                  },
+                  zIndex: 100,
+                });
+              },
+            },
           });
         }
 
