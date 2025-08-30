@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { chatCache, CachedResponse } from '../utils/chatCache';
 
 // 환경변수에서 백엔드 API URL 가져오기 (기본값: localhost:8000)
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -47,37 +46,19 @@ chatApi.interceptors.response.use(
   }
 );
 
-// AI 기반 고급 챗봇 메시지 전송 함수 (캐시 통합)
+// AI 기반 고급 챗봇 메시지 전송 함수
 export const sendAIChatMessage = async (
   message: string, 
   pdfId?: string,
-  useContext: boolean = true,
-  useCache: boolean = true
+  useContext: boolean = true
 ): Promise<{
   answer: string;
   confidence_score: number;
   question_type: string;
   generation_time: number;
   model_name: string;
-  from_cache: boolean;
 }> => {
   const targetPdfId = pdfId || 'default_pdf';
-  
-  // 캐시 사용이 활성화된 경우 캐시에서 먼저 검색
-  if (useCache) {
-    const cachedResponse = chatCache.findCachedAnswer(message, targetPdfId);
-    if (cachedResponse) {
-      console.log(`캐시에서 답변 찾음: "${message}"`);
-      return {
-        answer: cachedResponse.answer,
-        confidence_score: cachedResponse.confidence_score,
-        question_type: cachedResponse.question_type,
-        generation_time: cachedResponse.generation_time,
-        model_name: cachedResponse.model_name,
-        from_cache: true
-      };
-    }
-  }
 
   try {
     // AI 기반 질문 답변 API 호출
@@ -90,29 +71,13 @@ export const sendAIChatMessage = async (
     });
     
     if (response.data) {
-      const result = {
+      return {
         answer: response.data.answer,
         confidence_score: response.data.confidence_score,
         question_type: response.data.question_type,
         generation_time: response.data.generation_time,
-        model_name: response.data.model_name,
-        from_cache: false
+        model_name: response.data.model_name
       };
-      
-      // 성공적인 응답을 캐시에 저장
-      if (useCache) {
-        chatCache.cacheAnswer(
-          message,
-          result.answer,
-          result.confidence_score,
-          result.question_type,
-          result.generation_time,
-          result.model_name,
-          targetPdfId
-        );
-      }
-      
-      return result;
     } else {
       throw new Error('AI 응답이 올바르지 않습니다.');
     }
@@ -142,7 +107,6 @@ export const sendSimpleChatMessage = async (message: string): Promise<{
   question_type: string;
   generation_time: number;
   model_name: string;
-  from_cache: boolean;
 }> => {
   try {
     const response = await chatApi.post('/chat', {
@@ -155,8 +119,7 @@ export const sendSimpleChatMessage = async (message: string): Promise<{
         confidence_score: 0.8, // 간단한 챗봇은 기본 신뢰도
         question_type: 'simple_chat',
         generation_time: 0.1,
-        model_name: 'keyword_based',
-        from_cache: false
+        model_name: 'keyword_based'
       };
     } else {
       throw new Error('챗봇 응답이 올바르지 않습니다.');
@@ -175,28 +138,6 @@ export const sendChatMessage = async (message: string): Promise<string> => {
   } catch (error: any) {
     throw new Error(error.message);
   }
-};
-
-// 캐시 관련 유틸리티 함수들
-export const clearChatCache = (pdfId?: string): number => {
-  if (pdfId) {
-    return chatCache.clearPdfCache(pdfId);
-  } else {
-    chatCache.clearAllCache();
-    return 0;
-  }
-};
-
-export const getChatCacheStats = () => {
-  return chatCache.getCacheStats();
-};
-
-export const getChatCacheInfo = () => {
-  return chatCache.getCacheInfo();
-};
-
-export const findSimilarCachedQuestions = (question: string, limit: number = 5) => {
-  return chatCache.findSimilarQuestions(question, limit);
 };
 
 // 챗봇 연결 상태 확인 함수 (백엔드 프록시를 통해)
@@ -263,10 +204,6 @@ export const testChatConnection = async (): Promise<void> => {
     // AI 서비스 상태도 확인
     const aiStatus = await checkAIServiceStatus();
     console.log('AI Service status:', aiStatus);
-    
-    // 캐시 상태도 확인
-    const cacheInfo = getChatCacheInfo();
-    console.log('Cache info:', cacheInfo);
   } catch (error) {
     console.error('Connection test failed:', error);
   }

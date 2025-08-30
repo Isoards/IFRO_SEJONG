@@ -51,7 +51,7 @@ class PDFQASystem:
     
     def __init__(self, 
                  model_type: str = "ollama",
-                 model_name: str = "mistral:latest",
+                 model_name: str = "qwen2:1.5b",
                  embedding_model: str = "jhgan/ko-sroberta-multitask"):
         """
         시스템 초기화
@@ -109,11 +109,12 @@ class PDFQASystem:
             
             logger.info("✓ 벡터 저장소 초기화 완료")
             
-            # 3. 질문 분석기 초기화
+            # 3. 질문 분석기 초기화 (의도 분류기 포함)
+            logger.info("질문 분석기 초기화 중... (의도 분류기 포함)")
             self.question_analyzer = QuestionAnalyzer(
                 embedding_model=self.embedding_model
             )
-            logger.info("✓ 질문 분석기 초기화 완료")
+            logger.info("✓ 질문 분석기 초기화 완료 (의도 분류기 포함)")
             
             # 4. 답변 생성기 초기화
             config = GenerationConfig(
@@ -458,6 +459,8 @@ class PDFQASystem:
         print("  - '/pdfs': 저장된 PDF 목록 조회")
         print("  - '/add <파일경로>': PDF 파일 추가")
         print("  - '/categories': 사용 가능한 카테고리 조회")
+        print("  - '/performance': 성능 요약 출력")
+        print("  - '/export': 성능 메트릭 내보내기")
         print("  - '/exit': 프로그램 종료")
         print("="*60)
         
@@ -470,6 +473,10 @@ class PDFQASystem:
                 
                 if user_input == '/exit':
                     print("프로그램을 종료합니다.")
+                    # 성능 요약 출력
+                    self.performance_monitor.print_performance_summary()
+                    # 성능 메트릭 내보내기
+                    self.performance_monitor.export_metrics()
                     break
                 elif user_input == '/clear':
                     self.question_analyzer.conversation_history.clear()
@@ -484,6 +491,13 @@ class PDFQASystem:
                 elif user_input == '/categories':
                     self.show_categories()
                     continue
+                elif user_input == '/performance':
+                    self.performance_monitor.print_performance_summary()
+                    continue
+                elif user_input == '/export':
+                    filename = self.performance_monitor.export_metrics()
+                    print(f"성능 메트릭이 {filename}에 저장되었습니다.")
+                    continue
                 elif user_input.startswith('/add '):
                     pdf_path = user_input[5:].strip()
                     self.add_pdf_interactive(pdf_path)
@@ -497,12 +511,23 @@ class PDFQASystem:
                 print(f"질문 유형: {result['question_type']}")
                 print(f"처리 시간: {result['processing_time']:.2f}초")
                 
+                # 분류 결과 출력 (새로운 기능)
+                if 'classification' in result:
+                    classification = result['classification']
+                    print(f"분류 결과: {classification['classification']} (신뢰도: {classification['confidence']:.2f})")
+                    print(f"파이프라인 타입: {result.get('pipeline_type', 'N/A')}")
+                
             except KeyboardInterrupt:
-                print("\n\n프로그램을 종료합니다.")
+                print("\n프로그램을 종료합니다.")
+                # 성능 요약 출력
+                self.performance_monitor.print_performance_summary()
+                # 성능 메트릭 내보내기
+                self.performance_monitor.export_metrics()
                 break
             except Exception as e:
                 print(f"\n오류 발생: {e}")
                 logger.error(f"대화형 모드 오류: {e}")
+                continue
     
     def show_system_status(self):
         """시스템 상태 표시"""
@@ -686,7 +711,7 @@ def main():
     parser.add_argument("--question", type=str, help="질문 (process 모드)")
     parser.add_argument("--model-type", choices=["ollama", "huggingface", "llama_cpp"],
                        default="ollama", help="사용할 모델 타입")
-    parser.add_argument("--model-name", type=str, default="mistral:latest", 
+    parser.add_argument("--model-name", type=str, default="qwen2:1.5b", 
                        help="모델 이름")
     parser.add_argument("--embedding-model", type=str, 
                        default="jhgan/ko-sroberta-multitask",
