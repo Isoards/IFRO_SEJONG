@@ -4,8 +4,10 @@ import {
   ArrowRightLeft,
   AlertTriangle,
   BarChart3,
+  FileText,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import UserMenu from "./UserMenu";
 
 interface NavBarProps {
@@ -26,6 +28,7 @@ export const NavBar: React.FC<NavBarProps> = ({
   onCloseDetailPanels,
 }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   return (
     <nav className="w-16 bg-white flex flex-col items-center shadow-md z-20">
@@ -140,6 +143,18 @@ export const NavBar: React.FC<NavBarProps> = ({
           <BarChart3 size={24} />
         </button>
       </div>
+
+      {/* 정책제안 버튼 */}
+      <div className="p-3">
+        <button
+          onClick={() => navigate("/proposals")}
+          title="정책제안"
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors h-10 w-10"
+        >
+          <FileText size={20} />
+        </button>
+      </div>
+
       <div className="mt-auto p-4">
         <UserMenu />
       </div>

@@ -64,7 +64,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* 사이드바 */}
-      <aside className="w-64 bg-white shadow-sm border-r border-gray-200">
+      <aside className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col relative">
         <div className="p-6">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -74,7 +74,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           </div>
         </div>
 
-        <nav className="px-4 space-y-1">
+        <nav className="px-4 space-y-1 flex-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -95,7 +95,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </nav>
 
         {/* 사용자 정보 */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 w-64">
           {currentUser ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
