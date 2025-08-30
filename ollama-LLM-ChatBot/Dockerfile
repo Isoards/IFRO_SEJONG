@@ -30,7 +30,7 @@ EXPOSE 8008
 # 환경 변수 설정
 ENV PYTHONPATH=/app
 ENV MODEL_TYPE=ollama
-ENV MODEL_NAME=mistral:latest
+ENV MODEL_NAME=qwen2:1.5b
 ENV EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
 ENV OLLAMA_HOST=http://ollama:11434
 

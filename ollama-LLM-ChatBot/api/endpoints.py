@@ -1,18 +1,17 @@
 """
-TypeScript/Django 연동을 위한 FastAPI 엔드포인트
+FastAPI 엔드포인트 (최적화 버전)
 
-이 모듈은 PDF QA 시스템의 모든 기능을 REST API로 제공하여
-TypeScript 프론트엔드와 Django 백엔드에서 쉽게 사용할 수 있도록 합니다.
+빠른 응답을 위한 간소화된 API
 """
 
 import os
 import uuid
 import tempfile
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 import logging
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -23,41 +22,33 @@ from core.pdf_processor import PDFProcessor, TextChunk
 from core.vector_store import HybridVectorStore, VectorStoreInterface
 from core.question_analyzer import QuestionAnalyzer, AnalyzedQuestion, ConversationItem
 from core.answer_generator import AnswerGenerator, Answer, ModelType, GenerationConfig
-from core.evaluator import PDFQAEvaluator, SystemEvaluation
 from core.sql_generator import SQLGenerator, DatabaseSchema, SQLQuery
-from core.dual_pipeline_processor import DualPipelineProcessor, DualPipelineResult
+from core.fast_cache import get_all_cache_stats, clear_all_caches
+from core.query_router import QueryRouter, QueryRoute
 from utils.chatbot_logger import chatbot_logger, QuestionType
 
 logger = logging.getLogger(__name__)
 
-# Pydantic 모델들 (API 스키마 정의)
+# Pydantic 모델들 (단순화)
 class QuestionRequest(BaseModel):
     """질문 요청 모델"""
     question: str = Field(..., description="사용자 질문")
-    pdf_id: str = Field("", description="PDF 문서 식별자 (빈 문자열이면 기본 PDF 사용)")
+    pdf_id: str = Field("", description="PDF 문서 식별자")
     user_id: str = Field("", description="사용자 식별자")
     use_conversation_context: bool = Field(True, description="이전 대화 컨텍스트 사용 여부")
     max_chunks: int = Field(5, description="검색할 최대 청크 수")
-    use_dual_pipeline: bool = Field(True, description="Dual Pipeline 사용 여부")
-    
-class ConversationHistoryItem(BaseModel):
-    """대화 기록 항목 모델"""
-    question: str
-    answer: str
-    timestamp: str
-    confidence_score: float = 0.0
 
 class QuestionResponse(BaseModel):
     """질문 응답 모델"""
     answer: str = Field(..., description="생성된 답변")
-    confidence_score: float = Field(..., description="답변 신뢰도 (0-1)")
+    confidence_score: float = Field(..., description="답변 신뢰도")
     used_chunks: List[str] = Field(..., description="사용된 문서 청크 ID들")
     generation_time: float = Field(..., description="답변 생성 시간 (초)")
     question_type: str = Field(..., description="질문 유형")
     model_name: str = Field(..., description="사용된 모델 이름")
-    pipeline_type: str = Field(..., description="사용된 파이프라인 타입")
-    sql_query: Optional[str] = Field(None, description="생성된 SQL 쿼리 (있는 경우)")
-    
+    pipeline_type: str = Field("basic", description="사용된 파이프라인 타입")
+    sql_query: Optional[str] = Field(None, description="생성된 SQL 쿼리")
+
 class PDFUploadResponse(BaseModel):
     """PDF 업로드 응답 모델"""
     pdf_id: str = Field(..., description="생성된 PDF 식별자")
@@ -65,20 +56,6 @@ class PDFUploadResponse(BaseModel):
     total_pages: int = Field(..., description="총 페이지 수")
     total_chunks: int = Field(..., description="생성된 청크 수")
     processing_time: float = Field(..., description="처리 시간 (초)")
-    
-class EvaluationRequest(BaseModel):
-    """평가 요청 모델"""
-    questions: List[str]
-    generated_answers: List[str]
-    reference_answers: List[str]
-    
-class ModelConfigRequest(BaseModel):
-    """모델 설정 요청 모델"""
-    model_type: str = Field("ollama", description="모델 타입 (ollama/huggingface/llama_cpp)")
-    model_name: str = Field("mistral:latest", description="모델 이름")
-    max_length: int = Field(512, description="최대 생성 길이")
-    temperature: float = Field(0.7, description="생성 온도")
-    top_p: float = Field(0.9, description="Top-p 샘플링")
 
 class SystemStatusResponse(BaseModel):
     """시스템 상태 응답 모델"""
@@ -87,131 +64,33 @@ class SystemStatusResponse(BaseModel):
     total_pdfs: int = Field(..., description="등록된 PDF 수")
     total_chunks: int = Field(..., description="총 청크 수")
     memory_usage: Dict[str, Any] = Field(..., description="메모리 사용량")
-    database_connected: bool = Field(..., description="데이터베이스 연결 상태")
-
-class DatabaseStatusResponse(BaseModel):
-    """데이터베이스 상태 응답 모델"""
-    connected: bool = Field(..., description="연결 상태")
-    message: str = Field(..., description="상태 메시지")
-    schema_info: Optional[List[Dict[str, Any]]] = Field(None, description="스키마 정보")
-
-# 전역 객체들 (싱글톤 패턴)
-pdf_processor: Optional[PDFProcessor] = None
-vector_store: Optional[VectorStoreInterface] = None
-question_analyzer: Optional[QuestionAnalyzer] = None
-answer_generator: Optional[AnswerGenerator] = None
-evaluator: Optional[PDFQAEvaluator] = None
-sql_generator: Optional[SQLGenerator] = None
-dual_pipeline_processor: Optional[DualPipelineProcessor] = None
-
-# PDF 메타데이터 저장소 (실제로는 데이터베이스 사용 권장)
-pdf_metadata: Dict[str, Dict] = {}
-
-# 서버 시작 시 자동 PDF 로드 함수
-async def load_pdfs_on_startup():
-    """서버 시작 시 자동으로 data/pdfs 폴더의 모든 PDF를 로드"""
-    try:
-        from pathlib import Path
-        import glob
-        
-        pdf_dir = Path("data/pdfs")
-        if not pdf_dir.exists():
-            logger.warning("data/pdfs 폴더를 찾을 수 없습니다.")
-            return
-        
-        # 모든 PDF 파일 찾기
-        pdf_files = []
-        for pattern in ["*.pdf", "*/*.pdf", "*/*/*.pdf"]:
-            pdf_files.extend(pdf_dir.glob(pattern))
-        
-        if not pdf_files:
-            logger.info("로드할 PDF 파일이 없습니다.")
-            return
-        
-        logger.info(f"{len(pdf_files)}개의 PDF 파일을 자동으로 로드합니다...")
-        
-        # 전역 객체들 초기화
-        global pdf_processor, vector_store
-        if pdf_processor is None:
-            pdf_processor = PDFProcessor()
-        if vector_store is None:
-            vector_store = HybridVectorStore()
-        
-        loaded_count = 0
-        for pdf_path in pdf_files:
-            try:
-                # 이미 처리된 PDF인지 확인 (파일명 기준)
-                existing_pdf_id = None
-                for pdf_id, metadata in pdf_metadata.items():
-                    if metadata.get("file_path") == str(pdf_path):
-                        existing_pdf_id = pdf_id
-                        break
-                
-                if existing_pdf_id:
-                    logger.info(f"이미 로드된 PDF 건너뛰기: {pdf_path.name}")
-                    continue
-                
-                # PDF 처리
-                chunks, metadata = pdf_processor.process_pdf(str(pdf_path))
-                
-                # 벡터 저장소에 추가
-                vector_store.add_chunks(chunks)
-                
-                # 메타데이터 저장
-                pdf_id = str(uuid.uuid4())
-                pdf_metadata[pdf_id] = {
-                    "filename": pdf_path.name,
-                    "file_path": str(pdf_path),
-                    "upload_time": datetime.now().isoformat(),
-                    "total_pages": metadata.get("pages", 0),
-                    "total_chunks": len(chunks),
-                    "extraction_method": metadata.get("extraction_method", []),
-                    "auto_loaded": True
-                }
-                
-                loaded_count += 1
-                logger.info(f"PDF 자동 로드 완료: {pdf_path.name} ({len(chunks)}개 청크)")
-                
-            except Exception as e:
-                logger.error(f"PDF 자동 로드 실패 {pdf_path}: {e}")
-                continue
-        
-        # 벡터 저장소 저장
-        vector_store.save()
-        
-        logger.info(f"PDF 자동 로드 완료: {loaded_count}개 파일이 로드되었습니다.")
-        
-    except Exception as e:
-        logger.error(f"PDF 자동 로드 중 오류 발생: {e}")
 
 # FastAPI 앱 초기화
 app = FastAPI(
-    title="PDF QA System API",
-    description="로컬 LLM을 사용하는 PDF 기반 질문 답변 시스템 API",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="IFRO 챗봇 API",
+    description="IFRO 교통 시스템 챗봇 API (최적화 버전)",
+    version="2.0.0"
 )
 
-# 서버 시작 이벤트 핸들러
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 실행되는 이벤트"""
-    logger.info("PDF QA System API 서버 시작...")
-    
-    # PDF 자동 로드
-    await load_pdfs_on_startup()
-    
-    logger.info("서버 시작 완료!")
-
-# CORS 설정 (TypeScript 프론트엔드 지원)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8000"],  # React/Django 개발 서버
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 전역 객체들
+pdf_processor: Optional[PDFProcessor] = None
+vector_store: Optional[VectorStoreInterface] = None
+question_analyzer: Optional[QuestionAnalyzer] = None
+answer_generator: Optional[AnswerGenerator] = None
+sql_generator: Optional[SQLGenerator] = None
+query_router: Optional[QueryRouter] = None
+
+# PDF 메타데이터 저장소
+pdf_metadata: Dict[str, Dict] = {}
 
 # 의존성 함수들
 def get_pdf_processor() -> PDFProcessor:
@@ -240,18 +119,7 @@ def get_answer_generator() -> AnswerGenerator:
     global answer_generator
     if answer_generator is None:
         answer_generator = AnswerGenerator()
-        if not answer_generator.load_model():
-            logger.error("답변 생성 모델 로드 실패")
-            # 모델 로드 실패 시에도 기본 객체는 반환하되, 실제 사용 시 오류 처리
-            answer_generator.is_loaded = False
     return answer_generator
-
-def get_evaluator() -> PDFQAEvaluator:
-    """평가기 의존성"""
-    global evaluator
-    if evaluator is None:
-        evaluator = PDFQAEvaluator()
-    return evaluator
 
 def get_sql_generator() -> SQLGenerator:
     """SQL 생성기 의존성"""
@@ -260,192 +128,68 @@ def get_sql_generator() -> SQLGenerator:
         sql_generator = SQLGenerator()
     return sql_generator
 
-def get_dual_pipeline_processor() -> DualPipelineProcessor:
-    """Dual Pipeline 처리기 의존성"""
-    global dual_pipeline_processor
-    if dual_pipeline_processor is None:
-        # 필요한 컴포넌트들 가져오기
-        qa = get_question_analyzer()
-        ag = get_answer_generator()
-        sg = get_sql_generator()
-        vs = get_vector_store()
-        
-        # 실제 데이터베이스 스키마 조회
-        try:
-            schema_info = sg.get_database_schema()
-            if schema_info:
-                # 첫 번째 테이블을 기본 스키마로 사용
-                table_info = schema_info[0]
-                database_schema = DatabaseSchema(
-                    table_name=table_info['table_name'],
-                    columns=[
-                        {
-                            "name": col['name'], 
-                            "type": col['type'], 
-                            "description": f"{col['name']} 컬럼"
-                        } for col in table_info['columns']
-                    ],
-                    sample_data=table_info.get('sample_data', [])
-                )
-            else:
-                # 기본 스키마 사용
-                database_schema = DatabaseSchema(
-                    table_name="traffic_intersection",
-                    columns=[
-                        {"name": "id", "type": "INTEGER", "description": "교차로 ID"},
-                        {"name": "name", "type": "TEXT", "description": "교차로 이름"},
-                        {"name": "location", "type": "TEXT", "description": "위치"}
-                    ]
-                )
-        except Exception as e:
-            logger.warning(f"데이터베이스 스키마 조회 실패, 기본 스키마 사용: {e}")
-            database_schema = DatabaseSchema(
-                table_name="traffic_intersection",
-                columns=[
-                    {"name": "id", "type": "INTEGER", "description": "교차로 ID"},
-                    {"name": "name", "type": "TEXT", "description": "교차로 이름"},
-                    {"name": "location", "type": "TEXT", "description": "위치"}
-                ]
-            )
-        
-        dual_pipeline_processor = DualPipelineProcessor(
-            question_analyzer=qa,
-            answer_generator=ag,
-            sql_generator=sg,
-            vector_store=vs,
-            database_schema=database_schema
-        )
-    return dual_pipeline_processor
+def get_query_router() -> QueryRouter:
+    """쿼리 라우터 의존성"""
+    global query_router
+    if query_router is None:
+        query_router = QueryRouter()
+    return query_router
 
 # API 엔드포인트들
-
 @app.get("/", response_model=Dict[str, str])
 async def root():
     """루트 엔드포인트"""
-    return {
-        "message": "PDF QA System API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
+    return {"message": "IFRO 챗봇 API 서버가 실행 중입니다."}
 
-@app.get("/status", response_model=SystemStatusResponse)
-async def get_system_status(
-    vector_store: VectorStoreInterface = Depends(get_vector_store),
-    answer_generator: AnswerGenerator = Depends(get_answer_generator),
-    sql_generator: SQLGenerator = Depends(get_sql_generator)
-):
-    """시스템 상태 조회"""
-    import psutil
-    import gc
-    
-    # 메모리 사용량 조회
-    process = psutil.Process()
-    memory_info = process.memory_info()
-    
-    # 데이터베이스 연결 상태 확인
-    db_status = sql_generator.test_database_connection()
-    database_connected = db_status['success']
-    
-    return SystemStatusResponse(
-        status="running",
-        model_loaded=answer_generator.llm.is_loaded,
-        total_pdfs=len(pdf_metadata),
-        total_chunks=sum(meta.get("total_chunks", 0) for meta in pdf_metadata.values()),
-        memory_usage={
-            "rss_mb": round(memory_info.rss / 1024 / 1024, 2),
-            "vms_mb": round(memory_info.vms / 1024 / 1024, 2),
-            "cpu_percent": psutil.cpu_percent()
-        },
-        database_connected=database_connected
-    )
+@app.get("/health")
+async def health_check():
+    """헬스 체크"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
-@app.get("/database/status", response_model=DatabaseStatusResponse)
-async def get_database_status(
-    sql_generator: SQLGenerator = Depends(get_sql_generator)
-):
-    """데이터베이스 상태 조회"""
-    try:
-        # 연결 테스트
-        connection_test = sql_generator.test_database_connection()
-        
-        if connection_test['success']:
-            # 스키마 정보 조회
-            schema_info = sql_generator.get_database_schema()
-            
-            return DatabaseStatusResponse(
-                connected=True,
-                message="데이터베이스 연결 성공",
-                schema_info=schema_info
-            )
-        else:
-            return DatabaseStatusResponse(
-                connected=False,
-                message=f"데이터베이스 연결 실패: {connection_test.get('error', 'Unknown error')}",
-                schema_info=None
-            )
-            
-    except Exception as e:
-        logger.error(f"데이터베이스 상태 조회 실패: {e}")
-        return DatabaseStatusResponse(
-            connected=False,
-            message=f"데이터베이스 상태 조회 중 오류 발생: {str(e)}",
-            schema_info=None
-        )
-
-@app.post("/upload_pdf", response_model=PDFUploadResponse)
+@app.post("/upload-pdf", response_model=PDFUploadResponse)
 async def upload_pdf(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     pdf_processor: PDFProcessor = Depends(get_pdf_processor),
     vector_store: VectorStoreInterface = Depends(get_vector_store)
 ):
-    """PDF 파일 업로드 및 처리"""
-    import time
-    
-    start_time = time.time()
-    
-    # 파일 검증
+    """PDF 업로드 및 처리"""
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드 가능합니다.")
     
-    # 임시 파일로 저장
-    pdf_id = str(uuid.uuid4())
-    
     try:
+        # 임시 파일로 저장
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
             content = await file.read()
             temp_file.write(content)
-            temp_path = temp_file.name
+            temp_file_path = temp_file.name
         
         # PDF 처리
-        chunks, metadata = pdf_processor.process_pdf(temp_path)
+        start_time = datetime.now()
+        pdf_id = str(uuid.uuid4())
         
-        # 벡터 저장소에 추가
+        # PDF 처리 및 청크 생성
+        chunks = pdf_processor.process_pdf(temp_file_path, pdf_id)
+        
+        # 벡터 저장소에 저장
         vector_store.add_chunks(chunks)
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
         
         # 메타데이터 저장
         pdf_metadata[pdf_id] = {
             "filename": file.filename,
+            "total_pages": len(chunks),
             "upload_time": datetime.now().isoformat(),
-            "total_pages": metadata.get("pages", 0),
-            "total_chunks": len(chunks),
-            "extraction_method": metadata.get("extraction_method", [])
+            "file_size": len(content)
         }
         
-        # 백그라운드에서 벡터 저장소 저장
-        background_tasks.add_task(vector_store.save)
-        
         # 임시 파일 삭제
-        os.unlink(temp_path)
-        
-        processing_time = time.time() - start_time
-        
-        logger.info(f"PDF 업로드 완료: {file.filename} ({len(chunks)}개 청크)")
+        os.unlink(temp_file_path)
         
         return PDFUploadResponse(
             pdf_id=pdf_id,
             filename=file.filename,
-            total_pages=metadata.get("pages", 0),
+            total_pages=len(chunks),
             total_chunks=len(chunks),
             processing_time=processing_time
         )
@@ -460,531 +204,238 @@ async def ask_question(
     vector_store: VectorStoreInterface = Depends(get_vector_store),
     question_analyzer: QuestionAnalyzer = Depends(get_question_analyzer),
     answer_generator: AnswerGenerator = Depends(get_answer_generator),
-    dual_pipeline_processor: DualPipelineProcessor = Depends(get_dual_pipeline_processor)
+    sql_generator: SQLGenerator = Depends(get_sql_generator),
+    query_router: QueryRouter = Depends(get_query_router)
 ):
-    """질문에 대한 답변 생성 (Dual Pipeline 지원)"""
+    """질문에 대한 답변 생성 (최적화)"""
     
-    # 들어오는 데이터만 출력
-    print("=" * 50)
-    print(f"📥 챗봇 서버로 들어온 데이터:")
-    print(f"질문: {request.question}")
-    print(f"PDF ID: {request.pdf_id}")
-    print(f"사용자 ID: {request.user_id}")
-    print(f"대화 컨텍스트: {request.use_conversation_context}")
-    print(f"Dual Pipeline: {request.use_dual_pipeline}")
-    print(f"최대 청크 수: {request.max_chunks}")
-    print("=" * 50)
-    
-    # PDF ID가 비어있거나 존재하지 않는 경우 기본 PDF 사용
-    if not request.pdf_id or request.pdf_id not in pdf_metadata:
-        # 사용 가능한 PDF 중에서 첫 번째 사용
-        if pdf_metadata:
-            request.pdf_id = list(pdf_metadata.keys())[0]
-        else:
-            raise HTTPException(status_code=404, detail="사용 가능한 PDF가 없습니다.")
-
     try:
-        # Dual Pipeline 사용 여부에 따라 처리 방식 분기
-        if request.use_dual_pipeline and dual_pipeline_processor:
-            try:
-                # Dual Pipeline 처리
-                result = dual_pipeline_processor.process_question(
-                    question=request.question,
-                    use_context=request.use_conversation_context
-                )
-                
-                # 대화 기록에 추가
-                question_analyzer.add_conversation_item(
-                    request.question,
-                    result.final_answer,
-                    [],  # Dual Pipeline에서는 청크 ID를 별도로 관리하지 않음
-                    result.confidence_score
-                )
-                
-                # SQL 쿼리 정보 추출
-                sql_query = None
-                if result.sql_result and result.sql_result.sql_query:
-                    sql_query = result.sql_result.sql_query.query
-                
-                # Dual Pipeline API 로깅
-                try:
-                    pipeline_type = result.metadata.get("pipeline_type", "unknown")
-                    if pipeline_type == "sql_query":
-                        question_type = QuestionType.SQL
-                    elif pipeline_type == "document_search":
-                        question_type = QuestionType.PDF
-                    else:
-                        question_type = QuestionType.HYBRID
-                    
-                    chatbot_logger.log_question(
-                        user_question=request.question,
-                        question_type=question_type,
-                        intent=result.analyzed_question.intent,
-                        keywords=result.analyzed_question.keywords,
-                        processing_time=result.total_processing_time,
-                        confidence_score=result.confidence_score,
-                        generated_answer=result.final_answer,
-                        generated_sql=sql_query,
-                        model_name="dual_pipeline",
-                        additional_info={
-                            "pdf_id": request.pdf_id,
-                            "user_id": request.user_id,
-                            "pipeline_type": pipeline_type,
-                            "context": result.metadata.get("context", "general")
-                        }
-                    )
-                except Exception as log_error:
-                    logger.warning(f"Dual Pipeline API 로깅 중 오류 발생: {log_error}")
-                
-                return QuestionResponse(
-                    answer=result.final_answer,
-                    confidence_score=result.confidence_score,
-                    used_chunks=[],  # Dual Pipeline에서는 청크 ID를 별도로 관리하지 않음
-                    generation_time=result.total_processing_time,
-                    question_type=result.analyzed_question.question_type.value,
-                    model_name="dual_pipeline",
-                    pipeline_type=result.metadata.get("pipeline_type", "unknown"),
-                    sql_query=sql_query
-                )
-            except Exception as dual_error:
-                logger.error(f"Dual Pipeline 처리 실패: {dual_error}")
-                # Dual Pipeline 실패 시 일반 파이프라인으로 폴백
-                request.use_dual_pipeline = False
+        # 🚀 SBERT 기반 쿼리 라우팅
+        route_result = query_router.route_query(request.question)
+        logger.info(f"📍 라우팅 결과: {route_result.route.value} (신뢰도: {route_result.confidence:.3f})")
         
-        else:
-            # 기존 단일 파이프라인 처리
-            
-            # 1. 질문 분석
-            analyzed_question = question_analyzer.analyze_question(
-                request.question,
-                use_conversation_context=request.use_conversation_context
-            )
-            
-            # 2. 관련 문서 검색
-            query_embedding = analyzed_question.embedding
-            relevant_chunks = vector_store.search(
-                query_embedding,
-                top_k=request.max_chunks
-            )
-            
-            if not relevant_chunks:
-                raise HTTPException(status_code=404, detail="관련 문서를 찾을 수 없습니다.")
-            
-            # 3. 이전 대화 기록 가져오기
-            conversation_history = None
-            if request.use_conversation_context:
-                conversation_history = question_analyzer.get_conversation_context(max_items=3)
-            
-            # 4. 답변 생성 (대화 이력 캐시 포함)
-            if not answer_generator.is_loaded:
-                # 모델이 로드되지 않은 경우 기본 답변 생성
-                answer_content = "죄송합니다. 현재 AI 모델이 로드되지 않아 답변을 생성할 수 없습니다. 서버 관리자에게 문의해주세요."
-                confidence_score = 0.0
-                used_chunks = [chunk.chunk_id for chunk in relevant_chunks]
-                generation_time = 0.0
-                model_name = "error"
-            else:
-                answer = answer_generator.generate_answer(
-                    analyzed_question,
-                    relevant_chunks,
-                    conversation_history,
-                    pdf_id=request.pdf_id
-                )
-                answer_content = answer.content
-                confidence_score = answer.confidence_score
-                used_chunks = answer.used_chunks
-                generation_time = answer.generation_time
-                model_name = answer.model_name
-            
-            # 5. 대화 기록에 추가
-            question_analyzer.add_conversation_item(
-                request.question,
-                answer_content,
-                used_chunks,
-                confidence_score
-            )
-            
-            # 6. 캐시 사용 여부 확인
-            from_cache = False
-            if answer_generator.is_loaded and hasattr(answer, 'metadata') and answer.metadata:
-                from_cache = answer.metadata.get("from_cache", False)
-            
-            logger.info(f"질문 처리 완료: {analyzed_question.question_type.value}, 캐시: {from_cache}")
-            
-            # API 로깅
-            try:
-                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
-                chatbot_logger.log_question(
-                    user_question=request.question,
-                    question_type=question_type,
-                    intent=analyzed_question.intent,
-                    keywords=analyzed_question.keywords,
-                    processing_time=generation_time,
-                    confidence_score=confidence_score,
-                    generated_answer=answer_content,
-                    used_chunks=used_chunks,
-                    model_name=model_name,
-                    additional_info={
-                        "pdf_id": request.pdf_id,
-                        "user_id": request.user_id,
-                        "from_cache": from_cache,
-                        "pipeline_type": "document_search"
-                    }
-                )
-            except Exception as log_error:
-                logger.warning(f"API 로깅 중 오류 발생: {log_error}")
-            
+        # 인사말 처리 (가장 빠른 응답)
+        if route_result.route == QueryRoute.GREETING:
             return QuestionResponse(
-                answer=answer_content,
-                confidence_score=confidence_score,
-                used_chunks=used_chunks,
-                generation_time=generation_time,
-                question_type=analyzed_question.question_type.value,
-                model_name=model_name,
-                pipeline_type="document_search",
+                answer="안녕하세요! IFRO 교통 시스템에 대해 궁금한 것이 있으시면 언제든 물어보세요.",
+                confidence_score=route_result.confidence,
+                used_chunks=[],
+                generation_time=0.001,
+                question_type="greeting",
+                model_name="greeting_template",
+                pipeline_type="greeting",
                 sql_query=None
             )
+        
+        # SQL 쿼리 처리 (규칙 기반 빠른 처리)
+        if route_result.route == QueryRoute.SQL_QUERY:
+            try:
+                # 기본 스키마 정의
+                schema = DatabaseSchema(
+                    table_name="traffic_intersection",
+                    columns=[
+                        {"name": "id", "type": "INTEGER", "description": "교차로 ID"},
+                        {"name": "name", "type": "TEXT", "description": "교차로 이름"},
+                        {"name": "location", "type": "TEXT", "description": "위치"},
+                        {"name": "traffic_volume", "type": "INTEGER", "description": "교통량"},
+                        {"name": "district", "type": "TEXT", "description": "구역"}
+                    ]
+                )
+                
+                # 규칙 기반 SQL 생성
+                sql_result = sql_generator.generate_sql(request.question, schema)
+                
+                if sql_result.is_valid:
+                    # SQL 실행
+                    execution_result = sql_generator.execute_sql(sql_result)
+                    
+                    if execution_result['success']:
+                        # 데이터를 자연어로 변환
+                        data_summary = f"조회된 데이터: {execution_result.get('row_count', 0)}건"
+                        if execution_result.get('data'):
+                            data_summary = f"총 {len(execution_result['data'])}건의 결과를 찾았습니다."
+                        
+                        return QuestionResponse(
+                            answer=data_summary,
+                            confidence_score=sql_result.confidence_score,
+                            used_chunks=[],
+                            generation_time=sql_result.execution_time,
+                            question_type="sql_query",
+                            model_name=sql_result.model_name,
+                            pipeline_type="sql",
+                            sql_query=sql_result.query
+                        )
+                    else:
+                        logger.warning(f"SQL 실행 실패: {execution_result.get('error')}")
+                        # PDF 검색으로 폴백
+                        pass
+                else:
+                    logger.warning(f"SQL 검증 실패: {sql_result.error_message}")
+                    # PDF 검색으로 폴백
+                    pass
+            except Exception as sql_error:
+                logger.warning(f"SQL 처리 실패, PDF 검색으로 폴백: {sql_error}")
+                # PDF 검색으로 폴백
+                pass
+        
+        # PDF 검색 처리 (기본 모드)
+        logger.info("📄 PDF 검색 모드로 처리")
+        
+        # 1. 질문 분석
+        analyzed_question = question_analyzer.analyze_question(
+            request.question,
+            use_conversation_context=request.use_conversation_context
+        )
+        
+        # 2. 관련 문서 검색
+        query_embedding = analyzed_question.embedding
+        relevant_chunks = vector_store.search(
+            query_embedding,
+            k=request.max_chunks
+        )
+        
+        # 3. 답변 생성
+        answer = answer_generator.generate_answer(
+            analyzed_question,
+            relevant_chunks,
+            conversation_history=None,
+            pdf_id=request.pdf_id
+        )
+        
+        # 4. 대화 히스토리에 추가
+        conversation_item = ConversationItem(
+            question=request.question,
+            answer=answer.content,
+            timestamp=datetime.now(),
+            question_type=analyzed_question.question_type,
+            relevant_chunks=answer.used_chunks,
+            confidence_score=answer.confidence_score
+        )
+        question_analyzer.add_conversation_item(conversation_item)
+        
+        # 5. API 로깅
+        try:
+            chatbot_logger.log_question(
+                question=request.question,
+                answer=answer.content,
+                question_type=QuestionType.PDF,
+                pipeline_type=route_result.route.value,
+                generation_time=answer.generation_time,
+                confidence_score=answer.confidence_score,
+                model_name=answer.model_name,
+                user_id=request.user_id
+            )
+        except Exception as log_error:
+            logger.warning(f"API 로깅 중 오류 발생: {log_error}")
+        
+        return QuestionResponse(
+            answer=answer.content,
+            confidence_score=answer.confidence_score,
+            used_chunks=answer.used_chunks,
+            generation_time=answer.generation_time,
+            question_type=analyzed_question.question_type.value,
+            model_name=answer.model_name,
+            pipeline_type=route_result.route.value,
+            sql_query=None
+        )
         
     except Exception as e:
         logger.error(f"질문 처리 실패: {e}")
         import traceback
         logger.error(f"상세 오류: {traceback.format_exc()}")
-        
-        # 오류 로깅
-        try:
-            chatbot_logger.log_error(
-                user_question=request.question,
-                error_message=str(e),
-                question_type=QuestionType.UNKNOWN
-            )
-        except Exception as log_error:
-            logger.warning(f"오류 로깅 중 문제 발생: {log_error}")
-        
-        # 오류 발생 시에도 기본 응답 반환
-        return QuestionResponse(
-            answer="죄송합니다. 답변을 생성하는 중 오류가 발생했습니다. 서버 관리자에게 문의해주세요.",
-            confidence_score=0.0,
-            used_chunks=[],
-            generation_time=0.0,
-            question_type="error",
-            model_name="error",
-            pipeline_type="error",
-            sql_query=None
-        )
+        raise HTTPException(status_code=500, detail=f"질문 처리 중 오류 발생: {str(e)}")
 
-@app.get("/conversation_history")
-async def get_conversation_history(
-    pdf_id: str,
-    max_items: int = 10,
-    question_analyzer: QuestionAnalyzer = Depends(get_question_analyzer)
-):
-    """대화 기록 조회"""
-    if pdf_id not in pdf_metadata:
-        raise HTTPException(status_code=404, detail="PDF를 찾을 수 없습니다.")
-    
-    history = question_analyzer.get_conversation_context(max_items=max_items)
-    return {"conversation_history": history}
-
-@app.delete("/conversation_history")
-async def clear_conversation_history(
-    question_analyzer: QuestionAnalyzer = Depends(get_question_analyzer)
-):
-    """대화 기록 초기화"""
-    question_analyzer.conversation_history.clear()
-    return {"message": "대화 기록이 초기화되었습니다."}
-
-@app.post("/configure_model")
-async def configure_model(request: ModelConfigRequest):
-    """모델 설정 변경"""
-    global answer_generator
-    
+@app.get("/status", response_model=SystemStatusResponse)
+async def get_system_status():
+    """시스템 상태 조회"""
     try:
-        # 기존 모델 언로드
-        if answer_generator:
-            answer_generator.unload_model()
+        import psutil
         
-        # 새 설정으로 모델 초기화
-        config = GenerationConfig(
-            max_length=request.max_length,
-            temperature=request.temperature,
-            top_p=request.top_p
-        )
-        
-        model_type = ModelType(request.model_type)
-        answer_generator = AnswerGenerator(
-            model_type=model_type,
-            model_name=request.model_name,
-            generation_config=config
-        )
-        
-        # 모델 로드
-        if not answer_generator.load_model():
-            raise HTTPException(status_code=500, detail="새 모델 로드 실패")
-        
-        return {"message": f"모델 설정이 변경되었습니다: {request.model_name}"}
-        
-    except Exception as e:
-        logger.error(f"모델 설정 변경 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"모델 설정 변경 실패: {str(e)}")
-
-@app.post("/evaluate")
-async def evaluate_system(
-    request: EvaluationRequest,
-    evaluator: PDFQAEvaluator = Depends(get_evaluator)
-):
-    """시스템 성능 평가"""
-    try:
-        # 간단한 평가 실행 (실제로는 더 복잡한 평가 필요)
-        semantic_similarities = []
-        
-        for gen_answer, ref_answer in zip(request.generated_answers, request.reference_answers):
-            similarity = evaluator._calculate_semantic_similarity(gen_answer, ref_answer)
-            semantic_similarities.append(similarity)
-        
-        avg_similarity = sum(semantic_similarities) / len(semantic_similarities)
-        
-        return {
-            "evaluation_results": {
-                "average_semantic_similarity": avg_similarity,
-                "individual_similarities": semantic_similarities,
-                "total_questions": len(request.questions)
-            }
+        # 메모리 사용량
+        memory = psutil.virtual_memory()
+        memory_usage = {
+            "total": memory.total,
+            "available": memory.available,
+            "percent": memory.percent,
+            "used": memory.used
         }
         
+        # 모델 로드 상태
+        model_loaded = (
+            answer_generator is not None and 
+            question_analyzer is not None and 
+            vector_store is not None
+        )
+        
+        # PDF 및 청크 수
+        total_pdfs = len(pdf_metadata)
+        total_chunks = sum(len(chunks) for chunks in vector_store.get_all_chunks()) if vector_store else 0
+        
+        return SystemStatusResponse(
+            status="running",
+            model_loaded=model_loaded,
+            total_pdfs=total_pdfs,
+            total_chunks=total_chunks,
+            memory_usage=memory_usage
+        )
+        
     except Exception as e:
-        logger.error(f"평가 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"평가 중 오류 발생: {str(e)}")
+        logger.error(f"시스템 상태 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"시스템 상태 조회 실패: {str(e)}")
 
-@app.get("/pdfs")
-async def list_pdfs():
-    """등록된 PDF 목록 조회"""
-    pdf_list = []
-    for pdf_id, metadata in pdf_metadata.items():
-        pdf_list.append({
-            "pdf_id": pdf_id,
-            "filename": metadata["filename"],
-            "upload_time": metadata["upload_time"],
-            "total_pages": metadata["total_pages"],
-            "total_chunks": metadata["total_chunks"]
-        })
-    
-    return {"pdfs": pdf_list}
-
-@app.post("/load_existing_pdfs")
-async def load_existing_pdfs(
-    background_tasks: BackgroundTasks,
-    pdf_processor: PDFProcessor = Depends(get_pdf_processor),
-    vector_store: VectorStoreInterface = Depends(get_vector_store)
-):
-    """기존 PDF 파일들을 자동으로 로드"""
-    import glob
-    from pathlib import Path
-    
-    pdf_dir = Path("data/pdfs")
-    if not pdf_dir.exists():
-        raise HTTPException(status_code=404, detail="data/pdfs 폴더를 찾을 수 없습니다.")
-    
-    # 모든 PDF 파일 찾기
-    pdf_files = []
-    for pattern in ["*.pdf", "*/*.pdf", "*/*/*.pdf"]:
-        pdf_files.extend(pdf_dir.glob(pattern))
-    
-    if not pdf_files:
-        raise HTTPException(status_code=404, detail="PDF 파일을 찾을 수 없습니다.")
-    
-    loaded_pdfs = []
-    
-    for pdf_path in pdf_files:
-        try:
-            # 이미 처리된 PDF인지 확인
-            pdf_id = str(uuid.uuid4())
-            
-            # PDF 처리
-            chunks, metadata = pdf_processor.process_pdf(str(pdf_path))
-            
-            # 벡터 저장소에 추가
-            vector_store.add_chunks(chunks)
-            
-            # 메타데이터 저장
-            pdf_metadata[pdf_id] = {
-                "filename": pdf_path.name,
-                "file_path": str(pdf_path),
-                "upload_time": datetime.now().isoformat(),
-                "total_pages": metadata.get("pages", 0),
-                "total_chunks": len(chunks),
-                "extraction_method": metadata.get("extraction_method", [])
-            }
-            
-            loaded_pdfs.append({
-                "pdf_id": pdf_id,
-                "filename": pdf_path.name,
-                "file_path": str(pdf_path),
-                "total_pages": metadata.get("pages", 0),
-                "total_chunks": len(chunks)
-            })
-            
-            logger.info(f"기존 PDF 로드 완료: {pdf_path.name} ({len(chunks)}개 청크)")
-            
-        except Exception as e:
-            logger.error(f"PDF 로드 실패 {pdf_path}: {e}")
-            continue
-    
-    # 백그라운드에서 벡터 저장소 저장
-    background_tasks.add_task(vector_store.save)
-    
-    return {
-        "message": f"{len(loaded_pdfs)}개의 PDF 파일을 로드했습니다.",
-        "loaded_pdfs": loaded_pdfs
-    }
-
-@app.delete("/pdfs/{pdf_id}")
-async def delete_pdf(pdf_id: str):
-    """PDF 삭제"""
-    if pdf_id not in pdf_metadata:
-        raise HTTPException(status_code=404, detail="PDF를 찾을 수 없습니다.")
-    
-    # 메타데이터에서 제거
-    del pdf_metadata[pdf_id]
-    
-    # 실제로는 벡터 저장소에서도 해당 청크들을 제거해야 함
-    # 현재 구현에서는 전체 벡터 저장소 재구성이 필요
-    
-    return {"message": f"PDF {pdf_id}가 삭제되었습니다."}
-
-@app.get("/health")
-async def health_check():
-    """헬스 체크"""
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
-
-@app.get("/logs/statistics")
-async def get_log_statistics():
-    """로그 통계 조회"""
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """캐시 통계 조회"""
     try:
-        stats = chatbot_logger.get_statistics()
+        stats = get_all_cache_stats()
+        return {"status": "success", "cache_stats": stats}
+    except Exception as e:
+        logger.error(f"캐시 통계 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"캐시 통계 조회 실패: {str(e)}")
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """모든 캐시 삭제"""
+    try:
+        clear_all_caches()
+        return {"message": "모든 캐시가 삭제되었습니다."}
+    except Exception as e:
+        logger.error(f"캐시 삭제 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"캐시 삭제 실패: {str(e)}")
+
+@app.get("/router/stats")
+async def get_router_stats(
+    query_router: QueryRouter = Depends(get_query_router)
+):
+    """쿼리 라우터 통계"""
+    try:
+        stats = query_router.get_route_statistics()
         return {
             "status": "success",
-            "statistics": stats
+            "router_stats": stats
         }
     except Exception as e:
-        logger.error(f"로그 통계 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"로그 통계 조회 실패: {str(e)}")
+        logger.error(f"라우터 통계 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"라우터 통계 조회 실패: {str(e)}")
 
-@app.get("/logs/clear")
-async def clear_logs():
-    """로그 파일 초기화"""
-    try:
-        chatbot_logger.clear_logs()
-        return {"message": "모든 로그 파일이 초기화되었습니다."}
-    except Exception as e:
-        logger.error(f"로그 초기화 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"로그 초기화 실패: {str(e)}")
-
-
-
-# 간단한 챗봇 엔드포인트 (PDF 없이 작동)
-@app.post("/chat")
-async def simple_chat(message: Dict[str, str]):
-    """간단한 챗봇 응답 (PDF 없이 작동)"""
-    try:
-        # 메시지 추출
-        user_message = message.get("message", "")
-        if not user_message:
-            return {
-                "success": False,
-                "response": "메시지가 비어있습니다.",
-                "timestamp": datetime.now().isoformat()
-            }
-        
-        # 간단한 키워드 기반 응답
-        lower_message = user_message.lower()
-        
-        if "교통" in lower_message or "traffic" in lower_message:
-            response = "교통 데이터는 대시보드의 '분석' 탭에서 확인하실 수 있습니다. 특정 교차로를 클릭하시면 해당 지점의 상세한 교통량 정보를 볼 수 있어요."
-        elif "사고" in lower_message or "incident" in lower_message:
-            response = "교통사고 정보는 '사고' 탭에서 확인 가능합니다. 빨간색 삼각형 아이콘을 클릭하시면 사고 목록과 상세 정보를 볼 수 있습니다."
-        elif "경로" in lower_message or "route" in lower_message:
-            response = "경로 분석은 '교통흐름' 탭에서 이용하실 수 있습니다. 지도에서 두 지점을 선택하시면 해당 구간의 교통 흐름을 분석해드립니다."
-        elif "즐겨찾기" in lower_message or "favorite" in lower_message:
-            response = "관심 있는 교차로나 사고를 즐겨찾기에 추가하실 수 있습니다. 별표 아이콘을 클릭하시면 '즐겨찾기' 탭에서 쉽게 찾아보실 수 있어요."
-        elif "help" in lower_message or "도움" in lower_message or "사용법" in lower_message:
-            response = "IFRO 대시보드 사용법:\n\n🚗 분석: 교차로별 교통량 분석\n🔄 교통흐름: 두 지점 간 경로 분석\n⚠️ 사고: 교통사고 현황\n⭐ 즐겨찾기: 관심 지점 관리\n📊 Tableau: 고급 분석 대시보드\n\n더 자세한 정보가 필요하시면 구체적으로 물어보세요!"
-        else:
-            response = "네, 무엇을 도와드릴까요? 교통 데이터 분석, 대시보드 사용법, 특정 기능에 대해 궁금한 점이 있으시면 언제든 말씀해 주세요!"
-        
-        return {
-            "success": True,
-            "response": response,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"챗봇 응답 생성 중 오류: {e}")
-        return {
-            "success": False,
-            "response": "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
-            "timestamp": datetime.now().isoformat()
-        }
-
-# Django 연동을 위한 추가 엔드포인트들
-
-@app.post("/django/ask")
-async def django_ask_question(
+@app.post("/router/test")
+async def test_routing(
     question: str,
-    pdf_id: str,
-    conversation_history: Optional[List[ConversationHistoryItem]] = None,
-    vector_store: VectorStoreInterface = Depends(get_vector_store),
-    question_analyzer: QuestionAnalyzer = Depends(get_question_analyzer),
-    answer_generator: AnswerGenerator = Depends(get_answer_generator)
+    query_router: QueryRouter = Depends(get_query_router)
 ):
-    """Django에서 호출하기 쉬운 질문 엔드포인트"""
-    
-    # 대화 기록 복원 (필요한 경우)
-    if conversation_history:
-        question_analyzer.conversation_history.clear()
-        for item in conversation_history:
-            question_analyzer.add_conversation_item(
-                item.question,
-                item.answer,
-                [],  # 청크 정보는 없음
-                item.confidence_score
-            )
-    
-    # 기본 ask 엔드포인트 로직 재사용
-    request = QuestionRequest(
-        question=question,
-        pdf_id=pdf_id,
-        use_conversation_context=bool(conversation_history)
-    )
-    
-    return await ask_question(request, vector_store, question_analyzer, answer_generator)
-
-# 에러 핸들러
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"글로벌 예외 발생: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "내부 서버 오류가 발생했습니다."}
-    )
-
-# 서버 실행 함수
-def run_server(host: str = "0.0.0.0", port: int = 8008, debug: bool = False):
-    """
-    FastAPI 서버 실행
-    
-    Args:
-        host: 서버 호스트
-        port: 서버 포트
-        debug: 디버그 모드
-    """
-    uvicorn.run(
-        "api.endpoints:app",
-        host=host,
-        port=port,
-        reload=debug,
-        log_level="info" if not debug else "debug"
-    )
+    """라우팅 테스트"""
+    try:
+        result = query_router.route_query(question)
+        return {
+            "question": question,
+            "route": result.route.value,
+            "confidence": result.confidence,
+            "reasoning": result.reasoning,
+            "metadata": result.metadata
+        }
+    except Exception as e:
+        logger.error(f"라우팅 테스트 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"라우팅 테스트 실패: {str(e)}")
 
 if __name__ == "__main__":
-    # 개발 서버 실행
-    run_server(debug=False)
+    uvicorn.run(app, host="0.0.0.0", port=8008)

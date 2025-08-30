@@ -75,7 +75,7 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "ollama list | grep -q 'mistral:latest' && ollama run mistral:latest 'test' | head -1 | grep -q ."]
+      test: ["CMD", "sh", "-c", "ollama list | grep -q 'qwen2:1.5b' && ollama run qwen2:1.5b 'test' | head -1 | grep -q ."]
       interval: 30s
       timeout: 30s
       retries: 10
@@ -96,7 +96,7 @@ services:
     environment:
       - PYTHONPATH=/app
       - MODEL_TYPE=ollama
-      - MODEL_NAME=mistral:latest
+      - MODEL_NAME=qwen2:1.5b
       - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
       - OLLAMA_HOST=http://ollama:11434
       - MYSQL_DATABASE=traffic

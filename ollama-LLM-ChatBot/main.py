@@ -51,7 +51,7 @@ class PDFQASystem:
     
     def __init__(self, 
                  model_type: str = "ollama",
-                 model_name: str = "mistral:latest",
+                 model_name: str = "qwen2:1.5b",
                  embedding_model: str = "jhgan/ko-sroberta-multitask"):
         """
         시스템 초기화
@@ -711,7 +711,7 @@ def main():
     parser.add_argument("--question", type=str, help="질문 (process 모드)")
     parser.add_argument("--model-type", choices=["ollama", "huggingface", "llama_cpp"],
                        default="ollama", help="사용할 모델 타입")
-    parser.add_argument("--model-name", type=str, default="mistral:latest", 
+    parser.add_argument("--model-name", type=str, default="qwen2:1.5b", 
                        help="모델 이름")
     parser.add_argument("--embedding-model", type=str, 
                        default="jhgan/ko-sroberta-multitask",
