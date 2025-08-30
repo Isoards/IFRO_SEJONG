@@ -315,7 +315,7 @@ const AdminDashboard = () => {
         {/* 메인 콘텐츠 그리드 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 실시간 최다 조회 구간 TOP 10 */}
-          <div className="bg-white rounded-lg shadow-sm border">
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 실시간 최다 조회 구간 TOP 10
@@ -324,17 +324,17 @@ const AdminDashboard = () => {
                 세종시 시민들이 가장 많이 조회하는 지역
               </p>
             </div>
-            <div className="p-6">
+            <div className="p-6 flex-1 flex flex-col justify-start">
               {loading ? (
-                <div className="flex justify-center items-center h-32">
+                <div className="flex justify-center items-center min-h-[400px]">
                   <div className="text-gray-500">데이터 로딩 중...</div>
                 </div>
               ) : error ? (
-                <div className="flex justify-center items-center h-32">
+                <div className="flex justify-center items-center min-h-[400px]">
                   <div className="text-red-500">{error}</div>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 flex-1">
                   {adminStats?.top_viewed_areas.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       조회 데이터가 없습니다.
@@ -343,7 +343,7 @@ const AdminDashboard = () => {
                     adminStats?.top_viewed_areas.map((item: TopArea) => (
                       <div
                         key={item.rank}
-                        className="flex items-center justify-between py-2"
+                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
                       >
                         <div className="flex items-center space-x-3">
                           <span
@@ -385,24 +385,24 @@ const AdminDashboard = () => {
           </div>
 
           {/* 트래픽 차트 */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border">
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 시민 관심도 추이
               </h3>
               <p className="text-sm text-gray-500 mt-1">일주일간 조회수 변화</p>
             </div>
-            <div className="p-6">
+            <div className="p-6 flex-1 flex">
               {loading ? (
-                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                <div className="w-full min-h-[400px] bg-gray-50 rounded-lg flex items-center justify-center">
                   <div className="text-gray-500">차트 데이터 로딩 중...</div>
                 </div>
               ) : error ? (
-                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                <div className="w-full min-h-[400px] bg-gray-50 rounded-lg flex items-center justify-center">
                   <div className="text-red-500">차트 데이터 로드 실패</div>
                 </div>
               ) : (
-                <div className="h-64">
+                <div className="w-full min-h-[400px] flex-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                       data={dailyViewData}
@@ -476,7 +476,7 @@ const AdminDashboard = () => {
         {/* 두 번째 행 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 관심도 히트맵 */}
-          <div className="bg-white rounded-lg shadow-sm border">
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 관심도 히트맵
@@ -485,8 +485,8 @@ const AdminDashboard = () => {
                 세종시 지역별 시민 관심도 분포
               </p>
             </div>
-            <div className="p-6">
-              <SejongHeatmap className="h-80 relative" />
+            <div className="p-6 flex-1 flex">
+              <SejongHeatmap className="w-full h-full min-h-[400px] relative" />
             </div>
           </div>
 
