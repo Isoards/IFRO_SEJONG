@@ -155,3 +155,19 @@ export async function getProposalsByIntersection(): Promise<
   const response = await api.get(`${PROPOSALS_BASE_URL}/by-intersection/`);
   return response.data;
 }
+
+// 특정 교차로의 정책제안 목록 조회
+export async function getProposalsByIntersectionId(
+  intersectionId: number,
+  page: number = 1,
+  pageSize: number = 5
+): Promise<ProposalListResponse> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+    intersection_id: intersectionId.toString(),
+  });
+
+  const response = await api.get(`${PROPOSALS_BASE_URL}/?${params.toString()}`);
+  return response.data;
+}
