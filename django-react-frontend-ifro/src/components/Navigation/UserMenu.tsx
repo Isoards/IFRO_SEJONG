@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, FileSliders } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import Dashboard from "../Dashboard";
 
 export default function UserMenu() {
   const navigate = useNavigate();
@@ -12,8 +13,11 @@ export default function UserMenu() {
   };
 
   const handleSettings = () => {
-    // 설정 페이지로 이동 (예: /settings)
     navigate("/settings");
+  };
+
+  const handleAdmin = () => {
+    navigate("/admin");
   };
 
   return (
@@ -30,6 +34,12 @@ export default function UserMenu() {
             align="center"
             className="bg-white rounded shadow-lg py-2 px-4 z-50"
           >
+            <DropdownMenu.Item
+              onClick={handleAdmin}
+              className="cursor-pointer flex items-center gap-2 text-gray-700 hover:bg-gray-100 px-2 py-1 rounded outline-none"
+            >
+              <FileSliders size={16} /> AdminDashboard
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               onClick={handleSettings}
               className="cursor-pointer flex items-center gap-2 text-gray-700 hover:bg-gray-100 px-2 py-1 rounded outline-none"

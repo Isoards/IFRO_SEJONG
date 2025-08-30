@@ -26,6 +26,7 @@ api.add_router("/traffic/", traffic_router)
 api.add_router("/auth/", auth_router)
 api.add_router("/secure/traffic/", secure_traffic_router)
 api.add_router("/chatbot/", chatbot_router)
+# 정책제안 API는 traffic 라우터에 포함되어 있음
 
 urlpatterns = [
     path('admin/', admin.site.urls),
