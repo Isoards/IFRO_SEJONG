@@ -36,6 +36,7 @@ services:
       - DJANGO_DEBUG=True
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
       - GEMINI_API_KEY=AIzaSyAwA17afiK3RW95Z9hBcWpDOOVU_PELtfw
+      - CHATBOT_URL=http://chatbot:8008
     depends_on:
       db:
         condition: service_healthy
@@ -53,7 +54,9 @@ services:
       - /app/node_modules
     environment:
       - NODE_OPTIONS=--max-old-space-size=4096
-      - REACT_APP_CHATBOT_IP=http://localhost:8008
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
     deploy:
       resources:
         limits:
@@ -61,26 +64,62 @@ services:
     stdin_open: true
     tty: true
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ollama list | grep -q 'mistral:latest' && ollama run mistral:latest 'test' | head -1 | grep -q ."]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 300s
+
   chatbot:
     build:
-      context: ./chatBot_mk.1
+      context: ./ollama-LLM-ChatBot
     container_name: chatbot
     ports:
       - "8008:8008"
     volumes:
-      - ./chatBot_mk.1:/app
+      - ./ollama-LLM-ChatBot:/app
       - chatbot_data:/app/data
       - chatbot_vector_store:/app/vector_store
+      - chatbot_logs:/app/logs
+      - chatbot_models:/app/models
+      - sbert_cache:/root/.cache/torch/sentence_transformers
     environment:
       - PYTHONPATH=/app
       - MODEL_TYPE=ollama
       - MODEL_NAME=mistral:latest
       - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+      - OLLAMA_HOST=http://ollama:11434
     depends_on:
-      - backend
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
 
 volumes:
   mysql_data:
   chatbot_data:
   chatbot_vector_store:
+  chatbot_logs:
+  chatbot_models:
+  sbert_cache:
+  ollama_data:
+
+networks:
+  default:
+    driver: bridge

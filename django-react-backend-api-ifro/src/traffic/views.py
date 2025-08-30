@@ -4,7 +4,8 @@ from typing import List
 from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, Incident, TrafficInterpretation,
     S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation,
-    IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog
+    IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog,
+    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag
 )
 from .services import TrafficInterpretationService
 from .gemini_service import GeminiTrafficAnalyzer
@@ -14,7 +15,10 @@ from .schemas import (
     TrafficInterpretationRequestSchema, TrafficInterpretationResponseSchema, TrafficInterpretationSchema,
     ReportDataSchema, ValidationErrorSchema, ServiceErrorSchema,
     IntersectionStatsSchema, ViewRecordResponseSchema, FavoriteStatusSchema, FavoriteToggleResponseSchema,
-    AdminStatsSchema, IntersectionStatsListSchema
+    AdminStatsSchema, IntersectionStatsListSchema,
+    PolicyProposalSchema, CreateProposalRequestSchema, UpdateProposalRequestSchema, UpdateProposalStatusRequestSchema,
+    ProposalListResponseSchema, ProposalVoteRequestSchema, ProposalVoteResponseSchema, ProposalStatsSchema,
+    ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema
 )
 from django.db.models import Sum, OuterRef, Subquery, Count, Q, F
 from django.db import transaction
@@ -1238,6 +1242,18 @@ def get_admin_intersections(request):
             stats_last_viewed=Value(None, output_field=django.db.models.DateTimeField()),
             stats_last_ai_report=Value(None, output_field=django.db.models.DateTimeField())
         ).order_by('name')[:100]  # 상위 100개만
+        # 교차로와 통계를 한 번의 쿼리로 조회
+        intersections_with_stats = Intersection.objects.select_related('stats').annotate(
+            stats_view_count=Coalesce('stats__view_count', Value(0), output_field=IntegerField()),
+            stats_favorite_count=Coalesce('stats__favorite_count', Value(0), output_field=IntegerField()),
+            stats_ai_report_count=Coalesce('stats__ai_report_count', Value(0), output_field=IntegerField()),
+            stats_last_viewed=F('stats__last_viewed'),
+            stats_last_ai_report=F('stats__last_ai_report')
+        ).filter(
+            Q(stats__favorite_count__gt=0) | 
+            Q(stats__view_count__gt=0) |
+            Q(stats__ai_report_count__gt=0)
+        ).order_by('-stats__ai_report_count', '-stats__favorite_count', '-stats__view_count')[:100]  # 상위 100개만
         
         result = []
         for intersection in intersections_with_stats:
@@ -1681,3 +1697,694 @@ def get_admin_stats(request):
     except Exception as e:
         raise HttpError(500, f"관리자 통계 조회 실패: {str(e)}")
 
+
+
+# ============================
+# 정책제안 관련 API 엔드포인트들
+# ============================
+
+def get_client_ip(request):
+    """클라이언트 IP 주소 추출"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+# 정책제안 목록 조회
+@router.get("/proposals", response=ProposalListResponseSchema)
+@router.get("/proposals/", response=ProposalListResponseSchema)
+def list_proposals(request, 
+                  page: int = 1, 
+                  page_size: int = 10,
+                  category: str = None,
+                  status: str = None,
+                  priority: str = None,
+                  intersection_id: int = None,
+                  search: str = None,
+                  submitted_by: int = None,
+                  date_from: str = None,
+                  date_to: str = None):
+    """정책제안 목록 조회 (페이지네이션, 필터링 지원)"""
+    try:
+        queryset = PolicyProposal.objects.select_related(
+            'submitted_by', 'intersection', 'admin_response_by'
+        ).prefetch_related('tags', 'attachments')
+        
+        # 필터링
+        if category:
+            queryset = queryset.filter(category=category)
+        if status:
+            queryset = queryset.filter(status=status)
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        if intersection_id:
+            queryset = queryset.filter(intersection_id=intersection_id)
+        if submitted_by:
+            queryset = queryset.filter(submitted_by_id=submitted_by)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) | 
+                Q(description__icontains=search) |
+                Q(location__icontains=search)
+            )
+        if date_from:
+            try:
+                from_date = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                queryset = queryset.filter(created_at__gte=from_date)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                to_date = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                queryset = queryset.filter(created_at__lte=to_date)
+            except ValueError:
+                pass
+        
+        # 페이지네이션
+        total_count = queryset.count()
+        offset = (page - 1) * page_size
+        proposals = queryset[offset:offset + page_size]
+        
+        # 응답 데이터 구성
+        results = []
+        for proposal in proposals:
+            coordinates = None
+            if proposal.latitude and proposal.longitude:
+                coordinates = {
+                    'lat': proposal.latitude,
+                    'lng': proposal.longitude
+                }
+            
+            results.append({
+                'id': proposal.id,
+                'title': proposal.title,
+                'description': proposal.description,
+                'category': proposal.category,
+                'priority': proposal.priority,
+                'status': proposal.status,
+                'location': proposal.location,
+                'intersection_id': proposal.intersection_id,
+                'intersection_name': proposal.intersection.name if proposal.intersection else None,
+                'coordinates': coordinates,
+                'submitted_by': proposal.submitted_by_id,
+                'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+                'submitted_by_email': proposal.submitted_by.email,
+                'created_at': proposal.created_at,
+                'updated_at': proposal.updated_at,
+                'admin_response': proposal.admin_response,
+                'admin_response_date': proposal.admin_response_date,
+                'admin_response_by': proposal.admin_response_by.get_full_name() if proposal.admin_response_by else None,
+                'attachments': [
+                    {
+                        'id': att.id,
+                        'file_name': att.file_name,
+                        'file_url': att.file.url,
+                        'file_size': att.file_size,
+                        'uploaded_at': att.uploaded_at
+                    }
+                    for att in proposal.attachments.all()
+                ],
+                'tags': [tag.name for tag in proposal.tags.all()],
+                'votes_count': proposal.votes_count,
+                'views_count': proposal.views_count
+            })
+        
+        # 페이지네이션 링크
+        next_link = None
+        previous_link = None
+        if offset + page_size < total_count:
+            next_link = f"?page={page + 1}&page_size={page_size}"
+        if page > 1:
+            previous_link = f"?page={page - 1}&page_size={page_size}"
+        
+        return {
+            'results': results,
+            'count': total_count,
+            'next': next_link,
+            'previous': previous_link
+        }
+        
+    except Exception as e:
+        raise HttpError(500, f"정책제안 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 내 정책제안 목록 조회
+@router.get("/proposals/my", response=ProposalListResponseSchema, auth=JWTAuth())
+def my_proposals(request, page: int = 1, page_size: int = 10):
+    """내가 제출한 정책제안 목록 조회"""
+    try:
+        queryset = PolicyProposal.objects.filter(
+            submitted_by=request.auth
+        ).select_related(
+            'submitted_by', 'intersection', 'admin_response_by'
+        ).prefetch_related('tags', 'attachments')
+        
+        # 페이지네이션
+        total_count = queryset.count()
+        offset = (page - 1) * page_size
+        proposals = queryset[offset:offset + page_size]
+        
+        # 응답 데이터 구성 (위와 동일한 로직)
+        results = []
+        for proposal in proposals:
+            coordinates = None
+            if proposal.latitude and proposal.longitude:
+                coordinates = {
+                    'lat': proposal.latitude,
+                    'lng': proposal.longitude
+                }
+            
+            results.append({
+                'id': proposal.id,
+                'title': proposal.title,
+                'description': proposal.description,
+                'category': proposal.category,
+                'priority': proposal.priority,
+                'status': proposal.status,
+                'location': proposal.location,
+                'intersection_id': proposal.intersection_id,
+                'intersection_name': proposal.intersection.name if proposal.intersection else None,
+                'coordinates': coordinates,
+                'submitted_by': proposal.submitted_by_id,
+                'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+                'submitted_by_email': proposal.submitted_by.email,
+                'created_at': proposal.created_at,
+                'updated_at': proposal.updated_at,
+                'admin_response': proposal.admin_response,
+                'admin_response_date': proposal.admin_response_date,
+                'admin_response_by': proposal.admin_response_by.get_full_name() if proposal.admin_response_by else None,
+                'attachments': [
+                    {
+                        'id': att.id,
+                        'file_name': att.file_name,
+                        'file_url': att.file.url,
+                        'file_size': att.file_size,
+                        'uploaded_at': att.uploaded_at
+                    }
+                    for att in proposal.attachments.all()
+                ],
+                'tags': [tag.name for tag in proposal.tags.all()],
+                'votes_count': proposal.votes_count,
+                'views_count': proposal.views_count
+            })
+        
+        # 페이지네이션 링크
+        next_link = None
+        previous_link = None
+        if offset + page_size < total_count:
+            next_link = f"?page={page + 1}&page_size={page_size}"
+        if page > 1:
+            previous_link = f"?page={page - 1}&page_size={page_size}"
+        
+        return {
+            'results': results,
+            'count': total_count,
+            'next': next_link,
+            'previous': previous_link
+        }
+        
+    except Exception as e:
+        raise HttpError(500, f"내 정책제안 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 상세 조회
+@router.get("/proposals/{proposal_id}", response=PolicyProposalSchema)
+@router.get("/proposals/{proposal_id}/", response=PolicyProposalSchema)
+def get_proposal(request, proposal_id: int):
+    """정책제안 상세 조회"""
+    try:
+        proposal = PolicyProposal.objects.select_related(
+            'submitted_by', 'intersection', 'admin_response_by'
+        ).prefetch_related('tags', 'attachments').get(id=proposal_id)
+        
+        # 조회수 증가 (비동기적으로 처리)
+        from django.db.models import F
+        PolicyProposal.objects.filter(id=proposal_id).update(views_count=F('views_count') + 1)
+        
+        # 조회 로그 기록
+        client_ip = get_client_ip(request)
+        user = getattr(request, 'auth', None) if hasattr(request, 'auth') else None
+        ProposalViewLog.objects.create(
+            proposal=proposal,
+            user=user,
+            ip_address=client_ip
+        )
+        
+        coordinates = None
+        if proposal.latitude and proposal.longitude:
+            coordinates = {
+                'lat': proposal.latitude,
+                'lng': proposal.longitude
+            }
+        
+        return {
+            'id': proposal.id,
+            'title': proposal.title,
+            'description': proposal.description,
+            'category': proposal.category,
+            'priority': proposal.priority,
+            'status': proposal.status,
+            'location': proposal.location,
+            'intersection_id': proposal.intersection_id,
+            'intersection_name': proposal.intersection.name if proposal.intersection else None,
+            'coordinates': coordinates,
+            'submitted_by': proposal.submitted_by_id,
+            'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+            'submitted_by_email': proposal.submitted_by.email,
+            'created_at': proposal.created_at,
+            'updated_at': proposal.updated_at,
+            'admin_response': proposal.admin_response,
+            'admin_response_date': proposal.admin_response_date,
+            'admin_response_by': proposal.admin_response_by.get_full_name() if proposal.admin_response_by else None,
+            'attachments': [
+                {
+                    'id': att.id,
+                    'file_name': att.file_name,
+                    'file_url': att.file.url,
+                    'file_size': att.file_size,
+                    'uploaded_at': att.uploaded_at
+                }
+                for att in proposal.attachments.all()
+            ],
+            'tags': [tag.name for tag in proposal.tags.all()],
+            'votes_count': proposal.votes_count,
+            'views_count': proposal.views_count + 1  # 방금 증가된 조회수 반영
+        }
+        
+    except PolicyProposal.DoesNotExist:
+        raise HttpError(404, "정책제안을 찾을 수 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"정책제안 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 생성
+@router.post("/proposals", response=PolicyProposalSchema, auth=JWTAuth())
+@router.post("/proposals/", response=PolicyProposalSchema, auth=JWTAuth())
+def create_proposal(request, payload: CreateProposalRequestSchema):
+    """정책제안 생성"""
+    try:
+        with transaction.atomic():
+            # 좌표 처리
+            latitude = None
+            longitude = None
+            if payload.coordinates:
+                latitude = payload.coordinates.lat
+                longitude = payload.coordinates.lng
+            
+            # 정책제안 생성
+            proposal = PolicyProposal.objects.create(
+                title=payload.title,
+                description=payload.description,
+                category=payload.category,
+                priority=payload.priority,
+                location=payload.location,
+                intersection_id=payload.intersection_id,
+                latitude=latitude,
+                longitude=longitude,
+                submitted_by=request.auth
+            )
+            
+            # 태그 처리
+            if payload.tags:
+                for tag_name in payload.tags:
+                    tag, created = ProposalTag.objects.get_or_create(name=tag_name.strip())
+                    tag.proposals.add(proposal)
+            
+            # 응답 데이터 구성
+            coordinates = None
+            if proposal.latitude and proposal.longitude:
+                coordinates = {
+                    'lat': proposal.latitude,
+                    'lng': proposal.longitude
+                }
+            
+            return {
+                'id': proposal.id,
+                'title': proposal.title,
+                'description': proposal.description,
+                'category': proposal.category,
+                'priority': proposal.priority,
+                'status': proposal.status,
+                'location': proposal.location,
+                'intersection_id': proposal.intersection_id,
+                'intersection_name': proposal.intersection.name if proposal.intersection else None,
+                'coordinates': coordinates,
+                'submitted_by': proposal.submitted_by_id,
+                'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+                'submitted_by_email': proposal.submitted_by.email,
+                'created_at': proposal.created_at,
+                'updated_at': proposal.updated_at,
+                'admin_response': proposal.admin_response,
+                'admin_response_date': proposal.admin_response_date,
+                'admin_response_by': None,
+                'attachments': [],
+                'tags': [tag.name for tag in proposal.tags.all()],
+                'votes_count': proposal.votes_count,
+                'views_count': proposal.views_count
+            }
+            
+    except Exception as e:
+        raise HttpError(500, f"정책제안 생성 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 수정 (본인만)
+@router.patch("/proposals/{proposal_id}", response=PolicyProposalSchema, auth=JWTAuth())
+@router.patch("/proposals/{proposal_id}/", response=PolicyProposalSchema, auth=JWTAuth())
+def update_proposal(request, proposal_id: int, payload: UpdateProposalRequestSchema):
+    """정책제안 수정 (본인이 작성한 경우만)"""
+    try:
+        proposal = PolicyProposal.objects.get(id=proposal_id, submitted_by=request.auth)
+        
+        # 대기 중 상태만 수정 가능
+        if proposal.status != 'pending':
+            raise HttpError(403, "대기 중 상태의 제안만 수정할 수 있습니다.")
+        
+        with transaction.atomic():
+            # 필드 업데이트
+            if payload.title is not None:
+                proposal.title = payload.title
+            if payload.description is not None:
+                proposal.description = payload.description
+            if payload.category is not None:
+                proposal.category = payload.category
+            if payload.priority is not None:
+                proposal.priority = payload.priority
+            if payload.location is not None:
+                proposal.location = payload.location
+            if payload.intersection_id is not None:
+                proposal.intersection_id = payload.intersection_id
+            
+            # 좌표 처리
+            if payload.coordinates is not None:
+                proposal.latitude = payload.coordinates.lat
+                proposal.longitude = payload.coordinates.lng
+            
+            proposal.save()
+            
+            # 태그 처리
+            if payload.tags is not None:
+                # 기존 태그 제거
+                proposal.tags.clear()
+                # 새 태그 추가
+                for tag_name in payload.tags:
+                    tag, created = ProposalTag.objects.get_or_create(name=tag_name.strip())
+                    tag.proposals.add(proposal)
+            
+            # 응답 데이터 구성
+            coordinates = None
+            if proposal.latitude and proposal.longitude:
+                coordinates = {
+                    'lat': proposal.latitude,
+                    'lng': proposal.longitude
+                }
+            
+            return {
+                'id': proposal.id,
+                'title': proposal.title,
+                'description': proposal.description,
+                'category': proposal.category,
+                'priority': proposal.priority,
+                'status': proposal.status,
+                'location': proposal.location,
+                'intersection_id': proposal.intersection_id,
+                'intersection_name': proposal.intersection.name if proposal.intersection else None,
+                'coordinates': coordinates,
+                'submitted_by': proposal.submitted_by_id,
+                'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+                'submitted_by_email': proposal.submitted_by.email,
+                'created_at': proposal.created_at,
+                'updated_at': proposal.updated_at,
+                'admin_response': proposal.admin_response,
+                'admin_response_date': proposal.admin_response_date,
+                'admin_response_by': proposal.admin_response_by.get_full_name() if proposal.admin_response_by else None,
+                'attachments': [
+                    {
+                        'id': att.id,
+                        'file_name': att.file_name,
+                        'file_url': att.file.url,
+                        'file_size': att.file_size,
+                        'uploaded_at': att.uploaded_at
+                    }
+                    for att in proposal.attachments.all()
+                ],
+                'tags': [tag.name for tag in proposal.tags.all()],
+                'votes_count': proposal.votes_count,
+                'views_count': proposal.views_count
+            }
+            
+    except PolicyProposal.DoesNotExist:
+        raise HttpError(404, "정책제안을 찾을 수 없거나 수정 권한이 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"정책제안 수정 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 삭제 (본인만)
+@router.delete("/proposals/{proposal_id}", auth=JWTAuth())
+@router.delete("/proposals/{proposal_id}/", auth=JWTAuth())
+def delete_proposal(request, proposal_id: int):
+    """정책제안 삭제 (본인이 작성한 경우만)"""
+    try:
+        proposal = PolicyProposal.objects.get(id=proposal_id, submitted_by=request.auth)
+        
+        # 대기 중 상태만 삭제 가능
+        if proposal.status != 'pending':
+            raise HttpError(403, "대기 중 상태의 제안만 삭제할 수 있습니다.")
+        
+        proposal.delete()
+        return {"success": True, "message": "정책제안이 삭제되었습니다."}
+        
+    except PolicyProposal.DoesNotExist:
+        raise HttpError(404, "정책제안을 찾을 수 없거나 삭제 권한이 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"정책제안 삭제 중 오류가 발생했습니다: {str(e)}")
+
+# 관리자용: 정책제안 상태 업데이트
+@router.patch("/proposals/{proposal_id}/status", response=PolicyProposalSchema, auth=JWTAuth())
+def update_proposal_status(request, proposal_id: int, payload: UpdateProposalStatusRequestSchema):
+    """관리자용: 정책제안 상태 업데이트"""
+    try:
+        # 관리자 권한 체크 (is_staff 또는 is_superuser)
+        if not (request.auth.is_staff or request.auth.is_superuser):
+            raise HttpError(403, "관리자 권한이 필요합니다.")
+        
+        proposal = PolicyProposal.objects.get(id=proposal_id)
+        
+        with transaction.atomic():
+            proposal.status = payload.status
+            if payload.admin_response:
+                proposal.admin_response = payload.admin_response
+                proposal.admin_response_date = timezone.now()
+                proposal.admin_response_by = request.auth
+            
+            proposal.save()
+            
+            # 응답 데이터 구성
+            coordinates = None
+            if proposal.latitude and proposal.longitude:
+                coordinates = {
+                    'lat': proposal.latitude,
+                    'lng': proposal.longitude
+                }
+            
+            return {
+                'id': proposal.id,
+                'title': proposal.title,
+                'description': proposal.description,
+                'category': proposal.category,
+                'priority': proposal.priority,
+                'status': proposal.status,
+                'location': proposal.location,
+                'intersection_id': proposal.intersection_id,
+                'intersection_name': proposal.intersection.name if proposal.intersection else None,
+                'coordinates': coordinates,
+                'submitted_by': proposal.submitted_by_id,
+                'submitted_by_name': proposal.submitted_by.get_full_name() or proposal.submitted_by.username,
+                'submitted_by_email': proposal.submitted_by.email,
+                'created_at': proposal.created_at,
+                'updated_at': proposal.updated_at,
+                'admin_response': proposal.admin_response,
+                'admin_response_date': proposal.admin_response_date,
+                'admin_response_by': proposal.admin_response_by.get_full_name() if proposal.admin_response_by else None,
+                'attachments': [
+                    {
+                        'id': att.id,
+                        'file_name': att.file_name,
+                        'file_url': att.file.url,
+                        'file_size': att.file_size,
+                        'uploaded_at': att.uploaded_at
+                    }
+                    for att in proposal.attachments.all()
+                ],
+                'tags': [tag.name for tag in proposal.tags.all()],
+                'votes_count': proposal.votes_count,
+                'views_count': proposal.views_count
+            }
+            
+    except PolicyProposal.DoesNotExist:
+        raise HttpError(404, "정책제안을 찾을 수 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"정책제안 상태 업데이트 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안에 투표하기
+@router.post("/proposals/{proposal_id}/vote", response=ProposalVoteResponseSchema, auth=JWTAuth())
+@router.post("/proposals/{proposal_id}/vote/", response=ProposalVoteResponseSchema, auth=JWTAuth())
+def vote_proposal(request, proposal_id: int, payload: ProposalVoteRequestSchema):
+    """정책제안에 투표하기 (추천/비추천)"""
+    try:
+        proposal = PolicyProposal.objects.get(id=proposal_id)
+        
+        if payload.vote_type not in ['up', 'down']:
+            raise HttpError(400, "잘못된 투표 타입입니다.")
+        
+        with transaction.atomic():
+            # 기존 투표 확인
+            existing_vote = ProposalVote.objects.filter(
+                proposal=proposal,
+                user=request.auth
+            ).first()
+            
+            if existing_vote:
+                if existing_vote.vote_type == payload.vote_type:
+                    # 같은 투표면 취소
+                    existing_vote.delete()
+                    user_vote = None
+                else:
+                    # 다른 투표면 변경
+                    existing_vote.vote_type = payload.vote_type
+                    existing_vote.save()
+                    user_vote = payload.vote_type
+            else:
+                # 새 투표 생성
+                ProposalVote.objects.create(
+                    proposal=proposal,
+                    user=request.auth,
+                    vote_type=payload.vote_type
+                )
+                user_vote = payload.vote_type
+            
+            # 투표 수 재계산
+            up_votes = ProposalVote.objects.filter(proposal=proposal, vote_type='up').count()
+            down_votes = ProposalVote.objects.filter(proposal=proposal, vote_type='down').count()
+            proposal.votes_count = up_votes - down_votes
+            proposal.save()
+            
+            return {
+                'votes_count': proposal.votes_count,
+                'user_vote': user_vote
+            }
+            
+    except PolicyProposal.DoesNotExist:
+        raise HttpError(404, "정책제안을 찾을 수 없습니다.")
+    except Exception as e:
+        raise HttpError(500, f"투표 처리 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 조회수 증가 (별도 엔드포인트)
+@router.post("/proposals/{proposal_id}/view")
+@router.post("/proposals/{proposal_id}/view/")
+def increase_proposal_views(request, proposal_id: int):
+    """정책제안 조회수 증가"""
+    try:
+        from django.db.models import F
+        PolicyProposal.objects.filter(id=proposal_id).update(views_count=F('views_count') + 1)
+        return {"success": True, "message": "조회수가 증가되었습니다."}
+        
+    except Exception as e:
+        raise HttpError(500, f"조회수 증가 중 오류가 발생했습니다: {str(e)}")
+
+# 정책제안 통계 (관리자용)
+@router.get("/proposals/stats", response=ProposalStatsSchema, auth=JWTAuth())
+def get_proposal_stats(request):
+    """정책제안 통계 (관리자용)"""
+    try:
+        # 관리자 권한 체크
+        if not (request.auth.is_staff or request.auth.is_superuser):
+            raise HttpError(403, "관리자 권한이 필요합니다.")
+        
+        from django.db.models import Count
+        from django.db.models.functions import TruncMonth
+        from collections import defaultdict
+        
+        # 전체 통계
+        total_proposals = PolicyProposal.objects.count()
+        pending_proposals = PolicyProposal.objects.filter(status='pending').count()
+        completed_proposals = PolicyProposal.objects.filter(status='completed').count()
+        
+        # 카테고리별 통계
+        category_stats = PolicyProposal.objects.values('category').annotate(
+            count=Count('id')
+        ).order_by('category')
+        proposals_by_category = {item['category']: item['count'] for item in category_stats}
+        
+        # 상태별 통계
+        status_stats = PolicyProposal.objects.values('status').annotate(
+            count=Count('id')
+        ).order_by('status')
+        proposals_by_status = {item['status']: item['count'] for item in status_stats}
+        
+        # 월별 통계 (최근 12개월)
+        monthly_stats = PolicyProposal.objects.annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
+        
+        monthly_proposals = []
+        for item in monthly_stats:
+            monthly_proposals.append({
+                'month': item['month'].strftime('%Y-%m'),
+                'count': item['count']
+            })
+        
+        return {
+            'total_proposals': total_proposals,
+            'pending_proposals': pending_proposals,
+            'completed_proposals': completed_proposals,
+            'proposals_by_category': proposals_by_category,
+            'proposals_by_status': proposals_by_status,
+            'monthly_proposals': monthly_proposals
+        }
+        
+    except Exception as e:
+        raise HttpError(500, f"정책제안 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 카테고리별 제안 수 조회
+@router.get("/proposals/by-category", response=List[ProposalByCategorySchema])
+def get_proposals_by_category(request):
+    """카테고리별 제안 수 조회"""
+    try:
+        category_stats = PolicyProposal.objects.values('category').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        return [
+            {
+                'category': item['category'],
+                'count': item['count']
+            }
+            for item in category_stats
+        ]
+        
+    except Exception as e:
+        raise HttpError(500, f"카테고리별 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 교차로별 제안 수 조회
+@router.get("/proposals/by-intersection", response=List[ProposalByIntersectionSchema])
+def get_proposals_by_intersection(request):
+    """교차로별 제안 수 조회"""
+    try:
+        intersection_stats = PolicyProposal.objects.filter(
+            intersection__isnull=False
+        ).values(
+            'intersection_id', 'intersection__name'
+        ).annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        return [
+            {
+                'intersection_id': item['intersection_id'],
+                'intersection_name': item['intersection__name'],
+                'count': item['count']
+            }
+            for item in intersection_stats
+        ]
+        
+    except Exception as e:
+        raise HttpError(500, f"교차로별 통계 조회 중 오류가 발생했습니다: {str(e)}")
