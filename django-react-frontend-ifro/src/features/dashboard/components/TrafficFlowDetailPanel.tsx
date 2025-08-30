@@ -177,12 +177,22 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
         // 로컬 상태도 업데이트 (Dashboard의 함수 호출)
         if (onAddFlowToFavorites) {
           // routeData가 있고 계산이 완료된 경우 해당 데이터 사용, 없으면 기본 계산 함수 사용
-          const distance = routeData && routeData.source !== "calculating" 
-            ? parseFloat(routeData.distance.replace(" km", "").replace("(계산 중...)", "")) 
-            : calculateDistance(from, to);
-          const travelTime = routeData && routeData.source !== "calculating"
-            ? parseInt(routeData.duration.replace(" min", "").replace("(계산 중...)", ""))
-            : calculateTravelTime(from, to);
+          const distance =
+            routeData && routeData.source !== "calculating"
+              ? parseFloat(
+                  routeData.distance
+                    .replace(" km", "")
+                    .replace("(계산 중...)", "")
+                )
+              : calculateDistance(from, to);
+          const travelTime =
+            routeData && routeData.source !== "calculating"
+              ? parseInt(
+                  routeData.duration
+                    .replace(" min", "")
+                    .replace("(계산 중...)", "")
+                )
+              : calculateTravelTime(from, to);
 
           const flow: FavoriteFlow = {
             id: Date.now(), // 임시 ID (실제로는 서버에서 생성)
@@ -316,7 +326,10 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
                           ).toFixed(2)}
                     </p>
                     <p className="text-xs text-gray-500">
-                      km {routeData && routeData.source === "calculating" ? "(계산 중...)" : ""}
+                      km{" "}
+                      {routeData && routeData.source === "calculating"
+                        ? "(계산 중...)"
+                        : ""}
                     </p>
                   </div>
                 </div>
@@ -335,7 +348,10 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
                           )}
                     </p>
                     <p className="text-xs text-gray-500">
-                      min {routeData && routeData.source === "calculating" ? "(계산 중...)" : ""}
+                      min{" "}
+                      {routeData && routeData.source === "calculating"
+                        ? "(계산 중...)"
+                        : ""}
                     </p>
                   </div>
                 </div>
@@ -492,12 +508,20 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
                       <p className="text-xs text-gray-500">
                         {routeData && routeData.source !== "calculating"
                           ? `${routeData.distance} • ${routeData.duration}`
-                          : `${calculateDistance(selectedPoints[0], selectedPoints[1]).toFixed(1)}km • ${calculateTravelTime(selectedPoints[0], selectedPoints[1])}분 (계산중...)`}
+                          : `${calculateDistance(
+                              selectedPoints[0],
+                              selectedPoints[1]
+                            ).toFixed(1)}km • ${calculateTravelTime(
+                              selectedPoints[0],
+                              selectedPoints[1]
+                            )}분 (계산중...)`}
                       </p>
                     </div>
                     <div className="text-right">
                       <span className="text-xs px-3 py-1 rounded-full font-medium bg-blue-100 text-blue-700">
-                        {routeData && routeData.source === "osrm" ? "원활" : "분석중"}
+                        {routeData && routeData.source === "osrm"
+                          ? "원활"
+                          : "분석중"}
                       </span>
                     </div>
                   </div>

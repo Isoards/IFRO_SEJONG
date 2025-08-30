@@ -269,18 +269,21 @@ export const TrafficFlowSidebar: React.FC<TrafficFlowSidebarProps> = ({
                         <div className="flex justify-between">
                           <span>실제거리:</span>
                           <span className="font-medium">
-                            {routeInfo.source === "calculating" 
-                              ? "계산중..." 
+                            {routeInfo.source === "calculating"
+                              ? "계산중..."
                               : routeInfo.distance}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span>우회율:</span>
                           <span className="font-medium text-blue-600">
-                            {routeInfo.source === "calculating" || routeInfo.source !== "osrm"
+                            {routeInfo.source === "calculating" ||
+                            routeInfo.source !== "osrm"
                               ? "계산중..."
                               : `${(
-                                  (parseFloat(routeInfo.distance.replace(" km", "")) /
+                                  (parseFloat(
+                                    routeInfo.distance.replace(" km", "")
+                                  ) /
                                     calculateDistance(
                                       selectedPoints[0],
                                       selectedPoints[1]

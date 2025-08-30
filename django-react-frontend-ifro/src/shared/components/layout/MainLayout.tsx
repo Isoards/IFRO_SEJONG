@@ -8,6 +8,7 @@ import {
   LogOut,
   User,
   BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import { getCurrentUser } from "../../services/user";
 
@@ -49,12 +50,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navItems = [
     { path: "/dashboard", icon: Home, label: t("navigation.dashboard") },
     { path: "/proposals", icon: FileText, label: t("navigation.proposals") },
+    { path: "/admin", icon: TrendingUp, label: t("navigation.statistics") },
     { path: "/settings", icon: Settings, label: t("navigation.settings") },
   ];
 
   // 관리자용 메뉴
   if (currentUser?.role === "admin") {
-    navItems.splice(2, 0, {
+    navItems.splice(3, 0, {
       path: "/admin/proposals",
       icon: BarChart3,
       label: t("navigation.proposalManagement"),
@@ -67,12 +69,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       <aside className="w-64 bg-white shadow-sm border-r border-gray-200 flex flex-col relative">
         <div className="p-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">IFRO</span>
+            <div className="w-48 h-12 flex items-center justify-center">
+              <img
+                src="/WILL_logo.svg"
+                alt="WILL Logo"
+                className="w-48 h-12 object-contain"
+              />
             </div>
-            <h1 className="text-xl font-bold text-gray-800">
-              {t("common.trafficSystem")}
-            </h1>
           </div>
         </div>
 
