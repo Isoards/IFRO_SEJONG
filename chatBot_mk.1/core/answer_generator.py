@@ -51,6 +51,7 @@ class ModelType(Enum):
     OLLAMA = "ollama"           # Ollama 서비스
     LLAMA_CPP = "llama_cpp"     # llama.cpp 기반
     HUGGINGFACE = "huggingface" # HuggingFace transformers
+    GEMINI = "gemini"           # Google Gemini API
 
 @dataclass
 class GenerationConfig:
@@ -111,7 +112,7 @@ class OllamaInterface(LocalLLMInterface):
     ollama pull codellama:13b
     """
     
-    def __init__(self, model_name: str = "llama2:7b", config: GenerationConfig = None):
+    def __init__(self, model_name: str = "mistral:latest", config: GenerationConfig = None):
         super().__init__(model_name, config or GenerationConfig())
         self.client = None
     
@@ -122,7 +123,9 @@ class OllamaInterface(LocalLLMInterface):
             return False
         
         try:
-            self.client = ollama.Client()
+            # Docker 환경에서 Ollama 서비스 연결
+            ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            self.client = ollama.Client(host=ollama_host)
             
             # 모델이 설치되어 있는지 확인
             models = self.client.list()
@@ -140,8 +143,46 @@ class OllamaInterface(LocalLLMInterface):
             
             if self.model_name not in model_names:
                 logger.warning(f"모델 {self.model_name}이 설치되지 않았습니다.")
-                logger.info(f"다음 명령어로 설치하세요: ollama pull {self.model_name}")
-                return False
+                logger.info(f"모델을 자동으로 다운로드합니다: ollama pull {self.model_name}")
+                
+                try:
+                    # 모델 자동 다운로드
+                    import subprocess
+                    import time
+                    
+                    # Docker 환경에서 ollama pull 명령어 실행
+                    result = subprocess.run(
+                        ["docker", "exec", "ollama", "ollama", "pull", self.model_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=600  # 10분 타임아웃
+                    )
+                    
+                    if result.returncode == 0:
+                        logger.info(f"모델 다운로드 완료: {self.model_name}")
+                        # 다운로드 후 다시 모델 목록 확인
+                        time.sleep(5)
+                        models = self.client.list()
+                        model_names = []
+                        if 'models' in models:
+                            for model in models['models']:
+                                if 'name' in model:
+                                    model_names.append(model['name'])
+                                elif 'model' in model:
+                                    model_names.append(model['model'])
+                        
+                        if self.model_name in model_names:
+                            logger.info(f"모델 확인 완료: {self.model_name}")
+                        else:
+                            logger.error(f"모델 다운로드 후에도 확인되지 않음: {self.model_name}")
+                            return False
+                    else:
+                        logger.error(f"모델 다운로드 실패: {result.stderr}")
+                        return False
+                        
+                except Exception as e:
+                    logger.error(f"모델 다운로드 중 오류: {e}")
+                    return False
             
             self.is_loaded = True
             logger.info(f"Ollama 모델 로드 완료: {self.model_name}")
@@ -436,6 +477,22 @@ class AnswerGenerator:
         한국어에 최적화된 프롬프트를 사용합니다.
         """
         return {
+            "greeting": """당신은 친근하고 도움이 되는 AI 어시스턴트입니다.
+
+사용자의 인사말에 대해 자연스럽고 따뜻하게 응답해주세요.
+
+사용자: {question}
+
+응답 규칙:
+1. 반드시 한국어로만 답변하세요
+2. 자연스럽고 친근한 톤으로 응답하세요
+3. 사용자의 인사에 맞는 적절한 응답을 해주세요
+4. 1-2문장으로 간결하게 답변하세요
+5. 시간대에 따른 적절한 인사를 포함할 수 있습니다
+6. "안녕하세요", "반갑습니다", "도움이 필요하시면 언제든 말씀해주세요" 등의 표현을 사용하세요
+
+답변:""",
+
             "basic": """당신은 한국어 문서를 기반으로 질문에 답변하는 전문가입니다.
 
 주어진 문서 내용을 정확히 읽고 질문에 답변해주세요.
@@ -452,6 +509,8 @@ class AnswerGenerator:
 4. 문서에 없는 내용은 "문서에서 해당 정보를 찾을 수 없습니다"라고 답변하세요
 5. 2-4문장으로 간결하고 명확하게 답변하세요
 6. 반드시 완전한 문장으로 끝내세요
+7. 답변은 자연스럽고 이해하기 쉽게 작성하세요
+8. 필요시 문서의 구체적인 내용을 인용하세요
 
 답변:""",
 
@@ -550,8 +609,11 @@ class AnswerGenerator:
                 logger.info(f"캐시된 답변 사용: {time.time() - start_time:.3f}초")
                 return cached_answer
         
-        # 2. 컨텍스트 구성
-        context = self._build_context(relevant_chunks)
+        # 2. 컨텍스트 구성 (인사말이 아닌 경우에만)
+        if analyzed_question.question_type.value != "greeting":
+            context = self._build_context(relevant_chunks)
+        else:
+            context = ""  # 인사말의 경우 컨텍스트 불필요
         
         # 3. 프롬프트 선택 및 구성
         prompt = self._build_prompt(
@@ -685,6 +747,12 @@ class AnswerGenerator:
             return self.prompt_templates[template_key].format(
                 conversation_history=history_text,
                 context=context,
+                question=question
+            )
+        
+        # 인사말인 경우 특별 처리
+        if question_type.value == "greeting":
+            return self.prompt_templates["greeting"].format(
                 question=question
             )
         
@@ -1266,6 +1334,125 @@ class AnswerGenerator:
     def unload_model(self):
         """모델 언로드"""
         self.llm.unload_model()
+    
+    def generate_answer_from_chunks(self, question: str, chunks: List[TextChunk], 
+                                  model_type: Optional[ModelType] = None) -> Answer:
+        """
+        청크들을 기반으로 답변 생성
+        
+        Args:
+            question: 질문
+            chunks: 관련 청크들
+            model_type: 사용할 모델 타입 (None이면 기본 모델 사용)
+            
+        Returns:
+            생성된 답변
+        """
+        start_time = time.time()
+        
+        if not chunks:
+            return Answer(
+                content="관련된 문서 내용을 찾을 수 없습니다.",
+                confidence_score=0.0,
+                used_chunks=[],
+                generation_time=time.time() - start_time,
+                model_name=self.llm.model_name
+            )
+        
+        # 컨텍스트 구성
+        context_parts = []
+        used_chunk_ids = []
+        
+        for chunk in chunks:
+            context_parts.append(f"문서 내용: {chunk.content}")
+            used_chunk_ids.append(chunk.chunk_id)
+        
+        context = "\n\n".join(context_parts)
+        
+        # 프롬프트 구성
+        prompt = f"""다음 문서 내용을 바탕으로 질문에 답변해주세요.
+
+문서 내용:
+{context}
+
+질문: {question}
+
+답변:"""
+        
+        try:
+            # 답변 생성
+            response = self.llm.generate(prompt)
+            
+            return Answer(
+                content=response,
+                confidence_score=0.8,  # 기본 신뢰도
+                used_chunks=used_chunk_ids,
+                generation_time=time.time() - start_time,
+                model_name=self.llm.model_name
+            )
+            
+        except Exception as e:
+            logger.error(f"청크 기반 답변 생성 실패: {e}")
+            return Answer(
+                content=f"답변 생성 중 오류가 발생했습니다: {str(e)}",
+                confidence_score=0.0,
+                used_chunks=used_chunk_ids,
+                generation_time=time.time() - start_time,
+                model_name=self.llm.model_name
+            )
+    
+    def generate_answer_from_sql_result(self, question: str, sql_result: Dict, 
+                                      model_type: Optional[ModelType] = None) -> Answer:
+        """
+        SQL 결과를 기반으로 답변 생성
+        
+        Args:
+            question: 원본 질문
+            sql_result: SQL 실행 결과
+            model_type: 사용할 모델 타입
+            
+        Returns:
+            생성된 답변
+        """
+        start_time = time.time()
+        
+        try:
+            # SQL 결과를 텍스트로 변환
+            if isinstance(sql_result, dict):
+                result_text = json.dumps(sql_result, ensure_ascii=False, indent=2)
+            else:
+                result_text = str(sql_result)
+            
+            # 프롬프트 구성
+            prompt = f"""다음 데이터베이스 조회 결과를 바탕으로 질문에 답변해주세요.
+
+질문: {question}
+
+조회 결과:
+{result_text}
+
+답변:"""
+            
+            # 답변 생성
+            response = self.llm.generate(prompt)
+            
+            return Answer(
+                content=response,
+                confidence_score=0.9,  # SQL 결과 기반이므로 높은 신뢰도
+                used_chunks=[],
+                generation_time=time.time() - start_time,
+                model_name=self.llm.model_name
+            )
+            
+        except Exception as e:
+            logger.error(f"SQL 결과 기반 답변 생성 실패: {e}")
+            return Answer(
+                content=f"SQL 결과 분석 중 오류가 발생했습니다: {str(e)}",
+                confidence_score=0.0,
+                used_chunks=[],
+                generation_time=time.time() - start_time,
+                model_name=self.llm.model_name
+            )
 
 # 파인튜닝 관련 함수들
 def prepare_finetuning_data(qa_pairs: List[Dict], 

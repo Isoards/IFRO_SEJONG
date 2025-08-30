@@ -12,7 +12,7 @@ import os
 import logging
 import time
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent))
@@ -27,6 +27,7 @@ from core.sql_generator import SQLGenerator, DatabaseSchema
 from core.dual_pipeline_processor import DualPipelineProcessor
 from api.endpoints import run_server
 from utils.file_manager import PDFFileManager, setup_pdf_storage
+from utils.keyword_enhancer import KeywordEnhancer
 
 # 로깅 설정
 logging.basicConfig(
@@ -72,6 +73,7 @@ class PDFQASystem:
         self.sql_generator: Optional[SQLGenerator] = None
         self.dual_pipeline_processor: Optional[DualPipelineProcessor] = None
         self.file_manager: Optional[PDFFileManager] = None
+        self.keyword_enhancer: Optional[KeywordEnhancer] = None
         
         logger.info(f"PDF QA 시스템 초기화: {model_type}/{model_name}")
     
@@ -92,10 +94,7 @@ class PDFQASystem:
             logger.info("✓ PDF 프로세서 초기화 완료")
             
             # 2. 벡터 저장소 초기화
-            self.vector_store = HybridVectorStore(
-                embedding_dimension=768,  # 기본 임베딩 차원
-                persist_directory="./vector_store"
-            )
+            self.vector_store = HybridVectorStore()
             
             # 기존 벡터 데이터 로드 시도
             vector_store_path = "./vector_store"
@@ -129,8 +128,8 @@ class PDFQASystem:
             
             # 모델 로드
             if not self.answer_generator.load_model():
-                logger.error("답변 생성 모델 로드 실패")
-                return False
+                logger.warning("답변 생성 모델 로드 실패 - PDF 처리만 진행합니다")
+                # 모델 로드 실패해도 PDF 처리는 계속 진행
             
             logger.info("✓ 답변 생성기 초기화 완료")
             
@@ -174,9 +173,22 @@ class PDFQASystem:
             # 8. 파일 매니저 초기화
             self.file_manager = setup_pdf_storage()
             logger.info("✓ 파일 매니저 초기화 완료")
+
+            # 9. 키워드 향상기 초기화 (다중 표현 인덱싱 지원)
+            self.keyword_enhancer = KeywordEnhancer(domain="traffic")
+            logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
             
-            # 9. data 폴더의 PDF 파일들 자동 처리
+            # 10. data 폴더의 PDF 파일들 자동 처리
+            logger.info("=" * 60)
+            logger.info("data 폴더의 PDF 파일들을 벡터 저장소에 업로드합니다...")
+            logger.info("=" * 60)
             self.process_data_folder_pdfs()
+            logger.info("=" * 60)
+            logger.info("PDF 업로드 완료!")
+            logger.info("=" * 60)
+            
+            # 11. 다중 표현 인덱싱 통합
+            self._integrate_multi_expression_indexing()
             
             logger.info("모든 컴포넌트 초기화 완료!")
             return True
@@ -185,23 +197,49 @@ class PDFQASystem:
             logger.error(f"컴포넌트 초기화 실패: {e}")
             return False
     
+    def _integrate_multi_expression_indexing(self):
+        """다중 표현 인덱싱 통합"""
+        try:
+            # Dual Pipeline 프로세서에 표현 향상기 연결
+            if hasattr(self.dual_pipeline_processor, 'expression_enhancer'):
+                self.dual_pipeline_processor.expression_enhancer = self.keyword_enhancer
+            
+            # 벡터 저장소에 표현 향상기 연결
+            if hasattr(self.vector_store, 'expression_enhancer'):
+                self.vector_store.expression_enhancer = self.keyword_enhancer
+            
+            logger.info("✓ 다중 표현 인덱싱 통합 완료")
+            
+        except Exception as e:
+            logger.warning(f"다중 표현 인덱싱 통합 실패 (무시됨): {e}")
+    
     def process_data_folder_pdfs(self):
         """data 폴더의 모든 PDF 파일들을 자동으로 처리"""
-        data_folder = "./data"
-        if not os.path.exists(data_folder):
-            logger.warning("data 폴더가 존재하지 않습니다.")
-            return
-        
+        # data 폴더와 data/pdfs 폴더 모두 확인
+        data_folders = ["./data", "./data/pdfs"]
         pdf_files = []
-        for file in os.listdir(data_folder):
-            if file.lower().endswith('.pdf'):
-                pdf_files.append(os.path.join(data_folder, file))
+        
+        for data_folder in data_folders:
+            if not os.path.exists(data_folder):
+                logger.warning(f"{data_folder} 폴더가 존재하지 않습니다.")
+                continue
+            
+            # 재귀적으로 PDF 파일 찾기
+            for root, dirs, files in os.walk(data_folder):
+                for file in files:
+                    if file.lower().endswith('.pdf'):
+                        pdf_path = os.path.join(root, file)
+                        pdf_files.append(pdf_path)
         
         if not pdf_files:
-            logger.info("data 폴더에 PDF 파일이 없습니다.")
+            logger.info("data 폴더에서 PDF 파일을 찾을 수 없습니다.")
             return
         
         logger.info(f"data 폴더에서 {len(pdf_files)}개의 PDF 파일을 발견했습니다.")
+        
+        processed_count = 0
+        skipped_count = 0
+        error_count = 0
         
         for pdf_path in pdf_files:
             try:
@@ -209,22 +247,47 @@ class PDFQASystem:
                 pdf_id = os.path.basename(pdf_path)
                 if self.is_pdf_already_processed(pdf_id):
                     logger.info(f"이미 처리된 PDF 건너뛰기: {pdf_id}")
+                    skipped_count += 1
                     continue
                 
                 logger.info(f"PDF 처리 중: {pdf_id}")
                 result = self.process_pdf(pdf_path)
                 logger.info(f"✓ PDF 처리 완료: {result['filename']} ({result['total_chunks']}개 청크)")
+                processed_count += 1
                 
             except Exception as e:
                 logger.error(f"PDF 처리 실패 {pdf_path}: {e}")
+                error_count += 1
+        
+        logger.info(f"PDF 처리 완료: {processed_count}개 처리됨, {skipped_count}개 건너뜀, {error_count}개 오류")
     
     def is_pdf_already_processed(self, pdf_id: str) -> bool:
         """PDF가 이미 처리되었는지 확인"""
         try:
+            if not self.vector_store:
+                return False
+            
             # 벡터 저장소에서 해당 PDF의 청크들이 있는지 확인
-            # 간단한 방법으로 파일명 기반 확인
-            return False  # 일단 모든 PDF를 다시 처리하도록 설정
-        except:
+            # 메타데이터에서 파일명으로 검색
+            if hasattr(self.vector_store, 'search_by_metadata'):
+                results = self.vector_store.search_by_metadata(
+                    {"filename": pdf_id}, 
+                    limit=1
+                )
+                return len(results) > 0
+            
+            # 기본 검색으로 확인
+            if hasattr(self.vector_store, 'search'):
+                # 파일명을 포함한 검색어로 검색
+                search_results = self.vector_store.search(
+                    pdf_id,  # 파일명을 검색어로 사용
+                    top_k=1
+                )
+                return len(search_results) > 0
+            
+            return False
+        except Exception as e:
+            logger.warning(f"PDF 처리 상태 확인 실패 ({pdf_id}): {e}")
             return False
     
     def process_pdf(self, pdf_path: str) -> Dict:
@@ -247,8 +310,11 @@ class PDFQASystem:
             # 1. PDF 텍스트 추출 및 임베딩 생성
             chunks, metadata = self.pdf_processor.process_pdf(pdf_path)
             
-            # 2. 벡터 저장소에 추가
-            self.vector_store.add_chunks(chunks)
+            # 2. 벡터 저장소에 추가 (다중 표현 인덱싱 지원)
+            if hasattr(self.vector_store, 'add_chunks_with_expressions'):
+                self.vector_store.add_chunks_with_expressions(chunks, self.keyword_enhancer)
+            else:
+                self.vector_store.add_chunks(chunks)
             
             # 3. 저장소 저장
             self.vector_store.save()
@@ -509,6 +575,66 @@ class PDFQASystem:
         except Exception as e:
             print(f"PDF 추가 중 오류 발생: {e}")
     
+    def load_all_pdfs_from_data_folder(self) -> Dict[str, Any]:
+        """data/pdfs 폴더의 모든 PDF를 자동으로 로드"""
+        try:
+            from pathlib import Path
+            import glob
+            
+            pdf_dir = Path("data/pdfs")
+            if not pdf_dir.exists():
+                logger.warning("data/pdfs 폴더를 찾을 수 없습니다.")
+                return {"success": False, "error": "data/pdfs 폴더가 존재하지 않습니다."}
+            
+            # 모든 PDF 파일 찾기
+            pdf_files = []
+            for pattern in ["*.pdf", "*/*.pdf", "*/*/*.pdf"]:
+                pdf_files.extend(pdf_dir.glob(pattern))
+            
+            if not pdf_files:
+                logger.info("로드할 PDF 파일이 없습니다.")
+                return {"success": True, "loaded_count": 0}
+            
+            logger.info(f"{len(pdf_files)}개의 PDF 파일을 자동으로 로드합니다...")
+            
+            loaded_count = 0
+            failed_count = 0
+            
+            for pdf_path in pdf_files:
+                try:
+                    # 이미 처리된 PDF인지 확인
+                    existing_pdfs = self.file_manager.list_pdfs()
+                    if any(pdf_path.name in pdf["filename"] for pdf in existing_pdfs):
+                        logger.info(f"이미 로드된 PDF 건너뛰기: {pdf_path.name}")
+                        continue
+                    
+                    # PDF 처리
+                    pdf_result = self.process_pdf(str(pdf_path))
+                    loaded_count += 1
+                    logger.info(f"PDF 자동 로드 완료: {pdf_path.name} ({pdf_result['total_chunks']}개 청크)")
+                    
+                except Exception as e:
+                    logger.error(f"PDF 자동 로드 실패 {pdf_path}: {e}")
+                    failed_count += 1
+                    continue
+            
+            # 벡터 저장소 저장
+            if self.vector_store:
+                self.vector_store.save()
+            
+            logger.info(f"PDF 자동 로드 완료: {loaded_count}개 성공, {failed_count}개 실패")
+            
+            return {
+                "success": True,
+                "loaded_count": loaded_count,
+                "failed_count": failed_count,
+                "total_files": len(pdf_files)
+            }
+            
+        except Exception as e:
+            logger.error(f"PDF 자동 로드 중 오류 발생: {e}")
+            return {"success": False, "error": str(e)}
+    
     def cleanup(self):
         """시스템 정리"""
         logger.info("시스템 정리 중...")
@@ -555,6 +681,7 @@ def main():
         
         # 모드별 실행
         if args.mode == "server":
+            logger.info("모든 PDF 파일이 벡터 저장소에 업로드되었습니다.")
             logger.info(f"API 서버 시작: http://{args.host}:{args.port}")
             logger.info("Dual Pipeline 기능이 활성화되었습니다.")
             logger.info("- 문서 검색 파이프라인: PDF 내용 기반 질문 답변")

@@ -26,8 +26,13 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.keyword_enhancer import KeywordEnhancer
 
+# 핵심요소 추출 및 컨텍스트 연속성 관리 모듈 import
+from .core_element_extractor import CoreElementExtractor, ExtractedElements
+from .context_continuity_manager import ContextContinuityManager, ConversationContext, ContinuityResult
+
 class QuestionType(Enum):
     """질문 유형 분류"""
+    GREETING = "greeting"            # 인사말 (안녕, 반갑, 하이 등)
     FACTUAL = "factual"              # 사실 질문 (무엇, 언제, 어디서)
     CONCEPTUAL = "conceptual"        # 개념 질문 (어떻게, 왜)
     COMPARATIVE = "comparative"      # 비교 질문 (차이점, 유사점)
@@ -36,6 +41,8 @@ class QuestionType(Enum):
     FOLLOW_UP = "follow_up"         # 후속 질문 (이전 답변 관련)
     CLARIFICATION = "clarification"  # 명확화 질문 (구체적 설명 요구)
     DATABASE_QUERY = "database_query"  # 데이터베이스 질의 (SQL 생성 필요)
+    QUANTITATIVE = "quantitative"    # 정량적 질문 (얼마나, 몇 개, 통행량 등)
+    LOCATION_MOVEMENT = "location_movement"  # 장소 이동 요청 (조치원으로 이동 등)
 
 @dataclass
 class ConversationItem:
@@ -62,6 +69,10 @@ class AnalyzedQuestion:
     sql_intent: Optional[str] = None  # SQL 의도 (SELECT, INSERT, UPDATE, DELETE)
     embedding: Optional[np.ndarray] = None
     metadata: Optional[Dict] = None
+    # 새로운 필드들
+    core_elements: Optional[ExtractedElements] = None  # 추출된 핵심요소
+    enhanced_question: Optional[str] = None  # 향상된 질문
+    continuity_result: Optional[ContinuityResult] = None  # 연속성 분석 결과
 
 class QuestionAnalyzer:
     """
@@ -101,10 +112,19 @@ class QuestionAnalyzer:
         # 키워드 향상 모듈 초기화
         self.keyword_enhancer = KeywordEnhancer(domain=domain)
         
+        # 핵심요소 추출기 초기화
+        self.core_element_extractor = CoreElementExtractor()
+        
+        # 컨텍스트 연속성 관리자 초기화
+        self.context_manager = ContextContinuityManager()
+        
         # 대화 기록 저장
         self.conversation_history: List[ConversationItem] = []
         
-        # 질문 유형 분류를 위한 패턴
+        # 현재 대화 컨텍스트
+        self.current_context = ConversationContext()
+        
+        # 질문 유형 분류를 위한 패턴 (개선된 버전)
         self.question_patterns = {
             QuestionType.FACTUAL: [
                 r'무엇', r'뭐', r'언제', r'어디', r'누구', r'몇', r'얼마',
@@ -134,11 +154,44 @@ class QuestionAnalyzer:
                 r'구체적으로', r'자세히', r'정확히', r'명확히', r'구체적',
                 r'상세히', r'더 자세히', r'보다 구체적'
             ],
+            QuestionType.QUANTITATIVE: [
+                # 정량적 질문 패턴 (우선순위 높음)
+                r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+                r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+                r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+                r'얼마나\s*많', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+                r'count', r'sum', r'avg', r'max', r'min', r'total',
+                r'통계', r'집계', r'분석', r'데이터\s*분석'
+            ],
+            QuestionType.LOCATION_MOVEMENT: [
+                # 장소 이동 요청 패턴
+                r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+                r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+                r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+                r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+                r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+            ],
             QuestionType.DATABASE_QUERY: [
-                r'데이터', r'테이블', r'조회', r'검색', r'찾기', r'가져오기',
-                r'추출', r'통계', r'개수', r'합계', r'평균', r'최대', r'최소',
-                r'정렬', r'필터', r'조건', r'where', r'select', r'insert',
-                r'update', r'delete', r'from', r'join', r'group by', r'order by'
+                # 데이터베이스 관련 키워드
+                r'데이터', r'테이블', r'레코드', r'행', r'컬럼', r'필드', r'DB', r'데이터베이스',
+                # 조회 관련 키워드
+                r'조회', r'검색', r'찾기', r'가져오기', r'추출', r'보기', r'확인', r'출력',
+                r'리스트', r'목록', r'데이터 목록', r'정보 조회',
+                # 통계 관련 키워드
+                r'통계', r'집계', r'분석', r'개수', r'합계', r'평균', r'최대', r'최소', r'총계', r'갯수',
+                r'count', r'sum', r'avg', r'max', r'min', r'total',
+                # 필터링/정렬 관련
+                r'정렬', r'필터', r'조건', r'where', r'order by', r'group by',
+                r'순서', r'기준', r'기간', r'날짜', r'시간', r'기준',
+                # SQL 키워드
+                r'select', r'insert', r'update', r'delete', r'from', r'join',
+                r'where', r'group by', r'order by', r'limit', r'offset',
+                # 교통 관련 데이터 키워드
+                r'교통량', r'교차로', r'사고', r'인시던트', r'교통사고', r'교통 흐름',
+                r'평균속도', r'총 교통량', r'혼잡도', r'교통상황',
+                # 특정 패턴
+                r'얼마나', r'어떤', r'어디서', r'언제', r'누가',
+                r'가장 많이', r'가장 적게', r'평균적으로', r'대부분'
             ]
         }
         
@@ -154,7 +207,7 @@ class QuestionAnalyzer:
     def analyze_question(self, question: str, 
                         use_conversation_context: bool = True) -> AnalyzedQuestion:
         """
-        질문을 종합적으로 분석
+        질문을 종합적으로 분석 (개선된 버전 - 컨텍스트 연속성 고려)
         
         Args:
             question: 사용자 질문
@@ -166,32 +219,61 @@ class QuestionAnalyzer:
         # 1. 질문 전처리
         processed_question = self._preprocess_question(question)
         
-        # 2. 질문 유형 분류
-        question_type = self._classify_question_type(processed_question)
+        # 2. 핵심요소 추출
+        core_elements = self.core_element_extractor.extract_core_elements(question)
         
-        # 3. 키워드 추출
-        keywords = self._extract_keywords(processed_question)
+        # 3. 컨텍스트 연속성 분석
+        continuity_result = None
+        enhanced_question = question
         
-        # 4. 개체명 추출 (간단한 규칙 기반)
-        entities = self._extract_entities(processed_question)
+        if use_conversation_context and self.conversation_history:
+            # 이전 질문의 핵심요소 추출
+            previous_question = self.conversation_history[-1].question
+            previous_elements = self.core_element_extractor.extract_core_elements(previous_question)
+            
+            # 연속성 분석
+            continuity_result = self.context_manager.check_context_continuity(
+                question, self.current_context, core_elements, previous_elements
+            )
+            
+            # 컨텍스트 병합 (필요시)
+            if continuity_result.should_merge:
+                enhanced_question = continuity_result.enhanced_question or question
+                core_elements = self.context_manager.merge_context(
+                    core_elements, previous_elements, continuity_result
+                )
+                
+                # 컨텍스트 업데이트
+                self.current_context = self.context_manager.update_conversation_context(
+                    self.current_context, core_elements, continuity_result
+                )
         
-        # 5. 질문 의도 분석
-        intent = self._analyze_intent(processed_question, question_type)
+        # 4. 질문 유형 분류 (향상된 질문 사용)
+        question_type = self._classify_question_type(enhanced_question)
         
-        # 6. 컨텍스트 키워드 추출
+        # 5. 키워드 추출 (핵심요소 기반)
+        keywords = self._extract_keywords_with_core_elements(enhanced_question, core_elements)
+        
+        # 6. 개체명 추출
+        entities = self._extract_entities(enhanced_question)
+        
+        # 7. 질문 의도 분석
+        intent = self._analyze_intent(enhanced_question, question_type)
+        
+        # 8. 컨텍스트 키워드 추출
         context_keywords = []
         if use_conversation_context and self.conversation_history:
-            context_keywords = self._extract_context_keywords(processed_question)
+            context_keywords = self._extract_context_keywords(enhanced_question)
         
-        # 7. SQL 필요 여부 및 의도 분석
-        requires_sql, sql_intent = self._analyze_sql_requirements(processed_question, question_type)
+        # 9. SQL 필요 여부 및 의도 분석
+        requires_sql, sql_intent = self._analyze_sql_requirements(enhanced_question, question_type)
         
-        # 8. 임베딩 생성
-        embedding = self.embedding_model.encode(processed_question)
+        # 10. 임베딩 생성
+        embedding = self.embedding_model.encode(enhanced_question)
         
         analyzed_question = AnalyzedQuestion(
             original_question=question,
-            processed_question=processed_question,
+            processed_question=enhanced_question,
             question_type=question_type,
             keywords=keywords,
             entities=entities,
@@ -200,14 +282,249 @@ class QuestionAnalyzer:
             requires_sql=requires_sql,
             sql_intent=sql_intent,
             embedding=embedding,
+            core_elements=core_elements,
+            enhanced_question=enhanced_question,
+            continuity_result=continuity_result,
             metadata={
                 "analysis_timestamp": datetime.now().isoformat(),
-                "has_context": len(context_keywords) > 0
+                "has_context": len(context_keywords) > 0,
+                "continuity_type": continuity_result.continuity_type.value if continuity_result else "none",
+                "overlap_score": continuity_result.overlap_score if continuity_result else 0.0
             }
         )
         
-        logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개")
+        logger.info(f"질문 분석 완료: {question_type.value}, 키워드: {len(keywords)}개, 연속성: {continuity_result.continuity_type.value if continuity_result else 'none'}")
         return analyzed_question
+    
+    def analyze_question_with_expressions(self, question: str, 
+                                        conversation_history: Optional[List[ConversationItem]] = None,
+                                        expression_enhancer=None) -> AnalyzedQuestion:
+        """
+        다중 표현을 고려한 질문 분석
+        
+        Args:
+            question: 분석할 질문
+            conversation_history: 대화 히스토리
+            expression_enhancer: 표현 향상기 (KeywordEnhancer)
+            
+        Returns:
+            분석된 질문 정보
+        """
+        # 기본 질문 분석
+        analyzed = self.analyze_question(question, conversation_history)
+        
+        # 다중 표현 분석 추가
+        if expression_enhancer:
+            analyzed = self._enhance_analysis_with_expressions(analyzed, expression_enhancer)
+        
+        return analyzed
+    
+    def _is_greeting(self, question: str) -> bool:
+        """
+        인사말인지 확인
+        
+        Args:
+            question: 확인할 질문
+            
+        Returns:
+            인사말 여부
+        """
+        # 인사말 패턴들
+        greeting_patterns = [
+            r'안녕',
+            r'반갑',
+            r'하이',
+            r'hi',
+            r'hello',
+            r'좋은\s*(아침|점심|저녁|하루)',
+            r'만나서\s*반가워',
+            r'반가워',
+            r'인사',
+            r'오랜만',
+            r'오래간만',
+            r'잘\s*지내',
+            r'어떻게\s*지내',
+            r'안녕하세요',
+            r'안녕하십니까',
+            r'반갑습니다',
+            r'반가워요',
+            r'하이하이',
+            r'헬로',
+            r'헬로우'
+        ]
+        
+        question_lower = question.lower().strip()
+        
+        # 패턴 매칭
+        for pattern in greeting_patterns:
+            if re.search(pattern, question_lower, re.IGNORECASE):
+                return True
+        
+        # 단순한 인사말 확인 (2단어 이하)
+        words = question_lower.split()
+        if len(words) <= 2:
+            simple_greetings = ['안녕', '하이', 'hi', 'hello', '반가워', '반갑다']
+            if any(word in simple_greetings for word in words):
+                return True
+        
+        return False
+    
+    def _enhance_analysis_with_expressions(self, analyzed: AnalyzedQuestion, 
+                                         expression_enhancer) -> AnalyzedQuestion:
+        """표현을 활용한 분석 강화"""
+        # 컨텍스트 결정
+        context = self._determine_context(analyzed.original_question)
+        
+        # 관련 표현들 추출
+        expressions = expression_enhancer.get_multi_expressions(
+            analyzed.original_question, context
+        )
+        
+        # 최적 표현 선택
+        optimal_expressions = expression_enhancer.get_optimal_expressions(
+            analyzed.original_question, context, top_k=3
+        )
+        
+        # 키워드 확장
+        enhanced_keywords = analyzed.keywords.copy()
+        for expr, score in optimal_expressions:
+            if expr not in enhanced_keywords:
+                enhanced_keywords.append(expr)
+        
+        # 의도 분석 강화
+        enhanced_intent = self._analyze_intent_with_expressions(
+            analyzed.original_question, expressions, context
+        )
+        
+        # 메타데이터에 표현 정보 추가
+        expression_metadata = {
+            "context": context,
+            "expressions": expressions,
+            "optimal_expressions": optimal_expressions,
+            "expression_count": len(expressions)
+        }
+        
+        if analyzed.metadata is None:
+            analyzed.metadata = {}
+        analyzed.metadata.update(expression_metadata)
+        
+        # 분석 결과 업데이트
+        analyzed.keywords = enhanced_keywords
+        analyzed.intent = enhanced_intent
+        
+        return analyzed
+    
+    def _determine_context(self, question: str) -> str:
+        """질문의 컨텍스트 결정"""
+        question_lower = question.lower()
+        
+        # 교통 관련 키워드
+        traffic_keywords = ["교통", "사고", "교차로", "신호등", "교통량", "정체", "교통사고"]
+        if any(keyword in question_lower for keyword in traffic_keywords):
+            return "traffic"
+        
+        # 데이터베이스 관련 키워드
+        db_keywords = ["조회", "통계", "데이터", "테이블", "SELECT", "COUNT", "WHERE"]
+        if any(keyword in question_lower for keyword in db_keywords):
+            return "database"
+        
+        return "general"
+    
+    def _analyze_intent_with_expressions(self, question: str, 
+                                       expressions: List[str], 
+                                       context: str) -> str:
+        """표현을 고려한 의도 분석"""
+        question_lower = question.lower()
+        
+        # 기본 의도 분석
+        base_intent = self._analyze_basic_intent(question)
+        
+        # 표현 기반 의도 보정
+        if context == "traffic":
+            if any(expr in question_lower for expr in ["사고", "충돌", "발생"]):
+                return "traffic_accident_inquiry"
+            elif any(expr in question_lower for expr in ["교통량", "트래픽", "정체"]):
+                return "traffic_volume_inquiry"
+            elif any(expr in question_lower for expr in ["교차로", "신호등", "신호"]):
+                return "traffic_signal_inquiry"
+        
+        elif context == "database":
+            if any(expr in question_lower for expr in ["조회", "검색", "찾기"]):
+                return "data_retrieval"
+            elif any(expr in question_lower for expr in ["통계", "집계", "평균"]):
+                return "data_analysis"
+            elif any(expr in question_lower for expr in ["기간", "날짜", "시간"]):
+                return "temporal_analysis"
+        
+        return base_intent
+    
+    def _analyze_basic_intent(self, question: str) -> str:
+        """기본 의도 분석"""
+        question_lower = question.lower()
+        
+        # 질문 유형별 의도 분류
+        if any(word in question_lower for word in ["무엇", "뭐", "어떤"]):
+            return "what_inquiry"
+        elif any(word in question_lower for word in ["언제", "몇시", "날짜"]):
+            return "when_inquiry"
+        elif any(word in question_lower for word in ["어디", "장소", "위치"]):
+            return "where_inquiry"
+        elif any(word in question_lower for word in ["누가", "누구", "사람"]):
+            return "who_inquiry"
+        elif any(word in question_lower for word in ["왜", "이유", "원인"]):
+            return "why_inquiry"
+        elif any(word in question_lower for word in ["어떻게", "방법", "과정"]):
+            return "how_inquiry"
+        else:
+            return "general_inquiry"
+    
+    def get_expression_suggestions(self, question: str, 
+                                 expression_enhancer=None,
+                                 context: str = "general") -> List[str]:
+        """
+        질문에 대한 표현 제안
+        
+        Args:
+            question: 원본 질문
+            expression_enhancer: 표현 향상기
+            context: 컨텍스트
+            
+        Returns:
+            제안 표현 리스트
+        """
+        if not expression_enhancer:
+            return []
+        
+        # 관련 표현들 가져오기
+        expressions = expression_enhancer.get_multi_expressions(question, context)
+        
+        # 질문 개선 제안 생성
+        suggestions = []
+        for expr in expressions[:5]:  # 상위 5개만 사용
+            if expr.lower() not in question.lower():
+                # 질문에 표현을 추가한 제안 생성
+                suggestion = f"{question} ({expr} 관련)"
+                suggestions.append(suggestion)
+        
+        return suggestions
+    
+    def update_expression_feedback(self, question: str, 
+                                 expressions_used: List[str],
+                                 success: bool,
+                                 expression_enhancer=None):
+        """
+        표현 사용 피드백 업데이트
+        
+        Args:
+            question: 원본 질문
+            expressions_used: 사용된 표현들
+            success: 성공 여부
+            expression_enhancer: 표현 향상기
+        """
+        if expression_enhancer:
+            expression_enhancer.update_expression_feedback(
+                question, expressions_used, success
+            )
     
     def _preprocess_question(self, question: str) -> str:
         """
@@ -232,7 +549,7 @@ class QuestionAnalyzer:
     
     def _classify_question_type(self, question: str) -> QuestionType:
         """
-        질문 유형 분류
+        질문 유형 분류 (개선된 버전)
         
         Args:
             question: 전처리된 질문
@@ -240,20 +557,39 @@ class QuestionAnalyzer:
         Returns:
             질문 유형
         """
+        # 먼저 인사말인지 확인
+        if self._is_greeting(question):
+            return QuestionType.GREETING
+        
         question_lower = question.lower()
         
-        # 각 유형별 패턴 매칭 점수 계산
+        # 우선순위가 높은 유형들을 먼저 확인
+        priority_types = [
+            QuestionType.LOCATION_MOVEMENT,  # 장소 이동 요청 (최우선)
+            QuestionType.QUANTITATIVE,       # 정량적 질문 (우선)
+            QuestionType.DATABASE_QUERY      # 데이터베이스 질의
+        ]
+        
+        for q_type in priority_types:
+            if q_type in self.question_patterns:
+                patterns = self.question_patterns[q_type]
+                for pattern in patterns:
+                    if re.search(pattern, question_lower):
+                        return q_type
+        
+        # 나머지 유형들에 대해 점수 계산
         type_scores = {}
         
         for q_type, patterns in self.question_patterns.items():
-            score = 0
-            for pattern in patterns:
-                if re.search(pattern, question_lower):
-                    score += 1
-            type_scores[q_type] = score
+            if q_type not in priority_types:  # 이미 확인한 우선순위 유형 제외
+                score = 0
+                for pattern in patterns:
+                    if re.search(pattern, question_lower):
+                        score += 1
+                type_scores[q_type] = score
         
         # 가장 높은 점수의 유형 반환
-        if max(type_scores.values()) > 0:
+        if type_scores and max(type_scores.values()) > 0:
             return max(type_scores, key=type_scores.get)
         
         # 기본값: FACTUAL
@@ -261,7 +597,7 @@ class QuestionAnalyzer:
     
     def _extract_keywords(self, question: str) -> List[str]:
         """
-        질문에서 키워드 추출 (개선된 버전)
+        질문에서 키워드 추출 (기본 버전)
         
         Args:
             question: 전처리된 질문
@@ -301,6 +637,89 @@ class QuestionAnalyzer:
         # 가중치로 정렬하고 상위 15개 선택
         keyword_weights.sort(key=lambda x: x[1], reverse=True)
         top_keywords = [kw for kw, _ in keyword_weights[:15]]
+        
+        return top_keywords
+    
+    def _extract_keywords_with_core_elements(self, question: str, core_elements: ExtractedElements) -> List[str]:
+        """
+        핵심요소를 고려한 키워드 추출 (개선된 버전)
+        
+        Args:
+            question: 전처리된 질문
+            core_elements: 추출된 핵심요소
+            
+        Returns:
+            키워드 리스트
+        """
+        # 1. 기본 키워드 추출
+        basic_keywords = self._extract_keywords(question)
+        
+        # 2. 핵심요소에서 키워드 추가
+        core_keywords = []
+        
+        # 주제 키워드 (높은 우선순위)
+        if core_elements.topic:
+            core_keywords.append(core_elements.topic.text)
+        
+        # 개체 키워드 (중간 우선순위)
+        for entity in core_elements.entities:
+            if entity.text not in core_keywords:
+                core_keywords.append(entity.text)
+        
+        # 속성 키워드 (중간 우선순위)
+        for attr in core_elements.attributes:
+            if attr.text not in core_keywords:
+                core_keywords.append(attr.text)
+        
+        # 관계 키워드 (낮은 우선순위)
+        for relation in core_elements.relations:
+            if relation.text not in core_keywords:
+                core_keywords.append(relation.text)
+        
+        # 시간 키워드 (낮은 우선순위)
+        for temporal in core_elements.temporal:
+            if temporal.text not in core_keywords:
+                core_keywords.append(temporal.text)
+        
+        # 위치 키워드 (중간 우선순위)
+        for location in core_elements.locations:
+            if location.text not in core_keywords:
+                core_keywords.append(location.text)
+        
+        # 3. 키워드 통합 및 우선순위 적용
+        all_keywords = []
+        
+        # 핵심요소 키워드를 먼저 추가 (높은 우선순위)
+        all_keywords.extend(core_keywords)
+        
+        # 기본 키워드 추가 (중복 제거)
+        for keyword in basic_keywords:
+            if keyword not in all_keywords:
+                all_keywords.append(keyword)
+        
+        # 4. 키워드 향상
+        enhanced_keywords = self.keyword_enhancer.enhance_keywords(all_keywords)
+        
+        # 5. 도메인 특화 키워드 추가
+        domain_keywords = self.keyword_enhancer.extract_domain_specific_keywords(question)
+        enhanced_keywords.extend(domain_keywords)
+        
+        # 6. 중복 제거 및 정렬
+        unique_keywords = list(set(enhanced_keywords))
+        unique_keywords.sort(key=len, reverse=True)  # 긴 키워드 우선
+        
+        # 7. 키워드 가중치 계산 및 상위 키워드 선택
+        keyword_weights = []
+        for keyword in unique_keywords:
+            weight = self.keyword_enhancer.calculate_keyword_weight(keyword, question)
+            # 핵심요소 키워드에 가중치 부여
+            if keyword in core_keywords:
+                weight *= 1.5
+            keyword_weights.append((keyword, weight))
+        
+        # 가중치로 정렬하고 상위 20개 선택 (핵심요소 고려로 더 많은 키워드)
+        keyword_weights.sort(key=lambda x: x[1], reverse=True)
+        top_keywords = [kw for kw, _ in keyword_weights[:20]]
         
         return top_keywords
     
@@ -417,7 +836,7 @@ class QuestionAnalyzer:
                             relevant_chunks: List[str],
                             confidence_score: float = 0.0) -> None:
         """
-        대화 항목을 기록에 추가
+        대화 항목을 기록에 추가 (개선된 버전 - 컨텍스트 관리 포함)
         
         Args:
             question: 질문
@@ -425,8 +844,25 @@ class QuestionAnalyzer:
             relevant_chunks: 답변에 사용된 청크 ID들
             confidence_score: 답변 신뢰도
         """
-        # 질문 분석
-        analyzed_q = self.analyze_question(question, use_conversation_context=False)
+        # 질문 분석 (컨텍스트 연속성 고려)
+        analyzed_q = self.analyze_question(question, use_conversation_context=True)
+        
+        # 컨텍스트 정보 추가
+        context_info = {}
+        if analyzed_q.continuity_result:
+            context_info.update({
+                "continuity_type": analyzed_q.continuity_result.continuity_type.value,
+                "overlap_score": analyzed_q.continuity_result.overlap_score,
+                "should_merge": analyzed_q.continuity_result.should_merge,
+                "missing_elements_count": len(analyzed_q.continuity_result.missing_elements)
+            })
+        
+        if analyzed_q.core_elements:
+            context_info.update({
+                "topic": analyzed_q.core_elements.topic.text if analyzed_q.core_elements.topic else None,
+                "entities_count": len(analyzed_q.core_elements.entities),
+                "attributes_count": len(analyzed_q.core_elements.attributes)
+            })
         
         conv_item = ConversationItem(
             question=question,
@@ -437,7 +873,10 @@ class QuestionAnalyzer:
             confidence_score=confidence_score,
             metadata={
                 "keywords": analyzed_q.keywords,
-                "intent": analyzed_q.intent
+                "intent": analyzed_q.intent,
+                "enhanced_question": analyzed_q.enhanced_question,
+                "context_info": context_info,
+                "conversation_depth": self.current_context.depth
             }
         )
         
@@ -447,7 +886,7 @@ class QuestionAnalyzer:
         if len(self.conversation_history) > 50:
             self.conversation_history = self.conversation_history[-50:]
         
-        logger.info(f"대화 항목 추가: {analyzed_q.question_type.value}")
+        logger.info(f"대화 항목 추가: {analyzed_q.question_type.value}, 연속성: {analyzed_q.continuity_result.continuity_type.value if analyzed_q.continuity_result else 'none'}")
     
     def get_conversation_context(self, max_items: int = 3) -> List[Dict]:
         """
@@ -562,7 +1001,7 @@ class QuestionAnalyzer:
     
     def _analyze_sql_requirements(self, question: str, question_type: QuestionType) -> Tuple[bool, Optional[str]]:
         """
-        SQL 필요 여부 및 의도 분석
+        SQL 필요 여부 및 의도 분석 (개선된 버전)
         
         Args:
             question: 처리된 질문
@@ -573,31 +1012,171 @@ class QuestionAnalyzer:
         """
         requires_sql = False
         sql_intent = None
+        question_lower = question.lower()
         
-        # 데이터베이스 질의 유형인 경우
-        if question_type == QuestionType.DATABASE_QUERY:
+        # 1. 정량적 질문 패턴 (통행량, 개수, 수치 등)
+        quantitative_patterns = [
+            r'얼마나', r'몇\s*개', r'몇\s*명', r'몇\s*대', r'몇\s*건', r'몇\s*회',
+            r'통행량\s*[이]?\s*얼마', r'교통량\s*[이]?\s*얼마', r'사고\s*[가]?\s*몇\s*건',
+            r'평균\s*[이]?\s*얼마', r'최대\s*[가]?\s*얼마', r'최소\s*[가]?\s*얼마',
+            r'합계\s*[가]?\s*얼마', r'총\s*[이]?\s*얼마', r'갯수\s*[가]?\s*얼마',
+            r'count', r'sum', r'avg', r'max', r'min', r'total',
+            r'통계', r'집계', r'분석', r'데이터\s*분석'
+        ]
+        
+        # 2. 장소 이동 요청 패턴
+        location_movement_patterns = [
+            r'[으]?로\s*이동', r'[으]?로\s*가', r'[으]?로\s*보여', r'[으]?로\s*전환',
+            r'[으]?로\s*바꿔', r'[으]?로\s*변경', r'[으]?로\s*이동해', r'[으]?로\s*가줘',
+            r'[으]?로\s*보여줘', r'[으]?로\s*전환해', r'[으]?로\s*바꿔줘',
+            r'이동\s*[해줘]?', r'가\s*[줘]?', r'보여\s*[줘]?', r'전환\s*[해줘]?',
+            r'바꿔\s*[줘]?', r'변경\s*[해줘]?'
+        ]
+        
+        # 3. 질문 유형별 SQL 필요 여부 판단
+        if question_type == QuestionType.LOCATION_MOVEMENT:
+            # 장소 이동 요청은 SQL 불필요
+            requires_sql = False
+            sql_intent = None
+        elif question_type == QuestionType.QUANTITATIVE:
+            # 정량적 질문은 SQL 필요
+            requires_sql = True
+            sql_intent = 'SELECT'
+        elif question_type == QuestionType.DATABASE_QUERY:
             requires_sql = True
             
-            # SQL 의도 분석
-            question_lower = question.lower()
+            # SQL 의도 분석 (더 정확한 패턴 매칭)
+            select_keywords = ['조회', '검색', '찾기', '가져오기', '추출', '개수', '합계', '평균', '최대', '최소', 
+                             '보기', '확인', '출력', '리스트', '목록', '얼마나', '몇 개', '어떤', '어디서', '언제']
+            insert_keywords = ['추가', '삽입', '등록', '생성', '입력', '저장']
+            update_keywords = ['수정', '변경', '업데이트', '갱신', '편집']
+            delete_keywords = ['삭제', '제거', '지우기', '제거']
             
-            if any(word in question_lower for word in ['조회', '검색', '찾기', '가져오기', '추출', '개수', '합계', '평균', '최대', '최소']):
+            if any(word in question_lower for word in select_keywords):
                 sql_intent = 'SELECT'
-            elif any(word in question_lower for word in ['추가', '삽입', '등록', '생성']):
+            elif any(word in question_lower for word in insert_keywords):
                 sql_intent = 'INSERT'
-            elif any(word in question_lower for word in ['수정', '변경', '업데이트', '갱신']):
+            elif any(word in question_lower for word in update_keywords):
                 sql_intent = 'UPDATE'
-            elif any(word in question_lower for word in ['삭제', '제거', '지우기']):
+            elif any(word in question_lower for word in delete_keywords):
                 sql_intent = 'DELETE'
             else:
                 sql_intent = 'SELECT'  # 기본값
         
-        # 일반 질문이지만 데이터 관련 키워드가 포함된 경우
-        elif any(word in question.lower() for word in ['데이터', '테이블', '레코드', '행', '컬럼', '필드']):
-            requires_sql = True
-            sql_intent = 'SELECT'
+        # 4. 일반 질문이지만 정량적 질문인 경우 SQL 필요
+        else:
+            # 정량적 질문 패턴 확인
+            quantitative_match = any(re.search(pattern, question_lower) for pattern in quantitative_patterns)
+            
+            # 장소 이동 요청 패턴 확인 (SQL 불필요)
+            location_movement_match = any(re.search(pattern, question_lower) for pattern in location_movement_patterns)
+            
+            # 데이터베이스 관련 키워드
+            db_keywords = ['데이터', '테이블', '레코드', '행', '컬럼', '필드', 'db', '데이터베이스']
+            
+            # 교통 관련 데이터 키워드
+            traffic_keywords = ['교통량', '교차로', '사고', '인시던트', '교통사고', '교통 흐름', 
+                              '평균속도', '총 교통량', '혼잡도', '교통상황']
+            
+            # 통계 관련 키워드
+            stats_keywords = ['통계', '개수', '합계', '평균', '최대', '최소', '총계', '갯수', 'count', 'sum', 'avg', 'max', 'min']
+            
+            # 특정 질문 패턴
+            sql_patterns = ['얼마나', '몇 개', '어떤', '어디서', '언제', '누가', '가장 많이', '가장 적게', '평균적으로', '대부분']
+            
+            # 장소 이동 요청이 아닌 경우에만 SQL 필요 여부 판단
+            if not location_movement_match:
+                # 정량적 질문이거나 SQL이 필요한 키워드가 2개 이상 포함된 경우
+                matching_keywords = 0
+                for keywords in [db_keywords, traffic_keywords, stats_keywords, sql_patterns]:
+                    if any(word in question_lower for word in keywords):
+                        matching_keywords += 1
+                
+                if quantitative_match or matching_keywords >= 2:
+                    requires_sql = True
+                    sql_intent = 'SELECT'
         
         return requires_sql, sql_intent
+    
+    def get_current_context(self) -> ConversationContext:
+        """
+        현재 대화 컨텍스트 반환
+        
+        Returns:
+            현재 대화 컨텍스트
+        """
+        return self.current_context
+    
+    def reset_context(self) -> None:
+        """
+        대화 컨텍스트 초기화
+        """
+        self.current_context = ConversationContext()
+        logger.info("대화 컨텍스트 초기화 완료")
+    
+    def get_context_summary(self) -> Dict[str, Any]:
+        """
+        현재 컨텍스트 요약 정보 반환
+        
+        Returns:
+            컨텍스트 요약 정보
+        """
+        return {
+            "topic": self.current_context.topic,
+            "entities": self.current_context.entities,
+            "attributes": self.current_context.attributes,
+            "relations": self.current_context.relations,
+            "temporal": self.current_context.temporal,
+            "locations": self.current_context.locations,
+            "depth": self.current_context.depth,
+            "conversation_count": len(self.conversation_history)
+        }
+    
+    def analyze_conversation_flow(self) -> Dict[str, Any]:
+        """
+        대화 흐름 분석
+        
+        Returns:
+            대화 흐름 분석 결과
+        """
+        if len(self.conversation_history) < 2:
+            return {"message": "분석할 대화가 충분하지 않습니다."}
+        
+        flow_analysis = {
+            "total_conversations": len(self.conversation_history),
+            "context_changes": 0,
+            "continuity_scores": [],
+            "topic_transitions": [],
+            "average_depth": 0
+        }
+        
+        continuity_scores = []
+        topic_transitions = []
+        
+        for i in range(1, len(self.conversation_history)):
+            prev_item = self.conversation_history[i-1]
+            curr_item = self.conversation_history[i]
+            
+            # 연속성 점수 추출
+            if "context_info" in curr_item.metadata:
+                context_info = curr_item.metadata["context_info"]
+                if "overlap_score" in context_info:
+                    continuity_scores.append(context_info["overlap_score"])
+                
+                # 주제 전환 확인
+                if "continuity_type" in context_info:
+                    if context_info["continuity_type"] == "none":
+                        flow_analysis["context_changes"] += 1
+        
+        if continuity_scores:
+            flow_analysis["continuity_scores"] = continuity_scores
+            flow_analysis["average_continuity"] = sum(continuity_scores) / len(continuity_scores)
+        
+        # 평균 대화 깊이 계산
+        depths = [item.metadata.get("conversation_depth", 0) for item in self.conversation_history]
+        flow_analysis["average_depth"] = sum(depths) / len(depths) if depths else 0
+        
+        return flow_analysis
 
 # 유틸리티 함수들
 def calculate_question_complexity(analyzed_question: AnalyzedQuestion) -> float:
