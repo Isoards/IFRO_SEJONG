@@ -7,7 +7,10 @@ import {
   ProposalPriority,
   ProposalFilters,
 } from "../../../shared/types/global.types";
-import { getProposals, getMyProposals } from "../../../shared/services/proposals";
+import {
+  getProposals,
+  getMyProposals,
+} from "../../../shared/services/proposals";
 
 const CATEGORY_LABELS: Record<ProposalCategory, string> = {
   traffic_signal: "신호등 관련",

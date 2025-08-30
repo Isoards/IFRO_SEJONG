@@ -1,21 +1,26 @@
-import axios, { InternalAxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
+import axios, {
+  InternalAxiosRequestConfig,
+  AxiosResponse,
+  AxiosError,
+} from "axios";
+import { debugLog } from "../shared/utils/debugUtils";
 
 const api = axios.create({
   baseURL: "http://localhost:8000/api/", // Django backend URL (api 루트로 변경)
   timeout: 60000, // 60초로 증가
 
   headers: {
-    'Content-Type': 'application/json'
-  }
+    "Content-Type": "application/json",
+  },
 });
 
 // 요청 인터셉터
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('access');
+    const token = localStorage.getItem("access");
 
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers["Authorization"] = `Bearer ${token}`;
     }
 
     return config;
@@ -29,7 +34,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => {
     // 응답 데이터를 가공
-    console.log("API Response Data:", response.data);
+    debugLog("API Response Data:", response.data);
     return response;
   },
   (error: AxiosError) => {

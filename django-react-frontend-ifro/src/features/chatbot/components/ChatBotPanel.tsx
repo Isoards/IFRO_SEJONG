@@ -1,12 +1,21 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Minimize2, Info, AlertCircle, Database, Zap } from "lucide-react";
-import { 
-  sendAIChatMessage, 
-  testChatConnection, 
+import {
+  Send,
+  Bot,
+  User,
+  Minimize2,
+  Info,
+  AlertCircle,
+  Database,
+  Zap,
+} from "lucide-react";
+import {
+  sendAIChatMessage,
+  testChatConnection,
   checkAIServiceStatus,
   getAvailablePDFs,
   getChatCacheInfo,
-  clearChatCache
+  clearChatCache,
 } from "../../../shared/services/chat";
 
 interface Message {
@@ -44,16 +53,18 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     ai_available: false,
     model_loaded: false,
     total_pdfs: 0,
-    total_chunks: 0
+    total_chunks: 0,
   });
   const [selectedPdfId, setSelectedPdfId] = useState<string>("default_pdf");
-  const [availablePdfs, setAvailablePdfs] = useState<Array<{
-    pdf_id: string;
-    filename: string;
-    upload_time: string;
-    total_pages: number;
-    total_chunks: number;
-  }>>([]);
+  const [availablePdfs, setAvailablePdfs] = useState<
+    Array<{
+      pdf_id: string;
+      filename: string;
+      upload_time: string;
+      total_pages: number;
+      total_chunks: number;
+    }>
+  >([]);
   const [showInfo, setShowInfo] = useState(false);
   const [cacheInfo, setCacheInfo] = useState<{
     totalEntries: number;
@@ -64,12 +75,12 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
   }>({
     totalEntries: 0,
     sizeInKB: 0,
-    oldestEntry: '없음',
-    newestEntry: '없음',
-    hitRate: 0
+    oldestEntry: "없음",
+    newestEntry: "없음",
+    hitRate: 0,
   });
   const [useCache, setUseCache] = useState(true);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -90,26 +101,27 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           inputRef.current?.focus();
         }, 100);
       }
-      
+
       // AI 서비스 상태 확인
       checkAIServiceStatus().then(setAiStatus);
-      
+
       // 사용 가능한 PDF 목록 조회
       getAvailablePDFs().then(setAvailablePdfs);
-      
+
       // 캐시 정보 업데이트
       setCacheInfo(getChatCacheInfo());
-      
+
       // 챗봇 연결 테스트
       testChatConnection();
-      
+
       // AI 상태에 따른 환영 메시지 설정
       if (messages.length === 0) {
         const welcomeMessage: Message = {
           id: "1",
-          content: aiStatus.ai_available && aiStatus.model_loaded
-            ? "안녕하세요! IFRO 교통 분석 AI 어시스턴트입니다. 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n어떤 것이든 물어보세요!"
-            : "안녕하세요! IFRO 교통 분석 어시스턴트입니다. 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.",
+          content:
+            aiStatus.ai_available && aiStatus.model_loaded
+              ? "안녕하세요! IFRO 교통 분석 AI 어시스턴트입니다. 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n어떤 것이든 물어보세요!"
+              : "안녕하세요! IFRO 교통 분석 어시스턴트입니다. 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.",
           sender: "bot",
           timestamp: new Date(),
         };
@@ -135,12 +147,12 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     try {
       // AI 기반 챗봇 API 호출 (캐시 사용)
       const response = await sendAIChatMessage(
-        userMessage.content, 
-        selectedPdfId, 
+        userMessage.content,
+        selectedPdfId,
         true, // 대화 컨텍스트 사용
         useCache // 캐시 사용 여부
       );
-      
+
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         content: response.answer,
@@ -151,19 +163,22 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           question_type: response.question_type,
           generation_time: response.generation_time,
           model_name: response.model_name,
-          from_cache: response.from_cache
-        }
+          from_cache: response.from_cache,
+        },
       };
 
       setMessages((prev) => [...prev, botResponse]);
-      
+
       // 캐시 정보 업데이트
       setCacheInfo(getChatCacheInfo());
     } catch (error) {
       console.error("AI 응답 생성 중 오류:", error);
       const errorResponse: Message = {
         id: (Date.now() + 1).toString(),
-        content: error instanceof Error ? error.message : "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        content:
+          error instanceof Error
+            ? error.message
+            : "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
         sender: "bot",
         timestamp: new Date(),
       };
@@ -183,7 +198,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
   const handleClearCache = () => {
     const removedCount = clearChatCache(selectedPdfId);
     setCacheInfo(getChatCacheInfo());
-    
+
     // 사용자에게 알림
     const notificationMessage: Message = {
       id: (Date.now() + 1).toString(),
@@ -226,7 +241,12 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           <div>
             <h3 className="font-semibold text-gray-800">AI 어시스턴트</h3>
             <div className="flex items-center space-x-1 text-xs">
-              <div className={`w-2 h-2 rounded-full ${getStatusColor().replace('text-', 'bg-')}`}></div>
+              <div
+                className={`w-2 h-2 rounded-full ${getStatusColor().replace(
+                  "text-",
+                  "bg-"
+                )}`}
+              ></div>
               <span className={getStatusColor()}>{getStatusText()}</span>
               {useCache && (
                 <>
@@ -262,7 +282,11 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           <div className="space-y-2">
             <div className="flex justify-between">
               <span>AI 모델:</span>
-              <span className={aiStatus.model_loaded ? "text-green-600" : "text-red-600"}>
+              <span
+                className={
+                  aiStatus.model_loaded ? "text-green-600" : "text-red-600"
+                }
+              >
                 {aiStatus.model_loaded ? "로드됨" : "로드 안됨"}
               </span>
             </div>
@@ -274,7 +298,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
               <span>문서 청크:</span>
               <span>{aiStatus.total_chunks}개</span>
             </div>
-            
+
             {/* 캐시 정보 */}
             <div className="border-t pt-2 mt-2">
               <div className="flex items-center space-x-1 mb-1">
@@ -300,7 +324,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                 </div>
               </div>
             </div>
-            
+
             {/* 캐시 제어 */}
             <div className="border-t pt-2 mt-2">
               <div className="flex items-center justify-between">
@@ -322,11 +346,11 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                 </button>
               </div>
             </div>
-            
+
             {availablePdfs.length > 0 && (
               <div className="mt-2">
                 <span className="font-medium">사용 가능한 문서:</span>
-                <select 
+                <select
                   value={selectedPdfId}
                   onChange={(e) => setSelectedPdfId(e.target.value)}
                   className="ml-2 text-xs border rounded px-1"
@@ -391,17 +415,26 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                       <div className="flex items-center space-x-2">
                         <span>신뢰도:</span>
                         <div className="flex-1 bg-gray-200 rounded-full h-1">
-                          <div 
-                            className="bg-green-500 h-1 rounded-full" 
-                            style={{ width: `${message.metadata.confidence_score * 100}%` }}
+                          <div
+                            className="bg-green-500 h-1 rounded-full"
+                            style={{
+                              width: `${
+                                message.metadata.confidence_score * 100
+                              }%`,
+                            }}
                           ></div>
                         </div>
-                        <span>{Math.round(message.metadata.confidence_score * 100)}%</span>
+                        <span>
+                          {Math.round(message.metadata.confidence_score * 100)}%
+                        </span>
                       </div>
                     )}
                     <div className="flex items-center space-x-4">
                       {message.metadata.generation_time !== undefined && (
-                        <span>처리시간: {message.metadata.generation_time.toFixed(1)}초</span>
+                        <span>
+                          처리시간:{" "}
+                          {message.metadata.generation_time.toFixed(1)}초
+                        </span>
                       )}
                       {message.metadata.model_name && (
                         <span>모델: {message.metadata.model_name}</span>
@@ -440,7 +473,9 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                     ></div>
                   </div>
                   <span className="text-sm text-gray-600">
-                    {useCache ? "AI가 생각 중... (캐시 확인 중)" : "AI가 생각 중..."}
+                    {useCache
+                      ? "AI가 생각 중... (캐시 확인 중)"
+                      : "AI가 생각 중..."}
                   </span>
                 </div>
               </div>

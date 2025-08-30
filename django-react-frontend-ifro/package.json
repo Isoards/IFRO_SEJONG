@@ -1,6 +1,6 @@
 {
-  "name": "peru-traffic-dashboard",
-  "version": "0.1.0",
+  "name": "WILL-Traffic-Dashboard",
+  "version": "1.0.0",
   "private": true,
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

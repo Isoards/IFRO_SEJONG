@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { debugLog } from "../../utils/debugUtils";
 import { useTranslation } from "react-i18next";
 import { X, Star, Plus } from "lucide-react";
 import {
@@ -51,7 +52,7 @@ export const IntersectionDetailPanel: React.FC<
 
   // 컴포넌트 마운트 시 실제 데이터 가져오기
   React.useEffect(() => {
-    console.log(
+    debugLog(
       "Intersection changed to:",
       intersection.id,
       "clearing previous data"
@@ -62,13 +63,13 @@ export const IntersectionDetailPanel: React.FC<
   }, [intersection.id]);
 
   const { status, generatePDF, isSupported } = usePDFGeneration({
-    onSuccess: () => console.log("PDF generated successfully!"),
+    onSuccess: () => debugLog("PDF generated successfully!"),
     onError: (error) => console.error("PDF generation failed:", error),
   });
 
   // 실제 리포트 데이터를 가져오는 함수
   const fetchReportData = async () => {
-    console.log(`Fetching report data for intersection ${intersection.id}...`);
+    debugLog(`Fetching report data for intersection ${intersection.id}...`);
     setIsLoadingReportData(true);
     try {
       // 올바른 API 함수 사용 (현재 언어 전달)
@@ -79,8 +80,8 @@ export const IntersectionDetailPanel: React.FC<
         currentLanguage
       );
 
-      console.log("API Response:", data);
-      console.log("Traffic Volumes:", data.trafficVolumes);
+      debugLog("API Response:", data);
+      debugLog("Traffic Volumes:", data.trafficVolumes);
 
       const newReportData = {
         intersection: {
@@ -110,7 +111,7 @@ export const IntersectionDetailPanel: React.FC<
           (data as any).interpretation?.peak_direction || undefined,
       };
 
-      console.log("Setting report data:", newReportData);
+      debugLog("Setting report data:", newReportData);
       setActualReportData(newReportData);
     } catch (error) {
       console.error("Failed to fetch report data:", error);
@@ -165,13 +166,13 @@ export const IntersectionDetailPanel: React.FC<
 
     // 데이터 로딩이 완료될 때까지 기다리기
     if (isLoadingReportData) {
-      console.log("Waiting for report data to load...");
+      debugLog("Waiting for report data to load...");
       return;
     }
 
     // 실제 데이터가 있으면 사용하고, 없으면 기본 데이터 사용
     const dataToUse = actualReportData || reportData;
-    console.log("Using report data:", dataToUse);
+    debugLog("Using report data:", dataToUse);
     await generatePDF(dataToUse, templateRef.current);
   };
 
