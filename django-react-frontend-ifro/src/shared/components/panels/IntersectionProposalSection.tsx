@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import {
   FileText,
-  Plus,
   Eye,
   ThumbsUp,
   Clock,
@@ -85,7 +83,6 @@ const PRIORITY_COLORS: Record<ProposalPriority, string> = {
 export const IntersectionProposalSection: React.FC<
   IntersectionProposalSectionProps
 > = ({ intersection, onRefresh }) => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const [proposals, setProposals] = useState<PolicyProposal[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -116,11 +113,6 @@ export const IntersectionProposalSection: React.FC<
 
     loadProposals();
   }, [intersection.id]);
-
-  // 새 정책제안 작성 페이지로 이동
-  const handleCreateProposal = () => {
-    navigate(`/proposals/create?intersection_id=${intersection.id}`);
-  };
 
   // 데이터 새로고침 함수
   const refreshProposals = useCallback(async () => {

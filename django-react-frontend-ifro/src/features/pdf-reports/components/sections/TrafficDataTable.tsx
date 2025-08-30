@@ -18,13 +18,6 @@ const DIRECTION_LABELS = {
   W: 'West (W)'
 };
 
-const CONGESTION_COLORS = {
-  bajo: 'text-green-600 bg-green-100',
-  medio: 'text-yellow-600 bg-yellow-100',
-  alto: 'text-red-600 bg-red-100',
-  default: 'text-gray-600 bg-gray-100'
-};
-
 export const TrafficDataTable: React.FC<TrafficDataTableProps> = ({
   trafficVolumes,
   totalVolume,
@@ -47,11 +40,6 @@ export const TrafficDataTable: React.FC<TrafficDataTableProps> = ({
       return '0.0';
     }
     return ((volume / totalVolume) * 100).toFixed(1);
-  };
-
-  const getCongestionColor = (level?: string): string => {
-    if (!level) return CONGESTION_COLORS.default;
-    return CONGESTION_COLORS[level.toLowerCase() as keyof typeof CONGESTION_COLORS] || CONGESTION_COLORS.default;
   };
 
   return (

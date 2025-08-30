@@ -9,7 +9,6 @@ import {
   BarChart3,
 } from "lucide-react";
 import { getCurrentUser } from "../../services/user";
-import { useTranslation } from "react-i18next";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -18,7 +17,6 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const [currentUser, setCurrentUser] = React.useState<any>(null);
 
   React.useEffect(() => {

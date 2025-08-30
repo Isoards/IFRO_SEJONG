@@ -34,7 +34,6 @@ const PRIORITY_OPTIONS: {
 const EditProposalForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [proposal, setProposal] = useState<PolicyProposal | null>(null);
   const [intersections, setIntersections] = useState<Intersection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +61,6 @@ const EditProposalForm: React.FC = () => {
       try {
         // 사용자 정보 로드
         const user = await getCurrentUser();
-        setCurrentUser(user);
 
         // 제안 정보 로드
         const proposalData = await getProposal(parseInt(id));

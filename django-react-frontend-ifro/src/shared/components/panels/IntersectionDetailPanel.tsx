@@ -1,16 +1,13 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Star, Plus } from "lucide-react";
 import {
   Intersection,
   ApiTrafficData,
   ReportData,
-  TrafficData,
-  TrafficInterpretationResponse,
 } from "../../types/global.types";
 import { MiniChart } from "../ui/MiniChart";
 import { usePDFGeneration } from "../../utils/usePDFGeneration";
-import { PDFGenerationStatus } from "../../../features/pdf-reports/components/PDFGenerationStatus";
 import { AIEnhancedPDFButton } from "../../../features/dashboard/components/AIEnhancedPDFButton";
 import { PDFTemplate } from "../../../features/pdf-reports/components/PDFTemplate";
 import { getIntersectionReportData } from "../../services/intersections";
@@ -61,6 +58,7 @@ export const IntersectionDetailPanel: React.FC<
     );
     setActualReportData(null); // 이전 데이터 초기화
     fetchReportData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intersection.id]);
 
   const { status, generatePDF, isSupported } = usePDFGeneration({

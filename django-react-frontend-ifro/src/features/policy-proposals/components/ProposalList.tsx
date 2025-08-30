@@ -8,7 +8,6 @@ import {
   ProposalFilters,
 } from "../../../shared/types/global.types";
 import { getProposals, getMyProposals } from "../../../shared/services/proposals";
-import { getCurrentUser } from "../../../shared/services/user";
 
 const CATEGORY_LABELS: Record<ProposalCategory, string> = {
   traffic_signal: "신호등 관련",
@@ -54,7 +53,6 @@ const ProposalList: React.FC = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [pageSize] = useState(10);
   const [showMyProposals, setShowMyProposals] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [filters, setFilters] = useState<ProposalFilters>({
     category: undefined,
@@ -81,22 +79,10 @@ const ProposalList: React.FC = () => {
     }));
   }, [searchParams]);
 
-  // 현재 사용자 정보 로드
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const user = await getCurrentUser();
-        setCurrentUser(user);
-      } catch (error) {
-        console.error("사용자 정보 로딩 실패:", error);
-      }
-    };
-    loadUser();
-  }, []);
-
   // 제안 목록 로드
   useEffect(() => {
     loadProposals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, filters, showMyProposals]);
 
   const loadProposals = async () => {
