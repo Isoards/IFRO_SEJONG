@@ -398,9 +398,25 @@ class ChromaDBVectorStore(VectorStoreInterface):
         documents = []
         metadatas = []
         
+        # 중복 ID 필터링
+        existing_ids = set()
+        try:
+            # 기존 컬렉션의 모든 ID 가져오기
+            existing_data = self.collection.get()
+            if existing_data and existing_data['ids']:
+                existing_ids = set(existing_data['ids'])
+        except Exception as e:
+            logger.warning(f"기존 ID 확인 중 오류 발생: {e}")
+        
+        new_chunks = []
         for chunk in chunks:
             if chunk.embedding is None:
                 raise ValueError(f"청크 {chunk.chunk_id}에 임베딩이 없습니다.")
+            
+            # 중복 ID인지 확인
+            if chunk.chunk_id in existing_ids:
+                logger.info(f"중복 ID 건너뛰기: {chunk.chunk_id}")
+                continue
             
             ids.append(chunk.chunk_id)
             embeddings.append(chunk.embedding.tolist())
@@ -412,16 +428,24 @@ class ChromaDBVectorStore(VectorStoreInterface):
                 "chunk_index": chunk.metadata.get("chunk_index") if chunk.metadata else 0
             }
             metadatas.append(metadata)
+            new_chunks.append(chunk)
+        
+        if not new_chunks:
+            logger.info("추가할 새로운 청크가 없습니다.")
+            return
         
         # ChromaDB에 추가
-        self.collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=documents,
-            metadatas=metadatas
-        )
-        
-        logger.info(f"{len(chunks)}개 청크를 ChromaDB에 추가")
+        try:
+            self.collection.add(
+                ids=ids,
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas
+            )
+            logger.info(f"{len(new_chunks)}개 청크를 ChromaDB에 추가")
+        except Exception as e:
+            logger.error(f"ChromaDB에 청크 추가 실패: {e}")
+            raise
     
     def search(self, query_embedding: np.ndarray, top_k: int = 5, 
                filter_metadata: Optional[Dict] = None) -> List[Tuple[TextChunk, float]]:
@@ -538,7 +562,7 @@ class HybridVectorStore:
             # 교통, 데이터베이스, 일반 컨텍스트별 표현 추출
             for context in ["traffic", "database", "general"]:
                 expressions = expression_enhancer.get_multi_expressions(
-                    chunk.text, context
+                    chunk.content, context
                 )
                 
                 if expressions:

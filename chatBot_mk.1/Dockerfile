@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 파일 복사 및 설치
@@ -17,8 +18,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 애플리케이션 코드 복사
 COPY . .
 
+# 데이터 디렉토리 생성
+RUN mkdir -p /app/data /app/vector_store
+
 # 포트 노출
 EXPOSE 8008
 
-# 서버 실행 (실제 API 서버)
-CMD ["python", "-m", "api.endpoints"]
+# 환경 변수 설정
+ENV PYTHONPATH=/app
+ENV MODEL_TYPE=ollama
+ENV MODEL_NAME=mistral:latest
+ENV EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+
+# 서버 실행 (run_server.py 사용)
+CMD ["python", "run_server.py"]
