@@ -20,7 +20,9 @@
     "today": "Today",
     "all": "All",
     "time": "Time",
-    "lastUpdate": "Last Update"
+    "lastUpdate": "Last Update",
+    "trafficSystem": "Traffic System",
+    "noAccess": "No Access"
   },
   "auth": {
     "login": "Login",
@@ -44,8 +46,10 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "profile": "Profile",
+    "proposals": "Policy Proposals",
     "settings": "Settings",
+    "proposalManagement": "Proposal Management",
+    "profile": "Profile",
     "simpleView": "Simple Intersection View",
     "intersectionView": "Intersection Traffic Flow",
     "incidentsView": "Incidents and Events",
@@ -156,9 +160,52 @@
     "timeline": "Timeline"
   },
   "favorites": {
+    "add": "Add to Favorites",
+    "remove": "Remove from Favorites",
+    "addToFavorites": "Add Flow to Favorites",
     "empty": {
       "title": "No favorites yet",
       "description": "Click the star icon to add favorites"
+    }
+  },
+  "policy": {
+    "createProposal": "Create Policy Proposal",
+    "createDescription": "Submit your opinions or suggestions for traffic system improvements to administrators.",
+    "proposal": "Policy Proposal",
+    "submit": "Submit Proposal",
+    "submitting": "Submitting...",
+    "draft": "Draft",
+    "title": "Title",
+    "titlePlaceholder": "Enter the policy proposal title",
+    "category": "Category",
+    "priority": "Priority",
+    "relatedIntersection": "Related Intersection",
+    "selectIntersection": "Select intersection (optional)",
+    "locationDescription": "Location Description",
+    "locationPlaceholder": "Specific location or address (optional)",
+    "content": "Content",
+    "contentPlaceholder": "Please describe the policy proposal in detail. Include current issues, improvement plans, and expected effects.",
+    "tags": "Tags",
+    "categories": {
+      "trafficSignal": "Traffic Signal",
+      "roadSafety": "Road Safety",
+      "trafficFlow": "Traffic Flow",
+      "infrastructure": "Infrastructure",
+      "policy": "Traffic Policy",
+      "other": "Other"
+    },
+    "priorities": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "underReview": "Under Review",
+      "inProgress": "In Progress",
+      "completed": "Completed",
+      "rejected": "Rejected"
     }
   },
   "dates": {
