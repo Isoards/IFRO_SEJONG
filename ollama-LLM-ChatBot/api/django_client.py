@@ -173,46 +173,7 @@ class PDFQAClient:
         """
         return self._make_request("GET", "/health")
     
-    def get_conversation_cache_stats(self) -> Dict[str, Any]:
-        """
-        대화 이력 캐시 통계 조회
-        
-        Returns:
-            캐시 통계 정보
-        """
-        return self._make_request("GET", "/conversation/cache/stats")
-    
-    def clear_conversation_cache(self, pdf_id: Optional[str] = None) -> Dict[str, Any]:
-        """
-        대화 이력 캐시 삭제
-        
-        Args:
-            pdf_id: 특정 PDF의 캐시만 삭제 (None이면 전체)
-            
-        Returns:
-            삭제 결과
-        """
-        params = {"pdf_id": pdf_id} if pdf_id else {}
-        return self._make_request("DELETE", "/conversation/cache", params=params)
-    
-    def search_conversation_cache(self, question: str, threshold: float = 0.7, limit: int = 5) -> Dict[str, Any]:
-        """
-        대화 이력에서 유사한 질문 검색
-        
-        Args:
-            question: 검색할 질문
-            threshold: 유사도 임계값
-            limit: 반환할 최대 결과 수
-            
-        Returns:
-            검색 결과
-        """
-        params = {
-            "question": question,
-            "threshold": threshold,
-            "limit": limit
-        }
-        return self._make_request("GET", "/conversation/cache/search", params=params)
+
 
 # Django에서 사용하기 위한 편의 함수들
 
