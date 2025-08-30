@@ -38,6 +38,16 @@ interface GoogleMapProps {
     source: string;
     coordinates: { lat: number; lng: number }[];
   }) => void;
+  showHeatmap?: boolean;
+  heatmapData?: Array<{
+    intersection_id: number;
+    intersection_name: string;
+    latitude: number;
+    longitude: number;
+    view_count: number;
+    intensity: number;
+    weight: number;
+  }>;
 }
 
 // const defaultCenter = { lat: -12.0464, lng: -77.0428 }; // Lima, Peru
@@ -56,6 +66,8 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
   onIncidentClick,
   center,
   onRouteUpdate,
+  showHeatmap = false,
+  heatmapData = [],
 }) => {
   const { t } = useTranslation();
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -1267,6 +1279,47 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         gestureHandling: "greedy",
       }}
     >
+      {/* 히트맵 오버레이 - 조회수 기반 색상 표시 */}
+      {showHeatmap &&
+        heatmapData.map((point) => (
+          <OverlayView
+            key={`heatmap-${point.intersection_id}`}
+            position={{ lat: point.latitude, lng: point.longitude }}
+            mapPaneName={OverlayView.OVERLAY_LAYER}
+          >
+            <div
+              style={{
+                position: "absolute",
+                transform: "translate(-50%, -50%)",
+                width: `${Math.max(20, point.intensity * 40)}px`,
+                height: `${Math.max(20, point.intensity * 40)}px`,
+                borderRadius: "50%",
+                backgroundColor: `rgba(255, ${Math.floor(255 * (1 - point.intensity))}, ${Math.floor(255 * (1 - point.intensity))}, ${Math.max(0.3, point.intensity * 0.8)})`,
+                border: "2px solid rgba(255, 255, 255, 0.8)",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "10px",
+                fontWeight: "bold",
+                color: "white",
+                textShadow: "1px 1px 2px rgba(0, 0, 0, 0.7)",
+                cursor: "pointer",
+                zIndex: 100,
+              }}
+              onClick={() => {
+                const intersection = intersections.find(i => i.id === point.intersection_id);
+                if (intersection) {
+                  onIntersectionClick(intersection);
+                }
+              }}
+              title={`${point.intersection_name}\n조회수: ${point.view_count.toLocaleString()}회`}
+            >
+              {point.view_count > 100 ? Math.floor(point.view_count / 100) + 'K' : point.view_count}
+            </div>
+          </OverlayView>
+        ))}
+
       {/* 선택된 점 위에 커스텀 라벨 표시 - 교차로 간 통행량 뷰에서만 표시 */}
       {activeTrafficView === "flow" &&
         selectedPoints.map((point, idx) => (

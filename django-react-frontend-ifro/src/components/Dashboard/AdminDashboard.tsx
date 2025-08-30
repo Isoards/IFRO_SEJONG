@@ -13,14 +13,16 @@ import {
   getAdminStats,
   getAdminIntersections,
   getTrafficFlowFavoritesStats,
-  getTrafficFlowSummary
+  getTrafficFlowSummary,
+  getTopViewedIntersections
 } from "../../api/intersections";
 import {
   AdminStats,
   TopArea,
   IntersectionStats,
   TrafficFlowFavoriteStats,
-  TrafficFlowSummary
+  TrafficFlowSummary,
+  TopViewedIntersection
 } from "../../types/global.types";
 import SejongHeatmap from "./SejongHeatmap";
 
@@ -64,6 +66,7 @@ const AdminDashboard = () => {
   const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
   const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
   const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
+  const [topViewedIntersections, setTopViewedIntersections] = useState<TopViewedIntersection[]>([]);
   const [dailyViewData, setDailyViewData] = useState<DailyViewData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +127,18 @@ const AdminDashboard = () => {
           console.error('Failed to fetch traffic flow summary:', err);
           console.error('Error details:', err.response?.data || err.message);
           setTrafficFlowSummary(null);
+        }
+
+        // TOP 10 조회 구간 데이터 가져오기
+        try {
+          console.log('Fetching top viewed intersections...');
+          const topViewed = await getTopViewedIntersections();
+          console.log('Top viewed intersections fetched:', topViewed);
+          setTopViewedIntersections(topViewed);
+        } catch (err: any) {
+          console.error('Failed to fetch top viewed intersections:', err);
+          console.error('Error details:', err.response?.data || err.message);
+          setTopViewedIntersections([]);
         }
 
       } catch (err: any) {
@@ -335,15 +350,19 @@ const AdminDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-3 flex-1">
-                  {adminStats?.top_viewed_areas.length === 0 ? (
+                  {topViewedIntersections.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       조회 데이터가 없습니다.
                     </div>
                   ) : (
-                    adminStats?.top_viewed_areas.map((item: TopArea) => (
+                    topViewedIntersections.map((item: TopViewedIntersection) => (
                       <div
                         key={item.rank}
-                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
+                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => {
+                          // 교차로 상세 페이지로 이동하거나 지도에서 해당 위치로 이동
+                          console.log('Clicked intersection:', item.intersection_name);
+                        }}
                       >
                         <div className="flex items-center space-x-3">
                           <span
@@ -356,25 +375,33 @@ const AdminDashboard = () => {
                           >
                             {item.rank}
                           </span>
-                          <span className="text-gray-900 font-medium">
-                            {item.area}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-medium">
+                              {item.intersection_name}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              즐겨찾기: {item.favorite_count}명
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">
-                            {(item.views ?? 0).toLocaleString()}
-                          </span>
-                          <span
-                            className={`text-xs px-1 ${(item.change ?? 0) > 0
-                              ? "text-red-600"
-                              : (item.change ?? 0) < 0
-                                ? "text-blue-600"
-                                : "text-gray-600"
-                              }`}
-                          >
-                            {(item.change ?? 0) > 0 ? "▲" : (item.change ?? 0) < 0 ? "▼" : "—"}{" "}
-                            {Math.abs(item.change ?? 0)}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-sm text-gray-600 font-medium">
+                              {item.view_count.toLocaleString()}회
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor: `rgba(255, ${Math.floor(255 * (1 - item.intensity))}, ${Math.floor(255 * (1 - item.intensity))}, ${item.intensity})`
+                                }}
+                                title={`인기도: ${Math.round(item.intensity * 100)}%`}
+                              />
+                              <span className="text-xs text-gray-400">
+                                {Math.round(item.intensity * 100)}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -486,7 +513,10 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="p-6 flex-1 flex">
-              <SejongHeatmap className="w-full h-full min-h-[400px] relative" />
+              <SejongHeatmap 
+                className="w-full h-full min-h-[400px] relative"
+                topViewedData={topViewedIntersections}
+              />
             </div>
           </div>
 

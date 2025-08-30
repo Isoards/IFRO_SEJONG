@@ -364,3 +364,26 @@ export interface ProposalFilters {
   date_from?: string;
   date_to?: string;
 }
+
+// TOP 10 조회 구간 및 히트맵 관련 타입들
+export interface TopViewedIntersection {
+  rank: number;
+  intersection_id: number;
+  intersection_name: string;
+  latitude: number;
+  longitude: number;
+  view_count: number;
+  favorite_count: number;
+  intensity: number;
+  last_viewed?: string;
+}
+
+export interface HeatmapDataPoint {
+  intersection_id: number;
+  intersection_name: string;
+  latitude: number;
+  longitude: number;
+  view_count: number;
+  intensity: number;
+  weight: number;
+}
