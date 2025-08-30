@@ -20,6 +20,7 @@ from django.db.models import Sum, OuterRef, Subquery, Count, Q, F
 from django.db import transaction
 from datetime import datetime
 from django.utils import timezone
+import django.db.models
 from django.contrib.auth.models import User
 from django.contrib.auth import authenticate
 from ninja_jwt.controller import NinjaJWTDefaultController
@@ -1229,18 +1230,14 @@ def get_admin_intersections(request):
         from django.db.models import Q, F, Value, IntegerField
         from django.db.models.functions import Coalesce
         
-        # 교차로와 통계를 한 번의 쿼리로 조회
-        intersections_with_stats = Intersection.objects.select_related('intersectionstats').annotate(
-            stats_view_count=Coalesce('intersectionstats__view_count', Value(0), output_field=IntegerField()),
-            stats_favorite_count=Coalesce('intersectionstats__favorite_count', Value(0), output_field=IntegerField()),
-            stats_ai_report_count=Coalesce('intersectionstats__ai_report_count', Value(0), output_field=IntegerField()),
-            stats_last_viewed=F('intersectionstats__last_viewed'),
-            stats_last_ai_report=F('intersectionstats__last_ai_report')
-        ).filter(
-            Q(intersectionstats__favorite_count__gt=0) | 
-            Q(intersectionstats__view_count__gt=0) |
-            Q(intersectionstats__ai_report_count__gt=0)
-        ).order_by('-intersectionstats__ai_report_count', '-intersectionstats__favorite_count', '-intersectionstats__view_count')[:100]  # 상위 100개만
+        # 교차로와 통계를 한 번의 쿼리로 조회 (IntersectionStats 모델이 없으므로 기본값 사용)
+        intersections_with_stats = Intersection.objects.annotate(
+            stats_view_count=Value(0, output_field=IntegerField()),
+            stats_favorite_count=Value(0, output_field=IntegerField()),
+            stats_ai_report_count=Value(0, output_field=IntegerField()),
+            stats_last_viewed=Value(None, output_field=django.db.models.DateTimeField()),
+            stats_last_ai_report=Value(None, output_field=django.db.models.DateTimeField())
+        ).order_by('name')[:100]  # 상위 100개만
         
         result = []
         for intersection in intersections_with_stats:
@@ -1258,3 +1255,130 @@ def get_admin_intersections(request):
         
     except Exception as e:
         raise HttpError(500, f"관리자 교차로 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 교통 흐름 분석 즐겨찾기 통계 API
+@router.get("/admin/traffic-flow-favorites", response=List[dict])
+def get_traffic_flow_favorites_stats(request):
+    """관리자용 교통 흐름 분석 즐겨찾기 통계 조회"""
+    try:
+        from .models import TrafficFlowAnalysisStats
+        
+        # 인기 교통 흐름 경로 통계 (즐겨찾기 수 기준 상위 20개)
+        flow_stats = TrafficFlowAnalysisStats.objects.select_related(
+            'start_intersection', 'end_intersection'
+        ).order_by('-total_favorites', '-total_accesses')[:20]
+        
+        result = []
+        for idx, stat in enumerate(flow_stats):
+            result.append({
+                'rank': idx + 1,
+                'route': f"{stat.start_intersection.name} → {stat.end_intersection.name}",
+                'start_intersection': {
+                    'id': stat.start_intersection.id,
+                    'name': stat.start_intersection.name
+                },
+                'end_intersection': {
+                    'id': stat.end_intersection.id,
+                    'name': stat.end_intersection.name
+                },
+                'total_favorites': stat.total_favorites,
+                'total_accesses': stat.total_accesses,
+                'unique_users': stat.unique_users,
+                'last_accessed': stat.last_accessed,
+                'popularity_score': stat.total_favorites * 2 + stat.total_accesses,  # 인기도 점수
+                'created_at': stat.created_at,
+                'updated_at': stat.updated_at
+            })
+        
+        return result
+        
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 즐겨찾기 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/admin/traffic-flow-favorites/detailed", response=List[dict])
+def get_traffic_flow_favorites_detailed(request):
+    """관리자용 교통 흐름 분석 즐겨찾기 상세 정보"""
+    try:
+        from .models import TrafficFlowAnalysisFavorite
+        
+        # 모든 즐겨찾기 데이터 (사용자별)
+        favorites = TrafficFlowAnalysisFavorite.objects.select_related(
+            'user', 'start_intersection', 'end_intersection'
+        ).order_by('-access_count', '-last_accessed')[:50]  # 상위 50개
+        
+        result = []
+        for favorite in favorites:
+            result.append({
+                'id': favorite.id,
+                'user': {
+                    'id': favorite.user.id,
+                    'username': favorite.user.username,
+                    'email': favorite.user.email
+                },
+                'route': f"{favorite.start_intersection.name} → {favorite.end_intersection.name}",
+                'start_intersection': {
+                    'id': favorite.start_intersection.id,
+                    'name': favorite.start_intersection.name
+                },
+                'end_intersection': {
+                    'id': favorite.end_intersection.id,
+                    'name': favorite.end_intersection.name
+                },
+                'favorite_name': favorite.favorite_name,
+                'access_count': favorite.access_count,
+                'last_accessed': favorite.last_accessed,
+                'created_at': favorite.created_at
+            })
+        
+        return result
+        
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 즐겨찾기 상세 정보 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/admin/traffic-flow-summary", response=dict)
+def get_traffic_flow_summary(request):
+    """관리자용 교통 흐름 분석 요약 통계"""
+    try:
+        from .models import TrafficFlowAnalysisFavorite, TrafficFlowAnalysisStats
+        from django.db.models import Sum, Count, Avg
+        
+        # 전체 통계
+        total_favorites = TrafficFlowAnalysisFavorite.objects.count()
+        total_routes = TrafficFlowAnalysisStats.objects.count()
+        total_users = TrafficFlowAnalysisFavorite.objects.values('user').distinct().count()
+        
+        # 평균 통계
+        avg_favorites_per_route = TrafficFlowAnalysisStats.objects.aggregate(
+            avg_favorites=Avg('total_favorites')
+        )['avg_favorites'] or 0
+        
+        avg_accesses_per_favorite = TrafficFlowAnalysisFavorite.objects.aggregate(
+            avg_accesses=Avg('access_count')
+        )['avg_accesses'] or 0
+        
+        # 인기 경로 (상위 5개)
+        top_routes = TrafficFlowAnalysisStats.objects.select_related(
+            'start_intersection', 'end_intersection'
+        ).order_by('-total_favorites')[:5]
+        
+        top_routes_data = []
+        for route in top_routes:
+            top_routes_data.append({
+                'route': f"{route.start_intersection.name} → {route.end_intersection.name}",
+                'favorites': route.total_favorites,
+                'accesses': route.total_accesses
+            })
+        
+        return {
+            'summary': {
+                'total_favorites': total_favorites,
+                'total_routes': total_routes,
+                'total_users': total_users,
+                'avg_favorites_per_route': round(avg_favorites_per_route, 2),
+                'avg_accesses_per_favorite': round(avg_accesses_per_favorite, 2)
+            },
+            'top_routes': top_routes_data
+        }
+        
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 요약 통계 조회 중 오류가 발생했습니다: {str(e)}")

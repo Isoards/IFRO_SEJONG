@@ -225,6 +225,22 @@ export const getAdminIntersections = async (): Promise<IntersectionStats[]> => {
   return response.data;
 };
 
+// 교통 흐름 분석 즐겨찾기 관련 API
+export const getTrafficFlowFavoritesStats = async () => {
+  const response = await api.get('/traffic/admin/traffic-flow-favorites');
+  return response.data;
+};
+
+export const getTrafficFlowFavoritesDetailed = async () => {
+  const response = await api.get('/traffic/admin/traffic-flow-favorites/detailed');
+  return response.data;
+};
+
+export const getTrafficFlowSummary = async () => {
+  const response = await api.get('/traffic/admin/traffic-flow-summary');
+  return response.data;
+};
+
 // 호환성을 위한 별칭 함수들
 export const getIntersectionFavoriteStatus = getFavoriteStatus;
 export const toggleIntersectionFavorite = toggleFavorite;
