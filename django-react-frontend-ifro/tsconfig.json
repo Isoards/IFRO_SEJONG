@@ -21,6 +21,17 @@
     "jsx": "react-jsx",
     "jsxImportSource": "react",
     "downlevelIteration": true,
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"],
+      "@shared/*": ["shared/*"],
+      "@features/*": ["features/*"],
+      "@components/*": ["shared/components/*"],
+      "@services/*": ["shared/services/*"],
+      "@utils/*": ["shared/utils/*"],
+      "@types/*": ["shared/types/*"],
+      "@constants/*": ["shared/constants/*"]
+    },
     "types": [
       "node",
       "react",
