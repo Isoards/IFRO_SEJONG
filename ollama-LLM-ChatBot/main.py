@@ -28,6 +28,7 @@ from core.dual_pipeline_processor import DualPipelineProcessor
 from api.endpoints import run_server
 from utils.file_manager import PDFFileManager, setup_pdf_storage
 from utils.keyword_enhancer import KeywordEnhancer
+from utils.chatbot_logger import chatbot_logger, QuestionType
 
 # 로깅 설정
 logging.basicConfig(
@@ -76,6 +77,7 @@ class PDFQASystem:
         self.keyword_enhancer: Optional[KeywordEnhancer] = None
         
         logger.info(f"PDF QA 시스템 초기화: {model_type}/{model_name}")
+        logger.info("챗봇 로깅 시스템이 활성화되었습니다.")
     
     def initialize_components(self) -> bool:
         """
@@ -410,10 +412,38 @@ class PDFQASystem:
             }
             
             logger.info(f"답변 생성 완료: {processing_time:.2f}초, 신뢰도: {answer.confidence_score:.2f}")
+            
+            # 챗봇 로깅
+            try:
+                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
+                chatbot_logger.log_question(
+                    user_question=question,
+                    question_type=question_type,
+                    intent=analyzed_question.intent,
+                    keywords=analyzed_question.keywords,
+                    processing_time=processing_time,
+                    confidence_score=answer.confidence_score,
+                    generated_answer=answer.content,
+                    used_chunks=answer.used_chunks,
+                    model_name=answer.model_name
+                )
+            except Exception as log_error:
+                logger.warning(f"로깅 중 오류 발생: {log_error}")
+            
             return result
             
         except Exception as e:
             logger.error(f"질문 처리 실패: {e}")
+            
+            # 오류 로깅
+            try:
+                chatbot_logger.log_error(
+                    user_question=question,
+                    error_message=str(e)
+                )
+            except Exception as log_error:
+                logger.warning(f"오류 로깅 중 문제 발생: {log_error}")
+            
             raise
     
     def interactive_mode(self):
