@@ -302,3 +302,77 @@ class IntersectionFavoriteLog(models.Model):
     def __str__(self):
         status = "추가" if self.is_favorite else "제거"
         return f"{self.intersection.name} - {self.user.username} - {status}"
+
+class TrafficFlowAnalysisFavorite(models.Model):
+    """교통 흐름 분석 즐겨찾기 모델 (시작점 -> 끝점)"""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, verbose_name="사용자")
+    start_intersection = models.ForeignKey(
+        'Intersection', 
+        on_delete=models.CASCADE, 
+        related_name='flow_favorites_as_start',
+        verbose_name="시작 교차로"
+    )
+    end_intersection = models.ForeignKey(
+        'Intersection', 
+        on_delete=models.CASCADE, 
+        related_name='flow_favorites_as_end',
+        verbose_name="도착 교차로"
+    )
+    favorite_name = models.CharField(max_length=200, blank=True, verbose_name="즐겨찾기 이름")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="생성 시간")
+    last_accessed = models.DateTimeField(null=True, blank=True, verbose_name="마지막 접근 시간")
+    access_count = models.PositiveIntegerField(default=0, verbose_name="접근 횟수")
+
+    class Meta:
+        verbose_name = "교통 흐름 분석 즐겨찾기"
+        verbose_name_plural = "교통 흐름 분석 즐겨찾기들"
+        unique_together = ['user', 'start_intersection', 'end_intersection']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['start_intersection', 'end_intersection']),
+            models.Index(fields=['access_count']),
+            models.Index(fields=['last_accessed']),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.favorite_name:
+            self.favorite_name = f"{self.start_intersection.name} → {self.end_intersection.name}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.user.username}: {self.start_intersection.name} → {self.end_intersection.name}"
+
+class TrafficFlowAnalysisStats(models.Model):
+    """교통 흐름 분석 통계 모델 (시작점 -> 끝점별 인기도)"""
+    start_intersection = models.ForeignKey(
+        'Intersection', 
+        on_delete=models.CASCADE, 
+        related_name='flow_stats_as_start',
+        verbose_name="시작 교차로"
+    )
+    end_intersection = models.ForeignKey(
+        'Intersection', 
+        on_delete=models.CASCADE, 
+        related_name='flow_stats_as_end',
+        verbose_name="도착 교차로"
+    )
+    total_favorites = models.PositiveIntegerField(default=0, verbose_name="총 즐겨찾기 수")
+    total_accesses = models.PositiveIntegerField(default=0, verbose_name="총 접근 횟수")
+    unique_users = models.PositiveIntegerField(default=0, verbose_name="고유 사용자 수")
+    last_accessed = models.DateTimeField(null=True, blank=True, verbose_name="마지막 접근 시간")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="생성 시간")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="업데이트 시간")
+
+    class Meta:
+        verbose_name = "교통 흐름 분석 통계"
+        verbose_name_plural = "교통 흐름 분석 통계들"
+        unique_together = ['start_intersection', 'end_intersection']
+        indexes = [
+            models.Index(fields=['total_favorites']),
+            models.Index(fields=['total_accesses']),
+            models.Index(fields=['unique_users']),
+            models.Index(fields=['last_accessed']),
+        ]
+
+    def __str__(self):
+        return f"{self.start_intersection.name} → {self.end_intersection.name} (즐겨찾기: {self.total_favorites}명)"

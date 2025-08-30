@@ -221,3 +221,61 @@ export interface AdminStats {
   total_favorites: number;
   total_ai_reports: number;
 }
+
+// 교통 흐름 분석 즐겨찾기 관련 타입들
+export interface TrafficFlowFavoriteStats {
+  rank: number;
+  route: string;
+  start_intersection: {
+    id: number;
+    name: string;
+  };
+  end_intersection: {
+    id: number;
+    name: string;
+  };
+  total_favorites: number;
+  total_accesses: number;
+  unique_users: number;
+  last_accessed?: string;
+  popularity_score: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrafficFlowFavoriteDetailed {
+  id: number;
+  user: {
+    id: number;
+    username: string;
+    email: string;
+  };
+  route: string;
+  start_intersection: {
+    id: number;
+    name: string;
+  };
+  end_intersection: {
+    id: number;
+    name: string;
+  };
+  favorite_name: string;
+  access_count: number;
+  last_accessed?: string;
+  created_at: string;
+}
+
+export interface TrafficFlowSummary {
+  summary: {
+    total_favorites: number;
+    total_routes: number;
+    total_users: number;
+    avg_favorites_per_route: number;
+    avg_accesses_per_favorite: number;
+  };
+  top_routes: Array<{
+    route: string;
+    favorites: number;
+    accesses: number;
+  }>;
+}

@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { getAdminStats, getAdminIntersections } from "../../api/intersections";
-import { AdminStats, TopArea, IntersectionStats } from "../../types/global.types";
+import { 
+  getAdminStats, 
+  getAdminIntersections, 
+  getTrafficFlowFavoritesStats, 
+  getTrafficFlowSummary 
+} from "../../api/intersections";
+import { 
+  AdminStats, 
+  TopArea, 
+  IntersectionStats, 
+  TrafficFlowFavoriteStats, 
+  TrafficFlowSummary 
+} from "../../types/global.types";
 
 const AdminDashboard = () => {
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
+  const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
+  const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,15 +37,43 @@ const AdminDashboard = () => {
         setAdminStats(stats);
         setError(null);
         
-        // 교차로 목록은 백그라운드에서 로드 (덜 중요한 데이터)
-        getAdminIntersections().then(intersections => {
-          setIntersectionStats(intersections);
-        }).catch(err => {
-          console.error('Failed to fetch intersection stats:', err);
-          setIntersectionStats([]);
-        });
+        // 교차로 목록과 교통 흐름 데이터는 백그라운드에서 로드 (덜 중요한 데이터)
+        console.log('Starting to fetch additional data...');
         
-      } catch (err) {
+        // 각각 개별적으로 호출해서 어느 것이 실패하는지 확인
+        try {
+          console.log('Fetching intersections...');
+          const intersections = await getAdminIntersections();
+          console.log('Intersections fetched:', intersections.length);
+          setIntersectionStats(intersections);
+        } catch (err: any) {
+          console.error('Failed to fetch intersections:', err);
+          setIntersectionStats([]);
+        }
+
+        try {
+          console.log('Fetching traffic flow stats...');
+          const flowStats = await getTrafficFlowFavoritesStats();
+          console.log('Traffic flow stats fetched:', flowStats);
+          setTrafficFlowStats(flowStats);
+        } catch (err: any) {
+          console.error('Failed to fetch traffic flow stats:', err);
+          console.error('Error details:', err.response?.data || err.message);
+          setTrafficFlowStats([]);
+        }
+
+        try {
+          console.log('Fetching traffic flow summary...');
+          const flowSummary = await getTrafficFlowSummary();
+          console.log('Traffic flow summary fetched:', flowSummary);
+          setTrafficFlowSummary(flowSummary);
+        } catch (err: any) {
+          console.error('Failed to fetch traffic flow summary:', err);
+          console.error('Error details:', err.response?.data || err.message);
+          setTrafficFlowSummary(null);
+        }
+        
+      } catch (err: any) {
         console.error('Failed to fetch admin stats:', err);
         setError('통계 데이터를 불러오는데 실패했습니다.');
         // 에러 시 기본 데이터 사용
@@ -593,7 +634,290 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* 다섯 번째 행 - 정책 제안 섹션 */}
+        {/* 다섯 번째 행 - 교통 흐름 분석 즐겨찾기 통계 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* 교통 흐름 요약 통계 */}
+          <div className="bg-white rounded-lg shadow-sm border">
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                교통 흐름 분석 요약
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                시민들의 교통 흐름 분석 이용 현황
+              </p>
+            </div>
+            <div className="p-6">
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-red-500">데이터 로드 실패: {error}</div>
+                </div>
+              ) : trafficFlowSummary ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-blue-50 rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {trafficFlowSummary.summary.total_favorites}
+                      </div>
+                      <div className="text-sm text-gray-600">총 즐겨찾기</div>
+                    </div>
+                    <div className="text-center p-3 bg-green-50 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">
+                        {trafficFlowSummary.summary.total_routes}
+                      </div>
+                      <div className="text-sm text-gray-600">분석 경로</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-purple-50 rounded-lg">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {trafficFlowSummary.summary.total_users}
+                      </div>
+                      <div className="text-sm text-gray-600">활성 사용자</div>
+                    </div>
+                    <div className="text-center p-3 bg-orange-50 rounded-lg">
+                      <div className="text-lg font-bold text-orange-600">
+                        {trafficFlowSummary.summary.avg_favorites_per_route.toFixed(1)}
+                      </div>
+                      <div className="text-sm text-gray-600">경로당 평균</div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  교통 흐름 데이터가 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 인기 교통 흐름 경로 TOP 10 */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border">
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                인기 교통 흐름 경로 TOP 10
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                시민들이 가장 많이 즐겨찾기한 A → B 경로 분석
+              </p>
+            </div>
+            <div className="p-6">
+              {loading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="text-red-500">데이터 로드 실패: {error}</div>
+                </div>
+              ) : trafficFlowStats.length > 0 ? (
+                <div className="space-y-3">
+                  {trafficFlowStats.slice(0, 10).map((flow) => (
+                    <div
+                      key={flow.rank}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span
+                          className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                            flow.rank <= 3
+                              ? "bg-yellow-100 text-yellow-800"
+                              : flow.rank <= 5
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {flow.rank}
+                        </span>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            <span className="text-blue-600">{flow.start_intersection.name}</span>
+                            <span className="mx-2 text-gray-400">→</span>
+                            <span className="text-orange-600">{flow.end_intersection.name}</span>
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {flow.unique_users}명의 사용자가 이용
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center space-x-4">
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-blue-600">
+                              {flow.total_favorites}
+                            </div>
+                            <div className="text-xs text-gray-500">즐겨찾기</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-green-600">
+                              {flow.total_accesses}
+                            </div>
+                            <div className="text-xs text-gray-500">접근 횟수</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-purple-600">
+                              {flow.popularity_score}
+                            </div>
+                            <div className="text-xs text-gray-500">인기도</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 py-8">
+                  교통 흐름 즐겨찾기 데이터가 없습니다.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 여섯 번째 행 - 교통 흐름 분석 상세 통계 */}
+        <div className="bg-white rounded-lg shadow-sm border">
+          <div className="p-6 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">
+              교통 흐름 분석 상세 통계
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              각 교통 흐름 경로별 상세 이용 현황 및 인기도 분석
+            </p>
+          </div>
+          <div className="p-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-32">
+                <div className="text-gray-500">데이터 로딩 중...</div>
+              </div>
+            ) : trafficFlowStats.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        순위
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        교통 흐름 경로
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        즐겨찾기 수
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        총 접근 횟수
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        고유 사용자
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        인기도 점수
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        최근 접근
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {trafficFlowStats.map((flow) => (
+                      <tr key={flow.rank} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`text-sm font-bold ${
+                              flow.rank <= 3
+                                ? "text-yellow-600"
+                                : flow.rank <= 5
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            {flow.rank}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            <span className="text-blue-600">{flow.start_intersection.name}</span>
+                            <span className="mx-2 text-gray-400">→</span>
+                            <span className="text-orange-600">{flow.end_intersection.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <span className="text-sm font-medium text-blue-600">
+                              {flow.total_favorites}
+                            </span>
+                            <span className="text-sm text-gray-500 ml-1">명</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {flow.total_accesses.toLocaleString()}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {flow.unique_users}명
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <span
+                              className={`text-sm font-bold ${
+                                flow.popularity_score >= 50
+                                  ? "text-red-600"
+                                  : flow.popularity_score >= 20
+                                  ? "text-orange-600"
+                                  : flow.popularity_score >= 10
+                                  ? "text-green-600"
+                                  : "text-gray-600"
+                              }`}
+                            >
+                              {flow.popularity_score}
+                            </span>
+                            <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  flow.popularity_score >= 50
+                                    ? "bg-red-600"
+                                    : flow.popularity_score >= 20
+                                    ? "bg-orange-600"
+                                    : flow.popularity_score >= 10
+                                    ? "bg-green-600"
+                                    : "bg-gray-600"
+                                }`}
+                                style={{
+                                  width: `${Math.min((flow.popularity_score / 100) * 100, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {flow.last_accessed
+                            ? new Date(flow.last_accessed).toLocaleDateString("ko-KR", {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "접근 없음"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 py-8">
+                교통 흐름 분석 데이터가 없습니다.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 일곱 번째 행 - 정책 제안 섹션 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* 정책 제안 공감 순위 */}
           <div className="bg-white rounded-lg shadow-sm border">
