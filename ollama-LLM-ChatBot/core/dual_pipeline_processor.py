@@ -17,6 +17,7 @@ from .answer_generator import AnswerGenerator, Answer, ModelType, GenerationConf
 from .sql_generator import SQLGenerator, DatabaseSchema, SQLQuery
 from .vector_store import HybridVectorStore
 from .pdf_processor import TextChunk
+from ..utils.chatbot_logger import chatbot_logger, QuestionType as ChatbotQuestionType
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +183,60 @@ class DualPipelineProcessor:
             
             total_time = time.time() - start_time
             
+            # 챗봇 로깅
+            try:
+                # 파이프라인 타입에 따른 질문 유형 결정
+                if pipeline_type == PipelineType.SQL_QUERY:
+                    question_type = ChatbotQuestionType.SQL
+                elif pipeline_type == PipelineType.DOCUMENT_SEARCH:
+                    question_type = ChatbotQuestionType.PDF
+                else:
+                    question_type = ChatbotQuestionType.HYBRID
+                
+                # SQL 결과가 있는 경우 SQL 로깅
+                if sql_result and sql_result.sql_query:
+                    chatbot_logger.log_sql_query(
+                        user_question=question,
+                        generated_sql=sql_result.sql_query.query,
+                        processing_time=sql_result.processing_time,
+                        confidence_score=sql_result.confidence_score,
+                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
+                    )
+                
+                # 문서 검색 결과가 있는 경우 PDF 로깅
+                if document_result and document_result.answer:
+                    chatbot_logger.log_pdf_query(
+                        user_question=question,
+                        generated_answer=document_result.answer.content,
+                        used_chunks=[chunk.content for chunk in document_result.relevant_chunks] if document_result.relevant_chunks else [],
+                        processing_time=document_result.processing_time,
+                        confidence_score=document_result.confidence_score,
+                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None
+                    )
+                
+                # 하이브리드 또는 일반 로깅
+                if pipeline_type == PipelineType.HYBRID or (not sql_result and not document_result):
+                    chatbot_logger.log_question(
+                        user_question=question,
+                        question_type=question_type,
+                        intent=analyzed_question.intent,
+                        keywords=analyzed_question.keywords,
+                        processing_time=total_time,
+                        confidence_score=self._calculate_confidence_with_expressions(
+                            document_result, sql_result, analyzed_question
+                        ),
+                        generated_answer=final_answer,
+                        model_name=self.answer_generator.llm.model_name if self.answer_generator.llm else None,
+                        additional_info={
+                            "pipeline_type": pipeline_type.value,
+                            "context": context,
+                            "expressions_used": analyzed_question.metadata.get("expressions", []) if analyzed_question.metadata else []
+                        }
+                    )
+                    
+            except Exception as log_error:
+                logger.warning(f"Dual Pipeline 로깅 중 오류 발생: {log_error}")
+            
             return DualPipelineResult(
                 question=question,
                 analyzed_question=analyzed_question,
@@ -201,6 +256,17 @@ class DualPipelineProcessor:
         
         except Exception as e:
             logger.error(f"Dual Pipeline 처리 중 오류: {e}")
+            
+            # 오류 로깅
+            try:
+                chatbot_logger.log_error(
+                    user_question=question,
+                    error_message=str(e),
+                    question_type=ChatbotQuestionType.UNKNOWN
+                )
+            except Exception as log_error:
+                logger.warning(f"오류 로깅 중 문제 발생: {log_error}")
+            
             # 오류 발생 시 기본 응답 반환
             return DualPipelineResult(
                 question=question,
