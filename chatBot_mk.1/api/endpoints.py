@@ -33,7 +33,8 @@ logger = logging.getLogger(__name__)
 class QuestionRequest(BaseModel):
     """질문 요청 모델"""
     question: str = Field(..., description="사용자 질문")
-    pdf_id: str = Field(..., description="PDF 문서 식별자")
+    pdf_id: str = Field("", description="PDF 문서 식별자 (빈 문자열이면 기본 PDF 사용)")
+    user_id: str = Field("", description="사용자 식별자")
     use_conversation_context: bool = Field(True, description="이전 대화 컨텍스트 사용 여부")
     max_chunks: int = Field(5, description="검색할 최대 청크 수")
     use_dual_pipeline: bool = Field(True, description="Dual Pipeline 사용 여부")
@@ -98,6 +99,83 @@ dual_pipeline_processor: Optional[DualPipelineProcessor] = None
 # PDF 메타데이터 저장소 (실제로는 데이터베이스 사용 권장)
 pdf_metadata: Dict[str, Dict] = {}
 
+# 서버 시작 시 자동 PDF 로드 함수
+async def load_pdfs_on_startup():
+    """서버 시작 시 자동으로 data/pdfs 폴더의 모든 PDF를 로드"""
+    try:
+        from pathlib import Path
+        import glob
+        
+        pdf_dir = Path("data/pdfs")
+        if not pdf_dir.exists():
+            logger.warning("data/pdfs 폴더를 찾을 수 없습니다.")
+            return
+        
+        # 모든 PDF 파일 찾기
+        pdf_files = []
+        for pattern in ["*.pdf", "*/*.pdf", "*/*/*.pdf"]:
+            pdf_files.extend(pdf_dir.glob(pattern))
+        
+        if not pdf_files:
+            logger.info("로드할 PDF 파일이 없습니다.")
+            return
+        
+        logger.info(f"{len(pdf_files)}개의 PDF 파일을 자동으로 로드합니다...")
+        
+        # 전역 객체들 초기화
+        global pdf_processor, vector_store
+        if pdf_processor is None:
+            pdf_processor = PDFProcessor()
+        if vector_store is None:
+            vector_store = HybridVectorStore()
+        
+        loaded_count = 0
+        for pdf_path in pdf_files:
+            try:
+                # 이미 처리된 PDF인지 확인 (파일명 기준)
+                existing_pdf_id = None
+                for pdf_id, metadata in pdf_metadata.items():
+                    if metadata.get("file_path") == str(pdf_path):
+                        existing_pdf_id = pdf_id
+                        break
+                
+                if existing_pdf_id:
+                    logger.info(f"이미 로드된 PDF 건너뛰기: {pdf_path.name}")
+                    continue
+                
+                # PDF 처리
+                chunks, metadata = pdf_processor.process_pdf(str(pdf_path))
+                
+                # 벡터 저장소에 추가
+                vector_store.add_chunks(chunks)
+                
+                # 메타데이터 저장
+                pdf_id = str(uuid.uuid4())
+                pdf_metadata[pdf_id] = {
+                    "filename": pdf_path.name,
+                    "file_path": str(pdf_path),
+                    "upload_time": datetime.now().isoformat(),
+                    "total_pages": metadata.get("pages", 0),
+                    "total_chunks": len(chunks),
+                    "extraction_method": metadata.get("extraction_method", []),
+                    "auto_loaded": True
+                }
+                
+                loaded_count += 1
+                logger.info(f"PDF 자동 로드 완료: {pdf_path.name} ({len(chunks)}개 청크)")
+                
+            except Exception as e:
+                logger.error(f"PDF 자동 로드 실패 {pdf_path}: {e}")
+                continue
+        
+        # 벡터 저장소 저장
+        vector_store.save()
+        
+        logger.info(f"PDF 자동 로드 완료: {loaded_count}개 파일이 로드되었습니다.")
+        
+    except Exception as e:
+        logger.error(f"PDF 자동 로드 중 오류 발생: {e}")
+
 # FastAPI 앱 초기화
 app = FastAPI(
     title="PDF QA System API",
@@ -106,6 +184,17 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# 서버 시작 이벤트 핸들러
+@app.on_event("startup")
+async def startup_event():
+    """서버 시작 시 실행되는 이벤트"""
+    logger.info("PDF QA System API 서버 시작...")
+    
+    # PDF 자동 로드
+    await load_pdfs_on_startup()
+    
+    logger.info("서버 시작 완료!")
 
 # CORS 설정 (TypeScript 프론트엔드 지원)
 app.add_middleware(
@@ -307,9 +396,14 @@ async def ask_question(
 ):
     """질문에 대한 답변 생성 (Dual Pipeline 지원)"""
     
-    # PDF 존재 확인
-    if request.pdf_id not in pdf_metadata:
-        raise HTTPException(status_code=404, detail="PDF를 찾을 수 없습니다.")
+    # PDF ID가 비어있거나 존재하지 않는 경우 기본 PDF 사용
+    if not request.pdf_id or request.pdf_id not in pdf_metadata:
+        # 사용 가능한 PDF 중에서 첫 번째 사용
+        if pdf_metadata:
+            request.pdf_id = list(pdf_metadata.keys())[0]
+            logger.info(f"기본 PDF 사용: {request.pdf_id}")
+        else:
+            raise HTTPException(status_code=404, detail="사용 가능한 PDF가 없습니다.")
     
     try:
         # Dual Pipeline 사용 여부에 따라 처리 방식 분기
@@ -694,11 +788,20 @@ async def search_conversation_cache(
 
 # 간단한 챗봇 엔드포인트 (PDF 없이 작동)
 @app.post("/chat")
-async def simple_chat(message: str):
+async def simple_chat(message: Dict[str, str]):
     """간단한 챗봇 응답 (PDF 없이 작동)"""
     try:
+        # 메시지 추출
+        user_message = message.get("message", "")
+        if not user_message:
+            return {
+                "success": False,
+                "response": "메시지가 비어있습니다.",
+                "timestamp": datetime.now().isoformat()
+            }
+        
         # 간단한 키워드 기반 응답
-        lower_message = message.lower()
+        lower_message = user_message.lower()
         
         if "교통" in lower_message or "traffic" in lower_message:
             response = "교통 데이터는 대시보드의 '분석' 탭에서 확인하실 수 있습니다. 특정 교차로를 클릭하시면 해당 지점의 상세한 교통량 정보를 볼 수 있어요."
@@ -789,4 +892,4 @@ def run_server(host: str = "0.0.0.0", port: int = 8008, debug: bool = False):
 
 if __name__ == "__main__":
     # 개발 서버 실행
-    run_server(debug=True)
+    run_server(debug=False)
