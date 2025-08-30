@@ -204,7 +204,7 @@ export const AIEnhancedPDFButton: React.FC<AIEnhancedPDFButtonProps> = ({
     } else if (status.error) {
       return <span className="text-red-400">⚠</span>;
     }
-    return <span>🤖</span>;
+    return null; // 이모티콘 제거
   };
 
   const isButtonDisabled =
@@ -235,20 +235,30 @@ export const AIEnhancedPDFButton: React.FC<AIEnhancedPDFButtonProps> = ({
         onClick={handleGenerateAIPDF}
         disabled={isButtonDisabled}
         className={`
-          flex items-center justify-center space-x-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[80px]
+          flex items-center justify-center space-x-1 transition-all duration-200
+          ${
+            className ||
+            "px-3 py-1.5 rounded-md text-sm font-medium min-w-[80px] bg-purple-600 hover:bg-purple-700 text-white border border-purple-600"
+          }
           ${
             isButtonDisabled
-              ? "bg-gray-300 text-gray-500 cursor-not-allowed opacity-50"
+              ? "!bg-gray-300 !text-gray-500 !border-gray-300 cursor-not-allowed opacity-50"
+              : className
+              ? "" // className이 있으면 기본 스타일 적용하지 않음
               : status.completed
-              ? "bg-purple-600 hover:bg-purple-700 text-white"
-              : "bg-purple-600 hover:bg-purple-700 text-white"
+              ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-600"
+              : "bg-purple-600 hover:bg-purple-700 text-white border-purple-600"
           }
         `}
         aria-label={getButtonText()}
         title={getButtonText()}
       >
         {getStatusIcon()}
-        <span className="text-sm whitespace-nowrap">{getButtonText()}</span>
+        <span
+          className={`whitespace-nowrap ${className ? "text-xs" : "text-sm"}`}
+        >
+          {getButtonText()}
+        </span>
       </button>
 
       {/* Hidden PDF Template */}
