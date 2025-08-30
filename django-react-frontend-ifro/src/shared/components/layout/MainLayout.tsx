@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Home,
   FileText,
@@ -15,6 +16,7 @@ interface MainLayoutProps {
 }
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = React.useState<any>(null);
@@ -45,9 +47,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   };
 
   const navItems = [
-    { path: "/dashboard", icon: Home, label: "대시보드" },
-    { path: "/proposals", icon: FileText, label: "정책제안" },
-    { path: "/settings", icon: Settings, label: "설정" },
+    { path: "/dashboard", icon: Home, label: t("navigation.dashboard") },
+    { path: "/proposals", icon: FileText, label: t("navigation.proposals") },
+    { path: "/settings", icon: Settings, label: t("navigation.settings") },
   ];
 
   // 관리자용 메뉴
@@ -55,7 +57,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     navItems.splice(2, 0, {
       path: "/admin/proposals",
       icon: BarChart3,
-      label: "정책제안 관리",
+      label: t("navigation.proposalManagement"),
     });
   }
 
@@ -68,7 +70,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">IFRO</span>
             </div>
-            <h1 className="text-xl font-bold text-gray-800">교통 시스템</h1>
+            <h1 className="text-xl font-bold text-gray-800">
+              {t("common.trafficSystem")}
+            </h1>
           </div>
         </div>
 

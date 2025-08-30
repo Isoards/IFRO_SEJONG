@@ -42,6 +42,26 @@ services:
         condition: service_healthy
     volumes:
       - ./django-react-backend-api-ifro:/app
+    command: >
+      sh -c "cd /app/src &&
+             echo 'Waiting for MySQL to be ready...' &&
+             until mysql -h db -u root -p$$MYSQL_PASSWORD --skip-ssl -e 'SELECT 1;' > /dev/null 2>&1; do
+               sleep 1;
+             done &&
+             echo 'MySQL is ready.' &&
+             echo 'Running migrations...' &&
+             echo 'Checking Django system tables...' &&
+             python manage.py migrate --run-syncdb --verbosity=0 || echo 'Initial migration attempt completed' &&
+             python manage.py migrate traffic --verbosity=0 || echo 'Traffic migration attempt completed' &&
+             echo 'All migrations completed. Starting services...' &&
+             echo '[ENCRYPT] 🔄 encrypt_transfer.py 시작됨...' &&
+             python ../encrypt_transfer.py &
+             ENCRYPT_PID=$$! &&
+             echo 'Starting Django server...' &&
+             python manage.py runserver 0.0.0.0:8000 &
+             wait $$ENCRYPT_PID &&
+             echo '[ENCRYPT] ✅ encrypt_transfer.py 완료됨.' &&
+             wait"
 
   frontend:
     build:
@@ -75,7 +95,13 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "ollama list | grep -q 'qwen2:1.5b' && ollama run qwen2:1.5b 'test' | head -1 | grep -q ."]
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          "ollama list | grep -q 'qwen2:1.5b' && ollama run qwen2:1.5b 'test' | head -1 | grep -q .",
+        ]
       interval: 30s
       timeout: 30s
       retries: 10

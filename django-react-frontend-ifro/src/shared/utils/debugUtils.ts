@@ -1,27 +1,24 @@
 // 개발 환경에서만 로그를 출력하는 유틸리티 함수들
-export const debugLog = {
-  log: (...args: any[]) => {
-    if (process.env.NODE_ENV === "development") {
+export const debugLog = (...args: any[]) => {
+  if (process.env.NODE_ENV === "development") {
+    if (process.env.REACT_APP_ENABLE_LOGS !== "false") {
       console.log(...args);
     }
-  },
+  }
+};
 
-  warn: (...args: any[]) => {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(...args);
-    }
-  },
+export const errorLog = (...args: any[]) => {
+  console.error(...args);
+};
 
-  error: (...args: any[]) => {
-    // 에러는 프로덕션에서도 출력
-    console.error(...args);
-  },
+export const warnLog = (...args: any[]) => {
+  console.warn(...args);
+};
 
-  info: (...args: any[]) => {
-    if (process.env.NODE_ENV === "development") {
-      console.info(...args);
-    }
-  },
+export const infoLog = (...args: any[]) => {
+  if (process.env.NODE_ENV === "development") {
+    console.info(...args);
+  }
 };
 
 // 성능 측정을 위한 유틸리티
