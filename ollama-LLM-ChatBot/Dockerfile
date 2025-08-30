@@ -1,5 +1,10 @@
 FROM python:3.11-slim
 
+# 한글 지원을 위한 로케일 설정
+ENV LANG=ko_KR.UTF-8
+ENV LC_ALL=ko_KR.UTF-8
+ENV LC_CTYPE=ko_KR.UTF-8
+
 # 작업 디렉토리 설정
 WORKDIR /app
 
@@ -9,7 +14,11 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     wget \
+    locales \
     && rm -rf /var/lib/apt/lists/*
+
+# 한글 로케일 생성
+RUN locale-gen ko_KR.UTF-8
 
 # Python 의존성 파일 복사 및 설치
 COPY requirements.txt .

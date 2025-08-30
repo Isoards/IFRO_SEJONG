@@ -2,7 +2,14 @@
 산학연계 뉴노멀 프로젝트 - 지능형 교통 흐름 및 도로 운영 시스템
 
 ## 🚀 프로젝트 개요
-IFRO는 Django 백엔드와 React 프론트엔드로 구성된 지능형 교통 분석 및 관리 시스템입니다. 실시간 교통 데이터 분석, 교통사고 관리, 교차로 간 통행량 분석 등의 기능을 제공합니다. 또한 PDF QA 챗봇 시스템을 통합하여 문서 기반 질의응답 기능도 제공합니다.
+IFRO는 Django 백엔드와 React 프론트엔드로 구성된 지능형 교통 분석 및 관리 시스템입니다. 실시간 교통 데이터 분석, 교통사고 관리, 교차로 간 통행량 분석 등의 기능을 제공합니다. 또한 Ollama 기반 PDF QA 챗봇 시스템을 통합하여 문서 기반 질의응답 기능도 제공합니다.
+
+### 🤖 AI 챗봇 시스템
+- **Ollama 기반**: 로컬에서 실행되는 빠르고 안전한 AI 모델
+- **자동 모델 다운로드**: Docker Compose 실행 시 필요한 모델 자동 설치
+- **최적화된 성능**: 빠른 응답을 위한 모델 설정 최적화
+- **PDF 문서 분석**: 업로드된 PDF 문서에 대한 질의응답
+- **SQL 데이터베이스 질의**: 교통 데이터에 대한 자연어 질의
 
 ## 📁 프로젝트 구조
 ```
@@ -27,19 +34,130 @@ IFRO/
 │   │   ├── types/                    # TypeScript 타입 정의
 │   │   └── utils/                    # 유틸리티 함수
 │   └── package.json
-├── chatBot_mk.1/                     # PDF QA 챗봇 시스템
+├── ollama-LLM-ChatBot/               # Ollama 기반 PDF QA 챗봇 시스템
 │   ├── api/                          # FastAPI 엔드포인트
-│   ├── core/                         # 핵심 처리 모듈
+│   ├── core/                         # 핵심 처리 모듈 (답변 생성, 질문 분석 등)
 │   ├── data/                         # PDF 데이터 및 벡터 저장소
 │   ├── utils/                        # 유틸리티 함수
 │   ├── main.py                       # 메인 실행 파일
-│   ├── run_server.py                 # 서버 실행 스크립트
 │   ├── requirements.txt              # Python 의존성
 │   └── Dockerfile                    # 챗봇 컨테이너 설정
 ├── docker-compose.yml                # 전체 서비스 오케스트레이션
-├── start_chatbot.sh                  # 챗봇 서비스 시작 스크립트 (Linux/Mac)
-├── start_chatbot.ps1                 # 챗봇 서비스 시작 스크립트 (Windows)
+├── ollama-entrypoint.sh              # Ollama 서비스 초기화 스크립트
+├── ollama-healthcheck.sh             # Ollama 서비스 상태 확인 스크립트
+├── test-docker-setup.sh              # Docker 설정 테스트 스크립트
 └── README.md
+```
+
+## 🤖 Ollama AI 챗봇 시스템
+
+### 개요
+IFRO 시스템은 **Ollama**를 기반으로 한 로컬 AI 챗봇 시스템을 제공합니다. 이는 빠르고 안전하며, 인터넷 연결 없이도 작동하는 AI 모델입니다.
+
+### 주요 특징
+- ✅ **로컬 실행**: 모든 AI 처리가 로컬에서 실행되어 데이터 보안 보장
+- ✅ **자동 모델 설치**: Docker Compose 실행 시 필요한 모델 자동 다운로드
+- ✅ **최적화된 성능**: 빠른 응답을 위한 모델 설정 최적화
+- ✅ **PDF 문서 분석**: 업로드된 PDF 문서에 대한 질의응답
+- ✅ **SQL 데이터베이스 질의**: 교통 데이터에 대한 자연어 질의
+
+### 사용되는 AI 모델
+- **qwen2:1.5b**: 일반적인 질의응답 및 PDF 문서 분석
+- **sqlcoder:7b**: SQL 데이터베이스 질의 생성
+
+### Docker Compose 실행
+
+#### 1. 전체 시스템 시작
+```bash
+# 모든 서비스 시작 (모델 자동 다운로드 포함)
+docker-compose up -d
+
+# 실시간 로그 확인 (권장)
+docker-compose logs -f ollama
+docker-compose logs -f chatbot
+
+# 서비스 상태 확인
+docker-compose ps
+```
+
+#### 2. 단계별 시작 (권장)
+```bash
+# 1단계: 데이터베이스와 백엔드만 시작
+docker-compose up -d db backend
+
+# 2단계: Ollama 서비스 시작 (모델 다운로드)
+docker-compose up -d ollama
+
+# 3단계: 모델 다운로드 완료 확인 후 챗봇 시작
+docker-compose up -d chatbot
+```
+
+#### 2. 모델 설치 상태 확인
+```bash
+# Ollama 컨테이너에 접속하여 모델 확인
+docker exec -it ollama ollama list
+
+# 예상 출력:
+# NAME              ID              SIZE      MODIFIED   
+# qwen2:1.5b        xxxxxxxxxxxx    1.5 GB    x days ago    
+# sqlcoder:7b       xxxxxxxxxxxx    4.0 GB    x days ago
+```
+
+#### 3. 챗봇 테스트
+```bash
+# 챗봇 API 테스트
+curl -X POST http://localhost:8008/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "안녕하세요"}'
+```
+
+### 성능 최적화
+- **응답 시간**: 일반적으로 1-3초 내 응답
+- **모델 로딩**: 첫 실행 시 10-15초, 이후 0.5-1초
+- **메모리 사용**: qwen2:1.5b 모델 약 2GB RAM 사용
+- **모델 다운로드**: qwen2:1.5b 약 1.5GB, sqlcoder:7b 약 4GB
+- **시작 시간**: 전체 시스템 시작 시 약 15-20분 (모델 다운로드 포함)
+
+### 문제 해결
+
+#### 모델 다운로드 실패
+```bash
+# 수동으로 모델 다운로드
+docker exec -it ollama ollama pull qwen2:1.5b
+docker exec -it ollama ollama pull sqlcoder:7b
+
+# 다운로드 진행률 확인
+docker exec -it ollama ollama list
+```
+
+#### 서비스 시작 순서 문제
+```bash
+# 1. 모든 서비스 중지
+docker-compose down
+
+# 2. 데이터베이스와 백엔드만 시작
+docker-compose up -d db backend
+
+# 3. Ollama 서비스 시작 및 모델 다운로드 대기
+docker-compose up -d ollama
+docker-compose logs -f ollama
+
+# 4. 모델 다운로드 완료 후 챗봇 시작
+docker-compose up -d chatbot
+```
+
+#### 서비스 재시작
+```bash
+# 특정 서비스만 재시작
+docker-compose restart ollama
+docker-compose restart chatbot
+```
+
+#### 로그 확인
+```bash
+# 실시간 로그 확인
+docker-compose logs -f ollama
+docker-compose logs -f chatbot
 ```
 
 ## 🔐 관리자 코드 시스템

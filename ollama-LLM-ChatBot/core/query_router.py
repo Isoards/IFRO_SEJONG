@@ -125,6 +125,14 @@ class QueryRouter:
         Returns:
             라우팅 결과
         """
+        # "방법" 키워드가 있으면 우선적으로 PDF 검색으로 라우팅
+        if '방법' in question.lower():
+            return RouteResult(
+                route=QueryRoute.PDF_SEARCH,
+                confidence=0.95,
+                reasoning="우선 규칙: '방법' 키워드 감지 - PDF 검색으로 라우팅"
+            )
+        
         if not self.embedding_model or not self.reference_embeddings:
             # SBERT를 사용할 수 없는 경우 규칙 기반 폴백
             return self._rule_based_routing(question)
@@ -223,6 +231,14 @@ class QueryRouter:
                 reasoning="규칙 기반: 인사말 패턴 매칭"
             )
         
+        # "방법" 키워드가 있으면 우선적으로 PDF 검색으로 라우팅
+        if '방법' in question_lower:
+            return RouteResult(
+                route=QueryRoute.PDF_SEARCH,
+                confidence=0.9,
+                reasoning="규칙 기반: '방법' 키워드 감지 - PDF 검색으로 라우팅"
+            )
+        
         # SQL 쿼리 패턴 (숫자, 통계, 집계 키워드)
         sql_patterns = [
             '몇', '개수', '건수', '총', '평균', '최대', '최소', '상위', '하위',
@@ -234,7 +250,7 @@ class QueryRouter:
         
         # PDF 검색 패턴 (설명, 방법, 개념 키워드)  
         pdf_patterns = [
-            '무엇', '어떻게', '왜', '방법', '설명', '기능', '시스템', '매뉴얼',
+            '무엇', '어떻게', '왜', '설명', '기능', '시스템', '매뉴얼',
             '가이드', '정책', '절차', '사용법', '원리', '개념', '정의'
         ]
         
