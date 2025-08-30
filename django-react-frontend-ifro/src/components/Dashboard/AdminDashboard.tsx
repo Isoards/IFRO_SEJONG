@@ -22,6 +22,7 @@ import {
   TrafficFlowFavoriteStats,
   TrafficFlowSummary
 } from "../../types/global.types";
+import SejongHeatmap from "./SejongHeatmap";
 
 // 일별 조회수 데이터 타입
 interface DailyViewData {
@@ -34,27 +35,27 @@ interface DailyViewData {
 const generateDailyViewData = (): DailyViewData[] => {
   const data: DailyViewData[] = [];
   const today = new Date();
-  
+
   // 고정된 패턴 데이터 (요일별로 다른 패턴)
   const fixedPatterns = [1850, 1650, 1750, 1950, 2100, 2350, 2200]; // 7일간 고정 패턴
-  
+
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    
+
     const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
     const dayName = dayNames[date.getDay()];
-    
+
     // 고정된 패턴 사용 (6-i는 0부터 6까지의 인덱스)
     const views = fixedPatterns[6 - i];
-    
+
     data.push({
       date: `${date.getMonth() + 1}/${date.getDate()}`,
       views: views,
       day: dayName
     });
   }
-  
+
   return data;
 };
 
@@ -347,10 +348,10 @@ const AdminDashboard = () => {
                         <div className="flex items-center space-x-3">
                           <span
                             className={`text-sm font-bold w-6 ${item.rank <= 3
-                                ? "text-red-600"
-                                : item.rank <= 5
-                                  ? "text-orange-600"
-                                  : "text-gray-600"
+                              ? "text-red-600"
+                              : item.rank <= 5
+                                ? "text-orange-600"
+                                : "text-gray-600"
                               }`}
                           >
                             {item.rank}
@@ -365,10 +366,10 @@ const AdminDashboard = () => {
                           </span>
                           <span
                             className={`text-xs px-1 ${(item.change ?? 0) > 0
-                                ? "text-red-600"
-                                : (item.change ?? 0) < 0
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
+                              ? "text-red-600"
+                              : (item.change ?? 0) < 0
+                                ? "text-blue-600"
+                                : "text-gray-600"
                               }`}
                           >
                             {(item.change ?? 0) > 0 ? "▲" : (item.change ?? 0) < 0 ? "▼" : "—"}{" "}
@@ -434,7 +435,7 @@ const AdminDashboard = () => {
                           fontSize: "14px",
                           boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
                         }}
-                        labelStyle={{ 
+                        labelStyle={{
                           fontWeight: "600",
                           color: "#374151"
                         }}
@@ -485,9 +486,7 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="p-6">
-              <div className="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">세종시 히트맵 영역</p>
-              </div>
+              <SejongHeatmap className="h-80 relative" />
             </div>
           </div>
 
@@ -525,10 +524,10 @@ const AdminDashboard = () => {
                         <div className="flex items-center space-x-3">
                           <span
                             className={`text-sm font-bold w-6 ${item.rank <= 2
-                                ? "text-yellow-600"
-                                : item.rank <= 4
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
+                              ? "text-yellow-600"
+                              : item.rank <= 4
+                                ? "text-blue-600"
+                                : "text-gray-600"
                               }`}
                           >
                             {item.rank}
@@ -543,10 +542,10 @@ const AdminDashboard = () => {
                           </span>
                           <span
                             className={`text-xs px-1 ${(item.growth ?? 0) > 0
-                                ? "text-green-600"
-                                : (item.growth ?? 0) < 0
-                                  ? "text-red-600"
-                                  : "text-gray-600"
+                              ? "text-green-600"
+                              : (item.growth ?? 0) < 0
+                                ? "text-red-600"
+                                : "text-gray-600"
                               }`}
                           >
                             {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
@@ -769,10 +768,10 @@ const AdminDashboard = () => {
                       <div className="flex items-center space-x-3">
                         <span
                           className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${flow.rank <= 3
-                              ? "bg-yellow-100 text-yellow-800"
-                              : flow.rank <= 5
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-800"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : flow.rank <= 5
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
                             }`}
                         >
                           {flow.rank}
@@ -871,10 +870,10 @@ const AdminDashboard = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                             className={`text-sm font-bold ${flow.rank <= 3
-                                ? "text-yellow-600"
-                                : flow.rank <= 5
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
+                              ? "text-yellow-600"
+                              : flow.rank <= 5
+                                ? "text-blue-600"
+                                : "text-gray-600"
                               }`}
                           >
                             {flow.rank}
@@ -909,12 +908,12 @@ const AdminDashboard = () => {
                           <div className="flex items-center">
                             <span
                               className={`text-sm font-bold ${flow.popularity_score >= 50
-                                  ? "text-red-600"
-                                  : flow.popularity_score >= 20
-                                    ? "text-orange-600"
-                                    : flow.popularity_score >= 10
-                                      ? "text-green-600"
-                                      : "text-gray-600"
+                                ? "text-red-600"
+                                : flow.popularity_score >= 20
+                                  ? "text-orange-600"
+                                  : flow.popularity_score >= 10
+                                    ? "text-green-600"
+                                    : "text-gray-600"
                                 }`}
                             >
                               {flow.popularity_score}
@@ -922,12 +921,12 @@ const AdminDashboard = () => {
                             <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                               <div
                                 className={`h-2 rounded-full ${flow.popularity_score >= 50
-                                    ? "bg-red-600"
-                                    : flow.popularity_score >= 20
-                                      ? "bg-orange-600"
-                                      : flow.popularity_score >= 10
-                                        ? "bg-green-600"
-                                        : "bg-gray-600"
+                                  ? "bg-red-600"
+                                  : flow.popularity_score >= 20
+                                    ? "bg-orange-600"
+                                    : flow.popularity_score >= 10
+                                      ? "bg-green-600"
+                                      : "bg-gray-600"
                                   }`}
                                 style={{
                                   width: `${Math.min((flow.popularity_score / 100) * 100, 100)}%`,
