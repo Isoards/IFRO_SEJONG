@@ -33,7 +33,7 @@ export default function Settings() {
 
   useEffect(() => {
     // Load encryption setting from localStorage
-    const savedEncryption = localStorage.getItem('encryptionEnabled');
+    const savedEncryption = localStorage.getItem("encryptionEnabled");
     if (savedEncryption) {
       setEncryptionEnabled(JSON.parse(savedEncryption));
     }
@@ -97,7 +97,10 @@ export default function Settings() {
       i18n.changeLanguage(selectedLanguage);
     }
     // 암호화 설정 저장 로직 필요시 추가
-    localStorage.setItem('encryptionEnabled', JSON.stringify(encryptionEnabled));
+    localStorage.setItem(
+      "encryptionEnabled",
+      JSON.stringify(encryptionEnabled)
+    );
     // 설정 저장 메시지 표시 (자동으로 사라지지 않음)
     setShowSuccessMessage(true);
   };

@@ -1,8 +1,13 @@
 import React from "react";
+import { debugLog } from "../../utils/debugUtils";
 import { useTranslation } from "react-i18next";
 import { Intersection, FavoriteFlow } from "../../types/global.types";
 import { Star } from "lucide-react";
-import { addTrafficFlowFavorite, removeTrafficFlowFavorite, recordTrafficFlowAccess } from "../../services/intersections";
+import {
+  addTrafficFlowFavorite,
+  removeTrafficFlowFavorite,
+  recordTrafficFlowAccess,
+} from "../../services/intersections";
 
 interface TrafficFlowDetailPanelProps {
   selectedPoints: Intersection[];
@@ -35,22 +40,25 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
     if (selectedPoints.length === 2) {
       const [from, to] = selectedPoints;
       const routeKey = `${from.id}-${to.id}`;
-      
+
       // 이미 기록된 경로인지 확인 (중복 방지)
       if (accessRecordedRef.current.has(routeKey)) {
-        console.log(`이미 기록된 경로입니다: ${routeKey}`);
+        debugLog(`이미 기록된 경로입니다: ${routeKey}`);
         return;
       }
-      
+
       // 접근 기록 API 호출
-      console.log(`새로운 경로 접근 기록 시작: ${routeKey}`);
+      debugLog(`새로운 경로 접근 기록 시작: ${routeKey}`);
       recordTrafficFlowAccess(from.id, to.id)
         .then((result) => {
-          console.log(`교통 흐름 경로 접근 기록 완료: ${from.name} → ${to.name}`, result);
+          debugLog(
+            `교통 흐름 경로 접근 기록 완료: ${from.name} → ${to.name}`,
+            result
+          );
           accessRecordedRef.current.add(routeKey); // 기록 완료 표시
         })
         .catch((error) => {
-          console.error('교통 흐름 접근 기록 중 오류:', error);
+          console.error("교통 흐름 접근 기록 중 오류:", error);
         });
     }
   }, [selectedPoints]);
@@ -72,17 +80,23 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
       try {
         if (isCurrentFlowFavorited) {
           // 즐겨찾기 제거
-          console.log(`즐겨찾기 제거 시도: ${from.id} → ${to.id}`);
+          debugLog(`즐겨찾기 제거 시도: ${from.id} → ${to.id}`);
           const result = await removeTrafficFlowFavorite(from.id, to.id);
-          console.log(`교통 흐름 즐겨찾기 제거 완료:`, result);
-          console.log(`경로: ${from.name} → ${to.name}`);
+          debugLog(`교통 흐름 즐겨찾기 제거 완료:`, result);
+          debugLog(`경로: ${from.name} → ${to.name}`);
         } else {
           // 즐겨찾기 추가
           const routeName = `${from.name} → ${to.name}`;
-          console.log(`즐겨찾기 추가 시도: ${from.id} → ${to.id}, 이름: ${routeName}`);
-          const result = await addTrafficFlowFavorite(from.id, to.id, routeName);
-          console.log(`교통 흐름 즐겨찾기 추가 완료:`, result);
-          console.log(`경로: ${routeName}`);
+          debugLog(
+            `즐겨찾기 추가 시도: ${from.id} → ${to.id}, 이름: ${routeName}`
+          );
+          const result = await addTrafficFlowFavorite(
+            from.id,
+            to.id,
+            routeName
+          );
+          debugLog(`교통 흐름 즐겨찾기 추가 완료:`, result);
+          debugLog(`경로: ${routeName}`);
         }
 
         // 로컬 상태도 업데이트 (Dashboard의 함수 호출)
@@ -106,8 +120,8 @@ export const TrafficFlowDetailPanel: React.FC<TrafficFlowDetailPanelProps> = ({
           onAddFlowToFavorites(flow);
         }
       } catch (error) {
-        console.error('교통 흐름 즐겨찾기 처리 중 오류:', error);
-        alert('즐겨찾기 처리 중 오류가 발생했습니다. 다시 시도해주세요.');
+        console.error("교통 흐름 즐겨찾기 처리 중 오류:", error);
+        alert("즐겨찾기 처리 중 오류가 발생했습니다. 다시 시도해주세요.");
       }
     }
   };

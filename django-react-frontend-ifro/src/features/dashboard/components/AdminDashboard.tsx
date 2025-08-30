@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   getAdminStats,
   getTrafficFlowFavoritesStats,
-  getTrafficFlowSummary
+  getTrafficFlowSummary,
 } from "../../../shared/services/intersections";
+import { debugLog } from "../../../shared/utils/debugUtils";
 import {
   AdminStats,
   TopArea,
   TrafficFlowFavoriteStats,
-  TrafficFlowSummary
+  TrafficFlowSummary,
 } from "../../../shared/types/global.types";
 
 const AdminDashboard = () => {
+  const { t } = useTranslation();
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-  const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
-  const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
+  const [trafficFlowStats, setTrafficFlowStats] = useState<
+    TrafficFlowFavoriteStats[]
+  >([]);
+  const [trafficFlowSummary, setTrafficFlowSummary] =
+    useState<TrafficFlowSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,22 +33,25 @@ const AdminDashboard = () => {
         const statsPromise = getAdminStats();
         const stats = await statsPromise;
 
-        console.log('Fetched admin stats:', stats);
-        console.log('Top favorite areas:', stats.top_favorite_areas);
-        console.log('Top favorite areas length:', stats.top_favorite_areas?.length);
+        debugLog("Fetched admin stats:", stats);
+        debugLog("Top favorite areas:", stats.top_favorite_areas);
+        debugLog(
+          "Top favorite areas length:",
+          stats.top_favorite_areas?.length
+        );
 
         setAdminStats(stats);
         setError(null);
 
         // 교차로 목록과 교통 흐름 데이터는 백그라운드에서 로드 (덜 중요한 데이터)
-        console.log('Starting to fetch additional data...');
+        debugLog("Starting to fetch additional data...");
 
         // 각각 개별적으로 호출해서 어느 것이 실패하는지 확인
         // 교차로 데이터는 성능상 이유로 비활성화
         // try {
-        //   console.log('Fetching intersections...');
+        //   debugLog('Fetching intersections...');
         //   const intersections = await getAdminIntersections();
-        //   console.log('Intersections fetched:', intersections.length);
+        //   debugLog('Intersections fetched:', intersections.length);
         //   setIntersectionStats(intersections);
         // } catch (err: any) {
         //   console.error('Failed to fetch intersections:', err);
@@ -51,31 +60,30 @@ const AdminDashboard = () => {
 
         // 교통 흐름 통계 활성화
         try {
-          console.log('Fetching traffic flow stats...');
+          debugLog("Fetching traffic flow stats...");
           const flowStats = await getTrafficFlowFavoritesStats();
-          console.log('Traffic flow stats fetched:', flowStats);
+          debugLog("Traffic flow stats fetched:", flowStats);
           setTrafficFlowStats(flowStats);
         } catch (err: any) {
-          console.error('Failed to fetch traffic flow stats:', err);
-          console.error('Error details:', err.response?.data || err.message);
+          console.error("Failed to fetch traffic flow stats:", err);
+          console.error("Error details:", err.response?.data || err.message);
           setTrafficFlowStats([]);
         }
 
         // 교통 흐름 요약 활성화
         try {
-          console.log('Fetching traffic flow summary...');
+          debugLog("Fetching traffic flow summary...");
           const flowSummary = await getTrafficFlowSummary();
-          console.log('Traffic flow summary fetched:', flowSummary);
+          debugLog("Traffic flow summary fetched:", flowSummary);
           setTrafficFlowSummary(flowSummary);
         } catch (err: any) {
-          console.error('Failed to fetch traffic flow summary:', err);
-          console.error('Error details:', err.response?.data || err.message);
+          console.error("Failed to fetch traffic flow summary:", err);
+          console.error("Error details:", err.response?.data || err.message);
           setTrafficFlowSummary(null);
         }
-
       } catch (err: any) {
-        console.error('Failed to fetch admin stats:', err);
-        setError('통계 데이터를 불러오는데 실패했습니다.');
+        console.error("Failed to fetch admin stats:", err);
+        setError("통계 데이터를 불러오는데 실패했습니다.");
         // 에러 시 기본 데이터 사용
         setAdminStats({
           top_viewed_areas: [],
@@ -83,7 +91,7 @@ const AdminDashboard = () => {
           top_ai_report_areas: [],
           total_views: 0,
           total_favorites: 0,
-          total_ai_reports: 0
+          total_ai_reports: 0,
         });
       } finally {
         setLoading(false);
@@ -133,7 +141,9 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 조회수</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? "..." : adminStats?.total_views.toLocaleString() || "0"}
+                  {loading
+                    ? "..."
+                    : adminStats?.total_views.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
@@ -162,7 +172,9 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 즐겨찾기</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? "..." : adminStats?.total_favorites.toLocaleString() || "0"}
+                  {loading
+                    ? "..."
+                    : adminStats?.total_favorites.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -184,7 +196,9 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">총 정책 제안</p>
+                <p className="text-sm font-medium text-gray-600">
+                  총 정책 제안
+                </p>
                 <p className="text-2xl font-bold text-gray-900">
                   {loading ? "..." : "0"}
                 </p>
@@ -212,9 +226,13 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">AI 분석 요청</p>
+                <p className="text-sm font-medium text-gray-600">
+                  AI 분석 요청
+                </p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? "..." : adminStats?.total_ai_reports.toLocaleString() || "0"}
+                  {loading
+                    ? "..."
+                    : adminStats?.total_ai_reports.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -273,12 +291,13 @@ const AdminDashboard = () => {
                       >
                         <div className="flex items-center space-x-3">
                           <span
-                            className={`text-sm font-bold w-6 ${item.rank <= 3
+                            className={`text-sm font-bold w-6 ${
+                              item.rank <= 3
                                 ? "text-red-600"
                                 : item.rank <= 5
-                                  ? "text-orange-600"
-                                  : "text-gray-600"
-                              }`}
+                                ? "text-orange-600"
+                                : "text-gray-600"
+                            }`}
                           >
                             {item.rank}
                           </span>
@@ -291,14 +310,19 @@ const AdminDashboard = () => {
                             {(item.views ?? 0).toLocaleString()}
                           </span>
                           <span
-                            className={`text-xs px-1 ${(item.change ?? 0) > 0
+                            className={`text-xs px-1 ${
+                              (item.change ?? 0) > 0
                                 ? "text-red-600"
                                 : (item.change ?? 0) < 0
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
-                              }`}
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
                           >
-                            {(item.change ?? 0) > 0 ? "▲" : (item.change ?? 0) < 0 ? "▼" : "—"}{" "}
+                            {(item.change ?? 0) > 0
+                              ? "▲"
+                              : (item.change ?? 0) < 0
+                              ? "▼"
+                              : "—"}{" "}
                             {Math.abs(item.change ?? 0)}
                           </span>
                         </div>
@@ -366,9 +390,11 @@ const AdminDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {(!adminStats?.top_favorite_areas || adminStats?.top_favorite_areas.length === 0) ? (
+                  {!adminStats?.top_favorite_areas ||
+                  adminStats?.top_favorite_areas.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
-                      즐겨찾기 데이터가 없습니다. (Length: {adminStats?.top_favorite_areas?.length})
+                      즐겨찾기 데이터가 없습니다. (Length:{" "}
+                      {adminStats?.top_favorite_areas?.length})
                     </div>
                   ) : (
                     adminStats?.top_favorite_areas.map((item: TopArea) => (
@@ -378,12 +404,13 @@ const AdminDashboard = () => {
                       >
                         <div className="flex items-center space-x-3">
                           <span
-                            className={`text-sm font-bold w-6 ${item.rank <= 2
+                            className={`text-sm font-bold w-6 ${
+                              item.rank <= 2
                                 ? "text-yellow-600"
                                 : item.rank <= 4
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
-                              }`}
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
                           >
                             {item.rank}
                           </span>
@@ -393,17 +420,22 @@ const AdminDashboard = () => {
                         </div>
                         <div className="flex items-center space-x-2">
                           <span className="text-sm text-gray-600">
-                            {(item.favorites ?? 0)}명
+                            {item.favorites ?? 0}명
                           </span>
                           <span
-                            className={`text-xs px-1 ${(item.growth ?? 0) > 0
+                            className={`text-xs px-1 ${
+                              (item.growth ?? 0) > 0
                                 ? "text-green-600"
                                 : (item.growth ?? 0) < 0
-                                  ? "text-red-600"
-                                  : "text-gray-600"
-                              }`}
+                                ? "text-red-600"
+                                : "text-gray-600"
+                            }`}
                           >
-                            {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
+                            {(item.growth ?? 0) > 0
+                              ? "▲"
+                              : (item.growth ?? 0) < 0
+                              ? "▼"
+                              : "—"}{" "}
                             {Math.abs(item.growth ?? 0)}
                           </span>
                         </div>
@@ -471,7 +503,8 @@ const AdminDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {(!adminStats?.top_ai_report_areas || adminStats?.top_ai_report_areas.length === 0) ? (
+                  {!adminStats?.top_ai_report_areas ||
+                  adminStats?.top_ai_report_areas.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
                       AI 리포트 데이터가 없습니다.
                     </div>
@@ -516,7 +549,8 @@ const AdminDashboard = () => {
               교차로별 즐겨찾기 현황
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              각 교차로의 조회수와 즐겨찾기 등록 수 현황 (성능상 이유로 비활성화)
+              각 교차로의 조회수와 즐겨찾기 등록 수 현황 (성능상 이유로
+              비활성화)
             </p>
           </div>
           <div className="p-6">
@@ -580,7 +614,9 @@ const AdminDashboard = () => {
                     </div>
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
                       <div className="text-lg font-bold text-orange-600">
-                        {trafficFlowSummary.summary.avg_favorites_per_route.toFixed(1)}
+                        {trafficFlowSummary.summary.avg_favorites_per_route.toFixed(
+                          1
+                        )}
                       </div>
                       <div className="text-sm text-gray-600">경로당 평균</div>
                     </div>
@@ -622,20 +658,25 @@ const AdminDashboard = () => {
                     >
                       <div className="flex items-center space-x-3">
                         <span
-                          className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${flow.rank <= 3
+                          className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                            flow.rank <= 3
                               ? "bg-yellow-100 text-yellow-800"
                               : flow.rank <= 5
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-gray-100 text-gray-800"
-                            }`}
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-gray-100 text-gray-800"
+                          }`}
                         >
                           {flow.rank}
                         </span>
                         <div>
                           <div className="font-medium text-gray-900">
-                            <span className="text-blue-600">{flow.start_intersection.name}</span>
+                            <span className="text-blue-600">
+                              {flow.start_intersection.name}
+                            </span>
                             <span className="mx-2 text-gray-400">→</span>
-                            <span className="text-orange-600">{flow.end_intersection.name}</span>
+                            <span className="text-orange-600">
+                              {flow.end_intersection.name}
+                            </span>
                           </div>
                           <div className="text-sm text-gray-500">
                             {flow.unique_users}명의 사용자가 이용
@@ -648,13 +689,17 @@ const AdminDashboard = () => {
                             <div className="text-lg font-bold text-blue-600">
                               {flow.total_favorites}
                             </div>
-                            <div className="text-xs text-gray-500">즐겨찾기</div>
+                            <div className="text-xs text-gray-500">
+                              즐겨찾기
+                            </div>
                           </div>
                           <div className="text-center">
                             <div className="text-lg font-bold text-green-600">
                               {flow.total_accesses}
                             </div>
-                            <div className="text-xs text-gray-500">접근 횟수</div>
+                            <div className="text-xs text-gray-500">
+                              접근 횟수
+                            </div>
                           </div>
                           <div className="text-center">
                             <div className="text-lg font-bold text-purple-600">
@@ -724,21 +769,26 @@ const AdminDashboard = () => {
                       <tr key={flow.rank} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
-                            className={`text-sm font-bold ${flow.rank <= 3
+                            className={`text-sm font-bold ${
+                              flow.rank <= 3
                                 ? "text-yellow-600"
                                 : flow.rank <= 5
-                                  ? "text-blue-600"
-                                  : "text-gray-600"
-                              }`}
+                                ? "text-blue-600"
+                                : "text-gray-600"
+                            }`}
                           >
                             {flow.rank}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            <span className="text-blue-600">{flow.start_intersection.name}</span>
+                            <span className="text-blue-600">
+                              {flow.start_intersection.name}
+                            </span>
                             <span className="mx-2 text-gray-400">→</span>
-                            <span className="text-orange-600">{flow.end_intersection.name}</span>
+                            <span className="text-orange-600">
+                              {flow.end_intersection.name}
+                            </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -746,7 +796,9 @@ const AdminDashboard = () => {
                             <span className="text-sm font-medium text-blue-600">
                               {flow.total_favorites}
                             </span>
-                            <span className="text-sm text-gray-500 ml-1">명</span>
+                            <span className="text-sm text-gray-500 ml-1">
+                              명
+                            </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -762,29 +814,34 @@ const AdminDashboard = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <span
-                              className={`text-sm font-bold ${flow.popularity_score >= 50
+                              className={`text-sm font-bold ${
+                                flow.popularity_score >= 50
                                   ? "text-red-600"
                                   : flow.popularity_score >= 20
-                                    ? "text-orange-600"
-                                    : flow.popularity_score >= 10
-                                      ? "text-green-600"
-                                      : "text-gray-600"
-                                }`}
+                                  ? "text-orange-600"
+                                  : flow.popularity_score >= 10
+                                  ? "text-green-600"
+                                  : "text-gray-600"
+                              }`}
                             >
                               {flow.popularity_score}
                             </span>
                             <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                               <div
-                                className={`h-2 rounded-full ${flow.popularity_score >= 50
+                                className={`h-2 rounded-full ${
+                                  flow.popularity_score >= 50
                                     ? "bg-red-600"
                                     : flow.popularity_score >= 20
-                                      ? "bg-orange-600"
-                                      : flow.popularity_score >= 10
-                                        ? "bg-green-600"
-                                        : "bg-gray-600"
-                                  }`}
+                                    ? "bg-orange-600"
+                                    : flow.popularity_score >= 10
+                                    ? "bg-green-600"
+                                    : "bg-gray-600"
+                                }`}
                                 style={{
-                                  width: `${Math.min((flow.popularity_score / 100) * 100, 100)}%`,
+                                  width: `${Math.min(
+                                    (flow.popularity_score / 100) * 100,
+                                    100
+                                  )}%`,
                                 }}
                               ></div>
                             </div>
@@ -792,13 +849,16 @@ const AdminDashboard = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {flow.last_accessed
-                            ? new Date(flow.last_accessed).toLocaleDateString("ko-KR", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                            : "접근 없음"}
+                            ? new Date(flow.last_accessed).toLocaleDateString(
+                                "ko-KR",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }
+                              )
+                            : t("common.noAccess", "접근 없음")}
                         </td>
                       </tr>
                     ))}

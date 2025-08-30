@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   ProposalCategory,
   ProposalPriority,
@@ -8,26 +9,6 @@ import {
 } from "../../../shared/types/global.types";
 import { createProposal } from "../../../shared/services/proposals";
 import { getTrafficIntersections } from "../../../shared/services/intersections";
-
-const CATEGORY_OPTIONS: { value: ProposalCategory; label: string }[] = [
-  { value: "traffic_signal", label: "신호등 관련" },
-  { value: "road_safety", label: "도로 안전" },
-  { value: "traffic_flow", label: "교통 흐름" },
-  { value: "infrastructure", label: "인프라 개선" },
-  { value: "policy", label: "교통 정책" },
-  { value: "other", label: "기타" },
-];
-
-const PRIORITY_OPTIONS: {
-  value: ProposalPriority;
-  label: string;
-  color: string;
-}[] = [
-  { value: "low", label: "낮음", color: "text-green-600" },
-  { value: "medium", label: "보통", color: "text-yellow-600" },
-  { value: "high", label: "높음", color: "text-orange-600" },
-  { value: "urgent", label: "긴급", color: "text-red-600" },
-];
 
 interface CreateProposalFormProps {
   preselectedIntersectionId?: number;
@@ -40,8 +21,46 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const CATEGORY_OPTIONS: { value: ProposalCategory; label: string }[] = [
+    { value: "traffic_signal", label: t("policy.categories.trafficSignal") },
+    { value: "road_safety", label: t("policy.categories.roadSafety") },
+    { value: "traffic_flow", label: t("policy.categories.trafficFlow") },
+    { value: "infrastructure", label: t("policy.categories.infrastructure") },
+    { value: "policy", label: t("policy.categories.policy") },
+    { value: "other", label: t("policy.categories.other") },
+  ];
+
+  const PRIORITY_OPTIONS: {
+    value: ProposalPriority;
+    label: string;
+    color: string;
+  }[] = [
+    {
+      value: "low",
+      label: t("policy.priorities.low"),
+      color: "text-green-600",
+    },
+    {
+      value: "medium",
+      label: t("policy.priorities.medium"),
+      color: "text-yellow-600",
+    },
+    {
+      value: "high",
+      label: t("policy.priorities.high"),
+      color: "text-orange-600",
+    },
+    {
+      value: "urgent",
+      label: t("policy.priorities.urgent"),
+      color: "text-red-600",
+    },
+  ];
+
   const [intersections, setIntersections] = useState<Intersection[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<CreateProposalRequest>({
@@ -177,17 +196,17 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">정책제안 작성</h1>
-        <p className="text-gray-600">
-          교통 시스템 개선을 위한 의견이나 제안사항을 관리자에게 전달해주세요.
-        </p>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+          {t("policy.createProposal")}
+        </h1>
+        <p className="text-gray-600">{t("policy.createDescription")}</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* 제목 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            제목 *
+            {t("policy.title")} *
           </label>
           <input
             type="text"
@@ -198,7 +217,9 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
             className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               errors.title ? "border-red-500" : "border-gray-300"
             }`}
-            placeholder="정책제안 제목을 입력해주세요"
+            placeholder={
+              t("policy.titlePlaceholder") || "정책제안 제목을 입력해주세요"
+            }
             maxLength={200}
           />
           {errors.title && (
@@ -210,7 +231,7 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              카테고리 *
+              {t("policy.category")} *
             </label>
             <select
               value={formData.category}
@@ -237,7 +258,7 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              우선순위
+              {t("policy.priority")}
             </label>
             <select
               value={formData.priority}
@@ -262,14 +283,14 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              관련 교차로
+              {t("policy.relatedIntersection")}
             </label>
             <select
               value={formData.intersection_id || ""}
               onChange={(e) => handleIntersectionChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">교차로 선택 (선택사항)</option>
+              <option value="">{t("policy.selectIntersection")}</option>
               {intersections.map((intersection) => (
                 <option key={intersection.id} value={intersection.id}>
                   {intersection.name}
@@ -280,7 +301,7 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              위치 설명
+              {t("policy.locationDescription")}
             </label>
             <input
               type="text"
@@ -289,7 +310,10 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
                 setFormData((prev) => ({ ...prev, location: e.target.value }))
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="구체적인 위치나 주소 (선택사항)"
+              placeholder={
+                t("policy.locationPlaceholder") ||
+                "구체적인 위치나 주소 (선택사항)"
+              }
             />
           </div>
         </div>
@@ -297,7 +321,7 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
         {/* 내용 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            내용 *
+            {t("policy.content")} *
           </label>
           <textarea
             value={formData.description}
@@ -308,7 +332,10 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
             className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               errors.description ? "border-red-500" : "border-gray-300"
             }`}
-            placeholder="정책제안 내용을 상세히 설명해주세요. 현재 문제점, 개선 방안, 기대 효과 등을 포함해주시면 더 좋습니다."
+            placeholder={
+              t("policy.contentPlaceholder") ||
+              "정책제안 내용을 상세히 설명해주세요. 현재 문제점, 개선 방안, 기대 효과 등을 포함해주시면 더 좋습니다."
+            }
           />
           {errors.description && (
             <p className="mt-1 text-sm text-red-600">{errors.description}</p>
@@ -321,7 +348,7 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
         {/* 태그 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            태그
+            {t("policy.tags")}
           </label>
           <div className="flex gap-2 mb-2">
             <input
@@ -370,14 +397,14 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
             onClick={onClose || (() => navigate("/proposals"))}
             className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
           >
-            취소
+            {t("common.cancel")}
           </button>
           <button
             type="submit"
             disabled={isLoading}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "등록 중..." : "정책제안 등록"}
+            {isLoading ? t("policy.submitting") : t("policy.submit")}
           </button>
         </div>
       </form>

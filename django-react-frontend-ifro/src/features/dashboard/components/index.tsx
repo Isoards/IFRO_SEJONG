@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { debugLog } from "../../../shared/utils/debugUtils";
 import { useTranslation } from "react-i18next";
 import { NavBar } from "../../../shared/components/NavBar";
 import { AnalysisSidebar } from "../../../shared/components/sidebars/AnalysisSidebar";
@@ -10,7 +11,11 @@ import { IntersectionDetailPanel } from "../../../shared/components/panels/Inter
 import { IncidentDetailPanel } from "../../../shared/components/panels/IncidentDetailPanel";
 import { TrafficFlowDetailPanel } from "../../../shared/components/panels/TrafficFlowDetailPanel";
 import { TableauDashboard } from "../../../shared/components/panels/TableauDashboard";
-import { Intersection, Incident, FavoriteFlow } from "../../../shared/types/global.types";
+import {
+  Intersection,
+  Incident,
+  FavoriteFlow,
+} from "../../../shared/types/global.types";
 import { Map as MapIcon, Star } from "lucide-react";
 import {
   getTrafficIntersections,
@@ -22,7 +27,6 @@ import {
 import { getIncidents } from "../../../shared/services/incidents";
 
 import { ChatBotButton } from "../../../features/chatbot/components/ChatBotButton";
-import { debugLog } from "../../../shared/utils/debugUtils";
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -78,14 +82,12 @@ export default function Dashboard() {
   // 뷰 변경 핸들러 - 뷰 변경 시 선택된 점들 초기화
   const handleTrafficViewChange = useCallback(
     (view: "analysis" | "flow" | "incidents" | "favorites") => {
-      debugLog.log(
-        `Traffic view changing from ${activeTrafficView} to ${view}`
-      );
+      debugLog(`Traffic view changing from ${activeTrafficView} to ${view}`);
       setActiveTrafficView(view);
 
       // 교차로 간 뷰가 아닌 다른 뷰(analysis, incidents, favorites)로 전환할 때 선택된 점들 초기화
       if (view === "analysis" || view === "incidents" || view === "favorites") {
-        debugLog.log(`Clearing selected points for ${view} view`);
+        debugLog(`Clearing selected points for ${view} view`);
         setSelectedPoints([]);
       }
 
@@ -136,7 +138,7 @@ export default function Dashboard() {
     if (activeTrafficView !== "flow") {
       setSelectedPoints([]);
     }
-  }, [activeTrafficView]);
+  }, [activeTrafficView, selectedIntersection]);
 
   // 교차로 데이터 로드
   useEffect(() => {
@@ -159,6 +161,7 @@ export default function Dashboard() {
     };
 
     loadIntersections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 사고 데이터 로드
@@ -169,7 +172,7 @@ export default function Dashboard() {
       try {
         const data = await getIncidents();
         if (mounted) {
-          console.log("Loaded incidents:", data);
+          debugLog("Loaded incidents:", data);
           setIncidents(data);
         }
       } catch (error) {
@@ -190,14 +193,14 @@ export default function Dashboard() {
     const savedFavorites = localStorage.getItem("favoriteIntersections");
     if (savedFavorites) {
       const parsedFavorites = JSON.parse(savedFavorites);
-      console.log("Loading favorite intersections:", parsedFavorites);
+      debugLog("Loading favorite intersections:", parsedFavorites);
       setFavoriteIntersections(parsedFavorites);
     }
 
     const savedFlows = localStorage.getItem("favoriteFlows");
     if (savedFlows) {
       const parsedFlows = JSON.parse(savedFlows);
-      console.log("Loading favorite flows:", parsedFlows);
+      debugLog("Loading favorite flows:", parsedFlows);
       setFavoriteFlows(parsedFlows);
     }
 
@@ -208,7 +211,7 @@ export default function Dashboard() {
   // 즐겨찾기 변경 시 로컬 스토리지에 저장 (초기 로드 완료 후에만)
   useEffect(() => {
     if (isInitialLoadComplete) {
-      console.log(
+      debugLog(
         "Saving favorite intersections to localStorage:",
         favoriteIntersections
       );
@@ -221,7 +224,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (isInitialLoadComplete) {
-      console.log("Saving favorite flows to localStorage:", favoriteFlows);
+      debugLog("Saving favorite flows to localStorage:", favoriteFlows);
       localStorage.setItem("favoriteFlows", JSON.stringify(favoriteFlows));
     }
   }, [favoriteFlows, isInitialLoadComplete]);
@@ -248,7 +251,7 @@ export default function Dashboard() {
           }
         });
 
-        console.log(
+        debugLog(
           `Backend favorite toggled for intersection ${intersectionId}: ${response.is_favorite}`
         );
       } catch (error) {
@@ -268,12 +271,12 @@ export default function Dashboard() {
       setFavoriteIntersections((prev) => {
         const isCurrentlyFavorite = prev.includes(intersectionId);
         if (isCurrentlyFavorite) {
-          console.log(
+          debugLog(
             `Local favorite removed for intersection ${intersectionId} (not logged in)`
           );
           return prev.filter((id) => id !== intersectionId);
         } else {
-          console.log(
+          debugLog(
             `Local favorite added for intersection ${intersectionId} (not logged in)`
           );
           return [...prev, intersectionId];
@@ -301,7 +304,7 @@ export default function Dashboard() {
       // 조회수 기록
       try {
         await recordIntersectionView(intersection.id);
-        console.log(`Recorded view for intersection ${intersection.id}`);
+        debugLog(`Recorded view for intersection ${intersection.id}`);
       } catch (error) {
         console.error("Failed to record intersection view:", error);
       }
@@ -309,14 +312,14 @@ export default function Dashboard() {
       // 교통 통계 데이터 로드
       try {
         const datetime = intersection.datetime || new Date().toISOString();
-        console.log(
+        debugLog(
           `Loading traffic stats for intersection ${intersection.id} at ${datetime}`
         );
         const stats = await getIntersectionTrafficStat(
           intersection.id,
           datetime
         );
-        console.log("Loaded traffic stats:", stats);
+        debugLog("Loaded traffic stats:", stats);
         setTrafficStat(stats);
 
         // 3. 최근 10개 데이터 로드 로직 추가

@@ -9,6 +9,7 @@ import {
   MarkerClusterer,
   SuperClusterAlgorithm,
 } from "@googlemaps/markerclusterer";
+import { debugLog } from "../../../shared/utils/debugUtils";
 
 interface GoogleMapProps {
   selectedIntersection: Intersection | null;
@@ -149,7 +150,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
     if (!mapRef.current || selectedPoints.length !== 2) return false;
 
     try {
-      console.log("🗺️ OpenStreetMap Routing 시도");
+      debugLog("🗺️ OpenStreetMap Routing 시도");
 
       const start = selectedPoints[0];
       const end = selectedPoints[1];
@@ -157,12 +158,12 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       // OSRM (Open Source Routing Machine) API 사용
       const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
 
-      console.log("OSRM API URL:", osrmUrl);
+      debugLog("OSRM API URL:", osrmUrl);
 
       const response = await fetch(osrmUrl);
       const osrmData = await response.json();
 
-      console.log("OSRM 전체 응답:", osrmData);
+      debugLog("OSRM 전체 응답:", osrmData);
 
       if (
         osrmData.code === "Ok" &&
@@ -172,14 +173,8 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         const route = osrmData.routes[0];
         const coordinates = route.geometry.coordinates;
 
-        console.log("🎉 OSRM 성공! 경로 점 개수:", coordinates.length);
-        console.log(
-          "거리:",
-          route.distance,
-          "미터, 시간:",
-          route.duration,
-          "초"
-        );
+        debugLog("🎉 OSRM 성공! 경로 점 개수:", coordinates.length);
+        debugLog("거리:", route.distance, "미터, 시간:", route.duration, "초");
 
         // 좌표를 Google Maps 형식으로 변환 ([lng, lat] -> {lat, lng})
         const pathPoints = coordinates.map((coord: [number, number]) => ({
@@ -270,17 +265,17 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         );
         mapRef.current.fitBounds(bounds);
 
-        console.log("🎉 OpenStreetMap 실제 도로 경로 표시 완료!");
+        debugLog("🎉 OpenStreetMap 실제 도로 경로 표시 완료!");
         return true;
       } else {
-        console.log("OSRM 경로 찾기 실패:", osrmData.message || osrmData.code);
+        debugLog("OSRM 경로 찾기 실패:", osrmData.message || osrmData.code);
         return false;
       }
     } catch (error) {
       console.error("OpenStreetMap Routing 오류:", error);
       return false;
     }
-  }, [selectedPoints]);
+  }, [selectedPoints, onRouteUpdate]);
 
   // Roads API를 사용한 도로 스냅핑 경로 생성
   const tryRoadsAPI = useCallback(async (): Promise<boolean> => {
@@ -308,18 +303,18 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         intermediatePoints.push(`${lat},${lng}`);
       }
 
-      console.log("🛣️ Roads API 경로 스냅핑 시도:", intermediatePoints);
+      debugLog("🛣️ Roads API 경로 스냅핑 시도:", intermediatePoints);
 
       // Roads API - Snap to Roads 호출
       const pathParam = intermediatePoints.join("|");
       const roadsUrl = `https://roads.googleapis.com/v1/snapToRoads?path=${pathParam}&interpolate=true&key=${apiKey}`;
 
-      console.log("Roads API URL:", roadsUrl);
+      debugLog("Roads API URL:", roadsUrl);
 
       const response = await fetch(roadsUrl);
       const roadsData = await response.json();
 
-      console.log("Roads API 전체 응답:", roadsData);
+      debugLog("Roads API 전체 응답:", roadsData);
 
       if (roadsData.error) {
         console.error("Roads API 오류:", roadsData.error);
@@ -327,12 +322,12 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       }
 
       // Roads API 응답 상세 분석
-      console.log("snappedPoints 존재:", !!roadsData.snappedPoints);
-      console.log("snappedPoints 길이:", roadsData.snappedPoints?.length || 0);
-      console.log("warningMessage:", roadsData.warningMessage);
+      debugLog("snappedPoints 존재:", !!roadsData.snappedPoints);
+      debugLog("snappedPoints 길이:", roadsData.snappedPoints?.length || 0);
+      debugLog("warningMessage:", roadsData.warningMessage);
 
       if (roadsData.snappedPoints && roadsData.snappedPoints.length > 0) {
-        console.log(
+        debugLog(
           "🎉 Roads API 성공! 스냅된 점 개수:",
           roadsData.snappedPoints.length
         );
@@ -362,11 +357,11 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         );
         mapRef.current.fitBounds(bounds);
 
-        console.log("Roads API 경로 표시 완료");
+        debugLog("Roads API 경로 표시 완료");
         return true;
       }
 
-      console.log("Roads API 결과 없음");
+      debugLog("Roads API 결과 없음");
       return false;
     } catch (error) {
       console.error("Roads API 오류:", error);
@@ -384,7 +379,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       return false;
 
     try {
-      console.log("🔀 Geometry Library로 곡선 경로 생성 시도");
+      debugLog("🔀 Geometry Library로 곡선 경로 생성 시도");
 
       const start = new window.google.maps.LatLng(
         selectedPoints[0].latitude,
@@ -401,7 +396,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           start,
           end
         );
-      console.log("두 점 사이 거리:", distance, "미터");
+      debugLog("두 점 사이 거리:", distance, "미터");
 
       // 더 현실적인 도로 경로를 위한 중간점들 생성
       const pathPoints = [];
@@ -446,7 +441,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         pathPoints.push({ lat: adjustedLat, lng: adjustedLng });
       }
 
-      console.log("생성된 경로 점 개수:", pathPoints.length);
+      debugLog("생성된 경로 점 개수:", pathPoints.length);
 
       // 곡선 경로로 폴리라인 생성
       const polyline = new window.google.maps.Polyline({
@@ -468,7 +463,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       );
       mapRef.current.fitBounds(bounds);
 
-      console.log("🎉 Geometry Library 곡선 경로 표시 완료");
+      debugLog("🎉 Geometry Library 곡선 경로 표시 완료");
       return true;
     } catch (error) {
       console.error("Geometry Library 오류:", error);
@@ -479,7 +474,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
   // Polyline 관리 함수
   // Google Directions API를 사용한 실제 도로 경로 표시
   const updatePolyline = useCallback(async () => {
-    console.log("경로 표시 시작:", {
+    debugLog("경로 표시 시작:", {
       activeTrafficView,
       showPolyline,
       selectedPointsLength: selectedPoints.length,
@@ -498,13 +493,13 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         (polylineRef.current as any).animated?.setMap(null);
       }
       polylineRef.current = null;
-      console.log("기존 Polyline 제거");
+      debugLog("기존 Polyline 제거");
     }
 
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setMap(null);
       directionsRendererRef.current = null;
-      console.log("기존 DirectionsRenderer 제거");
+      debugLog("기존 DirectionsRenderer 제거");
     }
 
     // flow 뷰에서 두 점이 선택된 경우에만 경로 표시
@@ -534,7 +529,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         const adjustedLat = lat + adjustment.lat;
         const adjustedLng = lng + adjustment.lng;
 
-        console.log(
+        debugLog(
           `📍 좌표 조정 (시도 ${
             attempt + 1
           }): ${lat}, ${lng} → ${adjustedLat}, ${adjustedLng}`
@@ -546,27 +541,27 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         // 1. OpenStreetMap Routing을 먼저 시도 (무료, 전세계 도로 데이터)
         const osmSuccess = await tryOpenStreetMapRouting();
         if (osmSuccess) {
-          console.log("🗺️ OpenStreetMap Routing 성공!");
+          debugLog("🗺️ OpenStreetMap Routing 성공!");
           return;
         }
 
         // 2. Roads API 시도 (GPS 좌표를 도로에 스냅핑)
         const roadsApiSuccess = await tryRoadsAPI();
         if (roadsApiSuccess) {
-          console.log("🛣️ Roads API 성공!");
+          debugLog("🛣️ Roads API 성공!");
           return;
         }
 
         // 3. Roads API 실패 시 Geometry Library로 곡선 경로 시도
-        console.log("Roads API 실패, Geometry Library로 시도...");
+        debugLog("Roads API 실패, Geometry Library로 시도...");
         const geometrySuccess = tryGeometryPath();
         if (geometrySuccess) {
-          console.log("🔀 Geometry Library 성공!");
+          debugLog("🔀 Geometry Library 성공!");
           return;
         }
 
         // 4. Geometry Library도 실패 시 Directions API 시도
-        console.log("Geometry Library 실패, Directions API로 시도...");
+        debugLog("Geometry Library 실패, Directions API로 시도...");
         const directionsService = new window.google.maps.DirectionsService();
         const directionsRenderer = new window.google.maps.DirectionsRenderer({
           map: mapRef.current,
@@ -591,7 +586,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               lng: selectedPoints[1].longitude,
             },
             travelMode: window.google.maps.TravelMode.DRIVING,
-            label: "자동차(원본)",
+            label: t("map.carRoute") || "자동차(원본)",
           },
           {
             origin: {
@@ -603,7 +598,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               lng: selectedPoints[1].longitude,
             },
             travelMode: window.google.maps.TravelMode.WALKING,
-            label: "도보(원본)",
+            label: t("map.walkingRoute") || "도보(원본)",
           },
           // 조정된 좌표로 시도 (3가지 조정)
           ...Array.from({ length: 3 }, (_, i) => [
@@ -647,13 +642,13 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               lng: selectedPoints[1].longitude,
             },
             travelMode: window.google.maps.TravelMode.TRANSIT,
-            label: "대중교통",
+            label: t("map.publicTransport") || "대중교통",
           },
         ];
 
         for (let i = 0; i < routeAttempts.length; i++) {
           try {
-            console.log(
+            debugLog(
               `🗺️ [${routeAttempts[i].label}] 경로 검색 시도 ${i + 1}:`,
               routeAttempts[i]
             );
@@ -670,7 +665,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
 
               const route = result.routes[0];
               const leg = route.legs[0];
-              console.log(
+              debugLog(
                 `🎉 [${routeAttempts[i].label}] 경로 표시 성공! (시도 ${
                   i + 1
                 }) - ${leg.distance?.text}, ${leg.duration?.text}`
@@ -687,7 +682,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);
-            console.log(
+            debugLog(
               `❌ [${routeAttempts[i].label}] 경로 검색 시도 ${i + 1} 실패:`,
               {
                 label: routeAttempts[i].label,
@@ -703,7 +698,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         }
 
         // 모든 시도가 실패한 경우 직선으로 표시 (폴백)
-        console.log("모든 경로 검색 실패, 직선으로 표시");
+        debugLog("모든 경로 검색 실패, 직선으로 표시");
         const polyline = new window.google.maps.Polyline({
           path: [
             {
@@ -736,18 +731,26 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         });
         mapRef.current.fitBounds(bounds);
 
-        console.log("직선 경로 표시 완료");
+        debugLog("직선 경로 표시 완료");
       } catch (error) {
         console.error("경로 표시 중 오류:", error);
       }
     }
-  }, [activeTrafficView, showPolyline, selectedPoints]);
+  }, [
+    activeTrafficView,
+    showPolyline,
+    selectedPoints,
+    tryOpenStreetMapRouting,
+    tryRoadsAPI,
+    tryGeometryPath,
+    t,
+  ]);
 
   // activeTrafficView가 변경될 때 선택된 점들 초기화
   useEffect(() => {
     // 교차로 간 뷰에서 다른 뷰(analysis, incidents)로 전환할 때 선 해제
     if (activeTrafficView === "analysis" || activeTrafficView === "incidents") {
-      console.log(
+      debugLog(
         `View changed to ${activeTrafficView}, clearing selected points and polyline`
       );
       setSelectedPoints([]);
@@ -765,7 +768,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           (polylineRef.current as any).animated?.setMap(null);
         }
         polylineRef.current = null;
-        console.log("Polyline removed due to view change");
+        debugLog("Polyline removed due to view change");
       }
     }
   }, [activeTrafficView, onSelectedPointsChange]);
@@ -788,7 +791,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           (polylineRef.current as any).animated?.setMap(null);
         }
         polylineRef.current = null;
-        console.log("Polyline removed on component unmount");
+        debugLog("Polyline removed on component unmount");
       }
     };
   }, [updatePolyline]);
@@ -810,10 +813,10 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         return;
       }
 
-      console.log("clicked", intersection.id);
+      debugLog("clicked", intersection.id);
 
       setSelectedPoints((prev) => {
-        console.log(
+        debugLog(
           "prev selectedPoints:",
           prev.map((p) => p.id)
         );
@@ -824,7 +827,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         if (isAlreadySelected) {
           // 이미 선택된 점을 클릭하면 해제
           const newPoints = prev.filter((p) => p.id !== intersection.id);
-          console.log(
+          debugLog(
             "Deselected! New state:",
             newPoints.map((p) => p.id)
           );
@@ -839,7 +842,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
 
         // 새로운 점 선택
         if (prev.length === 0) {
-          console.log("First point selected:", intersection.id);
+          debugLog("First point selected:", intersection.id);
           setShowPolyline(false);
           const newPoints = [intersection];
           // 부모 컴포넌트에 알림
@@ -848,7 +851,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           }
           return newPoints;
         } else if (prev.length === 1) {
-          console.log("Second point selected:", intersection.id);
+          debugLog("Second point selected:", intersection.id);
           setShowPolyline(true);
           const newPoints = [...prev, intersection];
           // 부모 컴포넌트에 알림
@@ -858,7 +861,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
           return newPoints;
         } else if (prev.length === 2) {
           // 2개가 이미 선택된 상태에서 새로운 점을 클릭하면 초기화
-          console.log("Reset with new point:", intersection.id);
+          debugLog("Reset with new point:", intersection.id);
           setShowPolyline(false);
           const newPoints = [intersection];
           // 부모 컴포넌트에 알림
@@ -871,8 +874,8 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
         return prev;
       });
     },
-    [activeTrafficView, onIntersectionClick]
-  ); // 의존성 배열에 activeTrafficView와 onIntersectionClick 추가
+    [activeTrafficView, onIntersectionClick, onSelectedPointsChange]
+  ); // 의존성 배열에 activeTrafficView와 onIntersectionClick, onSelectedPointsChange 추가
 
   // 클러스터러 적용 - 뷰에 따라 다른 마커 표시
   useEffect(() => {
@@ -895,11 +898,11 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
 
     if (activeTrafficView === "incidents") {
       // incidents/intersections 데이터 상태 확인용 로그
-      console.log(
+      debugLog(
         "incidents:",
         incidents.map((i) => i.intersection_name || i.location_name)
       );
-      console.log(
+      debugLog(
         "intersections:",
         intersections.map((i) => i.name)
       );
@@ -920,7 +923,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               const found = intersections.find(
                 (i) => i.name === incident.intersection_name
               );
-              console.log(
+              debugLog(
                 "incident:",
                 incident.intersection_name,
                 "found:",
@@ -952,9 +955,9 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
             });
 
             marker.addListener("click", () => {
-              console.log("🎯 Incident marker clicked!");
-              console.log("Incident data:", incident);
-              console.log("onIncidentClick function:", typeof onIncidentClick);
+              debugLog("🎯 Incident marker clicked!");
+              debugLog("Incident data:", incident);
+              debugLog("onIncidentClick function:", typeof onIncidentClick);
 
               // 클릭된 마커 위치로 지도 중심 이동
               if (mapRef.current) {
@@ -962,10 +965,10 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
               }
 
               if (onIncidentClick) {
-                console.log("✅ Calling onIncidentClick...");
+                debugLog("✅ Calling onIncidentClick...");
                 onIncidentClick(incident);
               } else {
-                console.log("❌ onIncidentClick is not provided");
+                debugLog("❌ onIncidentClick is not provided");
               }
             });
 
@@ -1072,10 +1075,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
     if (markers.length > 0) {
       // incidents 뷰에서는 클러스터링을 완전히 비활성화
       if (activeTrafficView === "incidents") {
-        console.log(
-          "Setting incidents markers directly on map:",
-          markers.length
-        );
+        debugLog("Setting incidents markers directly on map:", markers.length);
         markers.forEach((marker) => {
           marker.setMap(mapRef.current!);
         });
@@ -1144,7 +1144,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
     // cleanup
     return () => {
       if (activeTrafficView === "incidents") {
-        console.log("Cleaning up incidents markers");
+        debugLog("Cleaning up incidents markers");
         markers.forEach((marker) => {
           marker.setMap(null);
         });
@@ -1186,16 +1186,16 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
 
   // 디버깅을 위한 selectedPoints 상태 변화 로그
   useEffect(() => {
-    console.log(
+    debugLog(
       "selectedPoints changed:",
       selectedPoints.map((p) => p.id)
     );
-    console.log(
+    debugLog(
       "Polyline status:",
       showPolyline && selectedPoints.length === 2 ? "visible" : "hidden",
       selectedPoints.map((p) => p.id)
     );
-    console.log("showPolyline:", showPolyline);
+    debugLog("showPolyline:", showPolyline);
 
     // 부모 컴포넌트로 선택된 점 정보 전달
     if (onSelectedPointsChange) {
