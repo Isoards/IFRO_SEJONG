@@ -16,7 +16,7 @@ from pathlib import Path
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent))
 
-from main import PDFQASystem
+from api.endpoints import app, initialize_system
 
 # 로깅 설정
 logging.basicConfig(
@@ -100,17 +100,17 @@ def download_ollama_model(model_name):
         return False
 
 def main():
-    """서버 실행 메인 함수"""
+    """서버 실행 메인 함수 (최적화 버전)"""
     
     print("=" * 60)
-    print("PDF QA 시스템 서버 시작")
-    print("Dual Pipeline 기능이 통합되었습니다!")
+    print("IFRO 챗봇 시스템 서버 시작")
+    print("최적화된 버전 - 빠른 응답!")
     print("=" * 60)
     print()
     print("기능:")
-    print("- 문서 검색 파이프라인: PDF 내용 기반 질문 답변")
-    print("- SQL 질의 파이프라인: 데이터베이스 스키마 기반 SQL 생성")
-    print("- 하이브리드 파이프라인: 두 파이프라인 결과 통합")
+    print("- SBERT 라우팅: 질문을 적절한 파이프라인으로 분기")
+    print("- 규칙 기반 SQL 추출: LLM 없이 빠른 SQL 생성")
+    print("- 인메모리 캐싱: 반복 질문 즉시 응답")
     print()
     print("API 문서: http://localhost:8008/docs")
     print("서버 주소: http://localhost:8008")
@@ -119,7 +119,7 @@ def main():
     
     # 환경 변수에서 설정 가져오기
     model_type = os.getenv("MODEL_TYPE", "ollama")
-    model_name = os.getenv("MODEL_NAME", "mistral:latest")
+    model_name = os.getenv("MODEL_NAME", "qwen2:1.5b")
     embedding_model = os.getenv("EMBEDDING_MODEL", "jhgan/ko-sroberta-multitask")
     
     # Ollama 모델 자동 다운로드
@@ -138,40 +138,23 @@ def main():
         
         logger.info("모델 다운로드 완료!")
     
-    # 시스템 초기화
-    system = PDFQASystem(
-        model_type=model_type,
-        model_name=model_name,
-        embedding_model=embedding_model
-    )
-    
     try:
-        # 컴포넌트 초기화
-        logger.info("시스템 초기화 중...")
+        logger.info("시스템 초기화 및 자동 PDF 업로드 시작...")
         
-        if not system.initialize_components():
-            logger.error("시스템 초기화 실패")
-            sys.exit(1)
+        # 시스템 초기화 (PDF 자동 업로드 포함)
+        initialize_system()
         
-        # data 폴더의 PDF 파일들을 자동으로 로드
-        logger.info("data 폴더의 PDF 파일들을 자동으로 로드합니다...")
-        system.load_all_pdfs_from_data_folder()
-        
-        logger.info("시스템 초기화 완료!")
-        logger.info("모든 PDF 파일이 벡터 저장소에 업로드되었습니다.")
         logger.info("API 서버를 시작합니다...")
         
-        # 서버 실행
-        from api.endpoints import run_server
-        run_server(host="0.0.0.0", port=8008, debug=False)
+        # FastAPI 서버 실행
+        import uvicorn
+        uvicorn.run(app, host="0.0.0.0", port=8008)
         
     except KeyboardInterrupt:
         logger.info("서버가 중단되었습니다.")
     except Exception as e:
         logger.error(f"서버 실행 중 오류: {e}")
         sys.exit(1)
-    finally:
-        system.cleanup()
 
 if __name__ == "__main__":
     main()

@@ -43,7 +43,6 @@ class AIQuestionResponse(Schema):
     question_type: str
     generation_time: float
     model_name: str
-    from_cache: bool
     used_chunks: Optional[List[str]] = None
     pipeline_type: Optional[str] = None
     sql_query: Optional[str] = None
@@ -161,7 +160,6 @@ def proxy_ai_question(request, data: AIQuestionRequest):
             question_type=response_data.get('question_type', 'unknown'),
             generation_time=response_data.get('generation_time', 0.0),
             model_name=response_data.get('model_name', 'unknown'),
-            from_cache=False,  # 백엔드를 거치므로 캐시 정보는 reset
             used_chunks=response_data.get('used_chunks', []),
             pipeline_type=response_data.get('pipeline_type'),
             sql_query=response_data.get('sql_query')
@@ -281,64 +279,4 @@ def proxy_clear_conversation_history(request):
         logger.error(f"대화 기록 초기화 프록시 오류: {str(e)}")
         raise HttpError(500, "대화 기록 초기화 중 오류가 발생했습니다.")
 
-# 캐시 관련 프록시 엔드포인트들
 
-@router.get("/conversation/cache/stats")
-def proxy_conversation_cache_stats(request):
-    """대화 캐시 통계 조회 프록시"""
-    try:
-        response_data = sync_make_chatbot_request(
-            method='GET',
-            endpoint='/conversation/cache/stats',
-            timeout=10
-        )
-        
-        return response_data
-        
-    except HttpError:
-        raise
-    except Exception as e:
-        logger.error(f"대화 캐시 통계 프록시 오류: {str(e)}")
-        raise HttpError(500, "대화 캐시 통계 조회 중 오류가 발생했습니다.")
-
-@router.delete("/conversation/cache")
-def proxy_clear_conversation_cache(request, pdf_id: Optional[str] = None):
-    """대화 캐시 삭제 프록시"""
-    try:
-        endpoint = '/conversation/cache'
-        if pdf_id:
-            endpoint += f'?pdf_id={pdf_id}'
-            
-        response_data = sync_make_chatbot_request(
-            method='DELETE',
-            endpoint=endpoint,
-            timeout=10
-        )
-        
-        return response_data
-        
-    except HttpError:
-        raise
-    except Exception as e:
-        logger.error(f"대화 캐시 삭제 프록시 오류: {str(e)}")
-        raise HttpError(500, "대화 캐시 삭제 중 오류가 발생했습니다.")
-
-@router.get("/conversation/cache/search")
-def proxy_search_conversation_cache(request, question: str, threshold: float = 0.7, limit: int = 5):
-    """대화 캐시 검색 프록시"""
-    try:
-        endpoint = f'/conversation/cache/search?question={question}&threshold={threshold}&limit={limit}'
-        
-        response_data = sync_make_chatbot_request(
-            method='GET',
-            endpoint=endpoint,
-            timeout=10
-        )
-        
-        return response_data
-        
-    except HttpError:
-        raise
-    except Exception as e:
-        logger.error(f"대화 캐시 검색 프록시 오류: {str(e)}")
-        raise HttpError(500, "대화 캐시 검색 중 오류가 발생했습니다.")

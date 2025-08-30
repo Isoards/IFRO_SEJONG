@@ -209,36 +209,7 @@ export class PDFQAClient {
     return this.makeRequest<HealthCheckResponse>("GET", "/health");
   }
 
-  /**
-   * 대화 이력 캐시 통계 조회
-   */
-  async getConversationCacheStats(): Promise<any> {
-    return this.makeRequest<any>("GET", "/conversation/cache/stats");
-  }
 
-  /**
-   * 대화 이력 캐시 삭제
-   */
-  async clearConversationCache(pdfId?: string): Promise<any> {
-    const params = pdfId ? new URLSearchParams({ pdf_id: pdfId }).toString() : '';
-    return this.makeRequest<any>("DELETE", `/conversation/cache?${params}`);
-  }
-
-  /**
-   * 대화 이력에서 유사한 질문 검색
-   */
-  async searchConversationCache(
-    question: string, 
-    threshold: number = 0.7, 
-    limit: number = 5
-  ): Promise<any> {
-    const params = new URLSearchParams({
-      question,
-      threshold: threshold.toString(),
-      limit: limit.toString()
-    });
-    return this.makeRequest<any>("GET", `/conversation/cache/search?${params}`);
-  }
 }
 
 // React Hook을 위한 커스텀 훅들

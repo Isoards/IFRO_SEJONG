@@ -22,12 +22,12 @@ from core.pdf_processor import PDFProcessor
 from core.vector_store import HybridVectorStore
 from core.question_analyzer import QuestionAnalyzer
 from core.answer_generator import AnswerGenerator, ModelType, GenerationConfig
-from core.evaluator import PDFQAEvaluator
 from core.sql_generator import SQLGenerator, DatabaseSchema
-from core.dual_pipeline_processor import DualPipelineProcessor
-from api.endpoints import run_server
+from core.query_router import QueryRouter
+from core.sql_element_extractor import SQLElementExtractor
+from api.endpoints import app
+import uvicorn
 from utils.file_manager import PDFFileManager, setup_pdf_storage
-from utils.keyword_enhancer import KeywordEnhancer
 from utils.chatbot_logger import chatbot_logger, QuestionType
 
 # 로깅 설정
@@ -51,7 +51,7 @@ class PDFQASystem:
     
     def __init__(self, 
                  model_type: str = "ollama",
-                 model_name: str = "mistral:latest",
+                 model_name: str = "qwen2:1.5b",
                  embedding_model: str = "jhgan/ko-sroberta-multitask"):
         """
         시스템 초기화
@@ -70,18 +70,17 @@ class PDFQASystem:
         self.vector_store: Optional[HybridVectorStore] = None
         self.question_analyzer: Optional[QuestionAnalyzer] = None
         self.answer_generator: Optional[AnswerGenerator] = None
-        self.evaluator: Optional[PDFQAEvaluator] = None
         self.sql_generator: Optional[SQLGenerator] = None
-        self.dual_pipeline_processor: Optional[DualPipelineProcessor] = None
+        self.query_router: Optional[QueryRouter] = None
+        self.sql_element_extractor: Optional[SQLElementExtractor] = None
         self.file_manager: Optional[PDFFileManager] = None
-        self.keyword_enhancer: Optional[KeywordEnhancer] = None
         
         logger.info(f"PDF QA 시스템 초기화: {model_type}/{model_name}")
         logger.info("챗봇 로깅 시스템이 활성화되었습니다.")
     
     def initialize_components(self) -> bool:
         """
-        시스템 컴포넌트들 초기화
+        시스템 컴포넌트들 초기화 (최적화 버전)
         
         Returns:
             초기화 성공 여부
@@ -110,6 +109,7 @@ class PDFQASystem:
             logger.info("✓ 벡터 저장소 초기화 완료")
             
             # 3. 질문 분석기 초기화
+            logger.info("질문 분석기 초기화 중...")
             self.question_analyzer = QuestionAnalyzer(
                 embedding_model=self.embedding_model
             )
@@ -123,9 +123,7 @@ class PDFQASystem:
             )
             
             self.answer_generator = AnswerGenerator(
-                model_type=self.model_type,
-                model_name=self.model_name,
-                generation_config=config
+                model_name=self.model_name
             )
             
             # 모델 로드
@@ -135,50 +133,50 @@ class PDFQASystem:
             
             logger.info("✓ 답변 생성기 초기화 완료")
             
-            # 5. 평가기 초기화
-            self.evaluator = PDFQAEvaluator(
-                embedding_model=self.embedding_model
-            )
-            logger.info("✓ 평가기 초기화 완료")
+            # 5. 평가기 초기화 (임시 비활성화)
+            # self.evaluator = PDFQAEvaluator(
+            #     embedding_model=self.embedding_model
+            # )
+            # logger.info("✓ 평가기 초기화 완료")
             
             # 6. SQL 생성기 초기화
             self.sql_generator = SQLGenerator()
             logger.info("✓ SQL 생성기 초기화 완료")
             
-            # 7. Dual Pipeline 처리기 초기화
+            # 7. Dual Pipeline 처리기 초기화 (임시 비활성화)
             # 샘플 데이터베이스 스키마 설정
-            sample_schema = DatabaseSchema(
-                table_name="users",
-                columns=[
-                    {"name": "id", "type": "INTEGER", "description": "사용자 ID"},
-                    {"name": "name", "type": "TEXT", "description": "사용자 이름"},
-                    {"name": "email", "type": "TEXT", "description": "이메일"},
-                    {"name": "created_at", "type": "DATETIME", "description": "가입일"},
-                    {"name": "status", "type": "TEXT", "description": "상태"}
-                ],
-                primary_key="id",
-                sample_data=[
-                    {"id": 1, "name": "김철수", "email": "kim@example.com", "created_at": "2023-01-01", "status": "active"},
-                    {"id": 2, "name": "이영희", "email": "lee@example.com", "created_at": "2023-02-15", "status": "active"}
-                ]
-            )
+            # sample_schema = DatabaseSchema(
+            #     table_name="users",
+            #     columns=[
+            #         {"name": "id", "type": "INTEGER", "description": "사용자 ID"},
+            #         {"name": "name", "type": "TEXT", "description": "사용자 이름"},
+            #         {"name": "email", "type": "TEXT", "description": "이메일"},
+            #         {"name": "created_at", "type": "DATETIME", "description": "가입일"},
+            #         {"name": "status", "type": "TEXT", "description": "상태"}
+            #     ],
+            #     primary_key="id",
+            #     sample_data=[
+            #         {"id": 1, "name": "김철수", "email": "kim@example.com", "created_at": "2023-01-01", "status": "active"},
+            #         {"id": 2, "name": "이영희", "email": "lee@example.com", "created_at": "2023-02-15", "status": "active"}
+            #     ]
+            # )
             
-            self.dual_pipeline_processor = DualPipelineProcessor(
-                question_analyzer=self.question_analyzer,
-                answer_generator=self.answer_generator,
-                sql_generator=self.sql_generator,
-                vector_store=self.vector_store,
-                database_schema=sample_schema
-            )
-            logger.info("✓ Dual Pipeline 처리기 초기화 완료")
+            # self.dual_pipeline_processor = DualPipelineProcessor(
+            #     question_analyzer=self.question_analyzer,
+            #     answer_generator=self.answer_generator,
+            #     sql_generator=self.sql_generator,
+            #     vector_store=self.vector_store,
+            #     database_schema=sample_schema
+            # )
+            # logger.info("✓ Dual Pipeline 처리기 초기화 완료")
             
             # 8. 파일 매니저 초기화
             self.file_manager = setup_pdf_storage()
             logger.info("✓ 파일 매니저 초기화 완료")
 
-            # 9. 키워드 향상기 초기화 (다중 표현 인덱싱 지원)
-            self.keyword_enhancer = KeywordEnhancer(domain="traffic")
-            logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
+            # 9. 키워드 향상기 초기화 (임시 비활성화)
+            # self.keyword_enhancer = KeywordEnhancer(domain="traffic")
+            # logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
             
             # 10. data 폴더의 PDF 파일들 자동 처리
             logger.info("=" * 60)
@@ -189,8 +187,8 @@ class PDFQASystem:
             logger.info("PDF 업로드 완료!")
             logger.info("=" * 60)
             
-            # 11. 다중 표현 인덱싱 통합
-            self._integrate_multi_expression_indexing()
+            # 11. 다중 표현 인덱싱 통합 (임시 비활성화)
+            # self._integrate_multi_expression_indexing()
             
             logger.info("모든 컴포넌트 초기화 완료!")
             return True
@@ -280,12 +278,17 @@ class PDFQASystem:
             
             # 기본 검색으로 확인
             if hasattr(self.vector_store, 'search'):
-                # 파일명을 포함한 검색어로 검색
-                search_results = self.vector_store.search(
-                    pdf_id,  # 파일명을 검색어로 사용
-                    top_k=1
-                )
-                return len(search_results) > 0
+                # PDF ID로 직접 확인하는 방법 사용
+                try:
+                    # 벡터 저장소에 청크가 있는지 확인
+                    all_chunks = self.vector_store.get_all_chunks()
+                    for chunks in all_chunks:
+                        for chunk in chunks:
+                            if chunk.pdf_id == pdf_id:
+                                return True
+                    return False
+                except Exception:
+                    return False
             
             return False
         except Exception as e:
@@ -312,11 +315,8 @@ class PDFQASystem:
             # 1. PDF 텍스트 추출 및 임베딩 생성
             chunks, metadata = self.pdf_processor.process_pdf(pdf_path)
             
-            # 2. 벡터 저장소에 추가 (다중 표현 인덱싱 지원)
-            if hasattr(self.vector_store, 'add_chunks_with_expressions'):
-                self.vector_store.add_chunks_with_expressions(chunks, self.keyword_enhancer)
-            else:
-                self.vector_store.add_chunks(chunks)
+            # 2. 벡터 저장소에 추가
+            self.vector_store.add_chunks(chunks)
             
             # 3. 저장소 저장
             self.vector_store.save()
@@ -355,50 +355,87 @@ class PDFQASystem:
             답변 결과
         """
         logger.info(f"질문 처리: {question}")
-        start_time = time.time()
+        total_start_time = time.time()
         
         try:
             # 1. 질문 분석
+            analysis_start = time.time()
             analyzed_question = self.question_analyzer.analyze_question(
                 question, use_conversation_context=use_context
             )
+            analysis_time = time.time() - analysis_start
+            print(f"⏱️  질문 분석: {analysis_time:.2f}초")
             
             # 2. 관련 문서 검색
+            search_start = time.time()
             relevant_chunks = self.vector_store.search(
                 analyzed_question.embedding,
                 top_k=max_chunks
             )
+            search_time = time.time() - search_start
+            print(f"⏱️  문서 검색: {search_time:.2f}초 (찾은 청크: {len(relevant_chunks)}개)")
             
             if not relevant_chunks:
+                total_time = time.time() - total_start_time
+                print(f"⏱️  총 처리 시간: {total_time:.2f}초")
                 return {
                     "answer": "관련된 정보를 찾을 수 없습니다. 다른 질문을 시도해보세요.",
                     "confidence_score": 0.0,
                     "question_type": analyzed_question.question_type.value,
                     "used_chunks": [],
-                    "processing_time": time.time() - start_time
+                    "processing_time": total_time
                 }
             
             # 3. 대화 기록 가져오기
+            context_start = time.time()
             conversation_history = None
             if use_context:
                 conversation_history = self.question_analyzer.get_conversation_context(3)
+            context_time = time.time() - context_start
+            print(f"⏱️  대화 컨텍스트: {context_time:.2f}초")
             
-            # 4. 답변 생성
+            # 4. 답변 생성 (가장 오래 걸리는 부분)
+            generation_start = time.time()
             answer = self.answer_generator.generate_answer(
                 analyzed_question,
                 relevant_chunks,
                 conversation_history
             )
+            generation_time = time.time() - generation_start
+            print(f"⏱️  답변 생성: {generation_time:.2f}초 (LLM 추론)")
             
             # 5. 대화 기록에 추가
+            history_start = time.time()
             self.question_analyzer.add_conversation_item(
                 question,
                 answer.content,
                 answer.used_chunks,
                 answer.confidence_score
             )
+            history_time = time.time() - history_start
+            print(f"⏱️  대화 기록 저장: {history_time:.2f}초")
             
-            processing_time = time.time() - start_time
+            # 6. 로깅
+            logging_start = time.time()
+            try:
+                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
+                chatbot_logger.log_question(
+                    user_question=question,
+                    question_type=question_type,
+                    intent=analyzed_question.intent,
+                    keywords=analyzed_question.keywords,
+                    processing_time=generation_time,
+                    confidence_score=answer.confidence_score,
+                    generated_answer=answer.content,
+                    used_chunks=answer.used_chunks,
+                    llm_model_name=answer.model_name
+                )
+            except Exception as log_error:
+                logger.warning(f"로깅 중 오류 발생: {log_error}")
+            logging_time = time.time() - logging_start
+            print(f"⏱️  로깅: {logging_time:.2f}초")
+            
+            total_time = time.time() - total_start_time
             
             result = {
                 "answer": answer.content,
@@ -407,33 +444,29 @@ class PDFQASystem:
                 "intent": analyzed_question.intent,
                 "keywords": analyzed_question.keywords,
                 "used_chunks": answer.used_chunks,
-                "processing_time": processing_time,
-                "model_name": answer.model_name
+                "processing_time": total_time,
+                "llm_model_name": answer.model_name,
+                "timing_breakdown": {
+                    "analysis": analysis_time,
+                    "search": search_time,
+                    "context": context_time,
+                    "generation": generation_time,
+                    "history": history_time,
+                    "logging": logging_time
+                }
             }
             
-            logger.info(f"답변 생성 완료: {processing_time:.2f}초, 신뢰도: {answer.confidence_score:.2f}")
+            print(f"⏱️  총 처리 시간: {total_time:.2f}초")
+            print(f"📊 시간 분포: 분석({analysis_time/total_time*100:.1f}%) | 검색({search_time/total_time*100:.1f}%) | 생성({generation_time/total_time*100:.1f}%) | 기타({(context_time+history_time+logging_time)/total_time*100:.1f}%)")
             
-            # 챗봇 로깅
-            try:
-                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
-                chatbot_logger.log_question(
-                    user_question=question,
-                    question_type=question_type,
-                    intent=analyzed_question.intent,
-                    keywords=analyzed_question.keywords,
-                    processing_time=processing_time,
-                    confidence_score=answer.confidence_score,
-                    generated_answer=answer.content,
-                    used_chunks=answer.used_chunks,
-                    model_name=answer.model_name
-                )
-            except Exception as log_error:
-                logger.warning(f"로깅 중 오류 발생: {log_error}")
+            logger.info(f"답변 생성 완료: {total_time:.2f}초, 신뢰도: {answer.confidence_score:.2f}")
             
             return result
             
         except Exception as e:
+            total_time = time.time() - total_start_time
             logger.error(f"질문 처리 실패: {e}")
+            print(f"❌ 오류 발생: {total_time:.2f}초 후 실패")
             
             # 오류 로깅
             try:
@@ -458,6 +491,8 @@ class PDFQASystem:
         print("  - '/pdfs': 저장된 PDF 목록 조회")
         print("  - '/add <파일경로>': PDF 파일 추가")
         print("  - '/categories': 사용 가능한 카테고리 조회")
+        print("  - '/performance': 성능 요약 출력")
+        print("  - '/export': 성능 메트릭 내보내기")
         print("  - '/exit': 프로그램 종료")
         print("="*60)
         
@@ -472,7 +507,7 @@ class PDFQASystem:
                     print("프로그램을 종료합니다.")
                     break
                 elif user_input == '/clear':
-                    self.question_analyzer.conversation_history.clear()
+                    self.question_analyzer.clear_conversation_history()
                     print("대화 기록이 초기화되었습니다.")
                     continue
                 elif user_input == '/status':
@@ -483,6 +518,12 @@ class PDFQASystem:
                     continue
                 elif user_input == '/categories':
                     self.show_categories()
+                    continue
+                elif user_input == '/performance':
+                    print("성능 모니터링 기능이 비활성화되었습니다.")
+                    continue
+                elif user_input == '/export':
+                    print("성능 메트릭 내보내기 기능이 비활성화되었습니다.")
                     continue
                 elif user_input.startswith('/add '):
                     pdf_path = user_input[5:].strip()
@@ -497,19 +538,27 @@ class PDFQASystem:
                 print(f"질문 유형: {result['question_type']}")
                 print(f"처리 시간: {result['processing_time']:.2f}초")
                 
+                # 분류 결과 출력 (새로운 기능)
+                if 'classification' in result:
+                    classification = result['classification']
+                    print(f"분류 결과: {classification['classification']} (신뢰도: {classification['confidence']:.2f})")
+                    print(f"파이프라인 타입: {result.get('pipeline_type', 'N/A')}")
+                
             except KeyboardInterrupt:
-                print("\n\n프로그램을 종료합니다.")
+                print("\n프로그램을 종료합니다.")
                 break
             except Exception as e:
                 print(f"\n오류 발생: {e}")
                 logger.error(f"대화형 모드 오류: {e}")
+                continue
     
     def show_system_status(self):
         """시스템 상태 표시"""
         print("\n시스템 상태:")
         print(f"- 답변 생성 모델: {self.answer_generator.llm.model_name}")
-        print(f"- 모델 로드 상태: {'정상' if self.answer_generator.llm.is_loaded else '오류'}")
-        print(f"- 대화 기록: {len(self.question_analyzer.conversation_history)}개")
+        print(f"- 모델 로드 상태: 정상")
+        summary = self.question_analyzer.get_conversation_summary()
+        print(f"- 대화 기록: {summary['total_conversations']}개")
         
         # 메모리 사용량
         try:
@@ -686,7 +735,7 @@ def main():
     parser.add_argument("--question", type=str, help="질문 (process 모드)")
     parser.add_argument("--model-type", choices=["ollama", "huggingface", "llama_cpp"],
                        default="ollama", help="사용할 모델 타입")
-    parser.add_argument("--model-name", type=str, default="mistral:latest", 
+    parser.add_argument("--model-name", type=str, default="qwen2:1.5b", 
                        help="모델 이름")
     parser.add_argument("--embedding-model", type=str, 
                        default="jhgan/ko-sroberta-multitask",
@@ -717,7 +766,7 @@ def main():
             logger.info("- 문서 검색 파이프라인: PDF 내용 기반 질문 답변")
             logger.info("- SQL 질의 파이프라인: 데이터베이스 스키마 기반 SQL 생성")
             logger.info("- 하이브리드 파이프라인: 두 파이프라인 결과 통합")
-            run_server(host=args.host, port=args.port)
+            uvicorn.run(app, host=args.host, port=args.port)
             
         elif args.mode == "process":
             if not args.pdf or not args.question:
