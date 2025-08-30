@@ -52,6 +52,7 @@ const AdminDashboard = () => {
         //   setIntersectionStats([]);
         // }
 
+        // 교통 흐름 통계 활성화
         try {
           console.log('Fetching traffic flow stats...');
           const flowStats = await getTrafficFlowFavoritesStats();
@@ -63,6 +64,7 @@ const AdminDashboard = () => {
           setTrafficFlowStats([]);
         }
 
+        // 교통 흐름 요약 활성화
         try {
           console.log('Fetching traffic flow summary...');
           const flowSummary = await getTrafficFlowSummary();
