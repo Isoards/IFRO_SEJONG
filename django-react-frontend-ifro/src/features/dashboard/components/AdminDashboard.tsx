@@ -1,26 +1,73 @@
 import React, { useState, useEffect } from "react";
-import { useTranslation } from "react-i18next";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from "recharts";
 import {
   getAdminStats,
+  getAdminIntersections,
   getTrafficFlowFavoritesStats,
   getTrafficFlowSummary,
-} from "../../../shared/services/intersections";
-import { debugLog } from "../../../shared/utils/debugUtils";
+  getTopViewedIntersections
+} from "../../../api/intersections";
 import {
   AdminStats,
   TopArea,
+  IntersectionStats,
   TrafficFlowFavoriteStats,
   TrafficFlowSummary,
-} from "../../../shared/types/global.types";
+  TopViewedIntersection
+} from "../../../types/global.types";
+import SejongHeatmap from "./SejongHeatmap";
+
+// 일별 조회수 데이터 타입
+interface DailyViewData {
+  date: string;
+  views: number;
+  day: string;
+}
+
+// 테스트 데이터 생성 함수
+const generateDailyViewData = (): DailyViewData[] => {
+  const data: DailyViewData[] = [];
+  const today = new Date();
+
+  // 고정된 패턴 데이터 (요일별로 다른 패턴)
+  const fixedPatterns = [1850, 1650, 1750, 1950, 2100, 2350, 2200]; // 7일간 고정 패턴
+
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = dayNames[date.getDay()];
+
+    // 고정된 패턴 사용 (6-i는 0부터 6까지의 인덱스)
+    const views = fixedPatterns[6 - i];
+
+    data.push({
+      date: `${date.getMonth() + 1}/${date.getDate()}`,
+      views: views,
+      day: dayName
+    });
+  }
+
+  return data;
+};
 
 const AdminDashboard = () => {
-  const { t } = useTranslation();
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-  const [trafficFlowStats, setTrafficFlowStats] = useState<
-    TrafficFlowFavoriteStats[]
-  >([]);
-  const [trafficFlowSummary, setTrafficFlowSummary] =
-    useState<TrafficFlowSummary | null>(null);
+  const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
+  const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
+  const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
+  const [topViewedIntersections, setTopViewedIntersections] = useState<TopViewedIntersection[]>([]);
+  const [dailyViewData, setDailyViewData] = useState<DailyViewData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,25 +80,25 @@ const AdminDashboard = () => {
         const statsPromise = getAdminStats();
         const stats = await statsPromise;
 
-        debugLog("Fetched admin stats:", stats);
-        debugLog("Top favorite areas:", stats.top_favorite_areas);
-        debugLog(
-          "Top favorite areas length:",
-          stats.top_favorite_areas?.length
-        );
+        console.log('Fetched admin stats:', stats);
+        console.log('Top favorite areas:', stats.top_favorite_areas);
+        console.log('Top favorite areas length:', stats.top_favorite_areas?.length);
 
         setAdminStats(stats);
         setError(null);
 
+        // 일별 조회수 데이터 초기화
+        setDailyViewData(generateDailyViewData());
+
         // 교차로 목록과 교통 흐름 데이터는 백그라운드에서 로드 (덜 중요한 데이터)
-        debugLog("Starting to fetch additional data...");
+        console.log('Starting to fetch additional data...');
 
         // 각각 개별적으로 호출해서 어느 것이 실패하는지 확인
         // 교차로 데이터는 성능상 이유로 비활성화
         // try {
-        //   debugLog('Fetching intersections...');
+        //   console.log('Fetching intersections...');
         //   const intersections = await getAdminIntersections();
-        //   debugLog('Intersections fetched:', intersections.length);
+        //   console.log('Intersections fetched:', intersections.length);
         //   setIntersectionStats(intersections);
         // } catch (err: any) {
         //   console.error('Failed to fetch intersections:', err);
@@ -60,30 +107,43 @@ const AdminDashboard = () => {
 
         // 교통 흐름 통계 활성화
         try {
-          debugLog("Fetching traffic flow stats...");
+          console.log('Fetching traffic flow stats...');
           const flowStats = await getTrafficFlowFavoritesStats();
-          debugLog("Traffic flow stats fetched:", flowStats);
+          console.log('Traffic flow stats fetched:', flowStats);
           setTrafficFlowStats(flowStats);
         } catch (err: any) {
-          console.error("Failed to fetch traffic flow stats:", err);
-          console.error("Error details:", err.response?.data || err.message);
+          console.error('Failed to fetch traffic flow stats:', err);
+          console.error('Error details:', err.response?.data || err.message);
           setTrafficFlowStats([]);
         }
 
         // 교통 흐름 요약 활성화
         try {
-          debugLog("Fetching traffic flow summary...");
+          console.log('Fetching traffic flow summary...');
           const flowSummary = await getTrafficFlowSummary();
-          debugLog("Traffic flow summary fetched:", flowSummary);
+          console.log('Traffic flow summary fetched:', flowSummary);
           setTrafficFlowSummary(flowSummary);
         } catch (err: any) {
-          console.error("Failed to fetch traffic flow summary:", err);
-          console.error("Error details:", err.response?.data || err.message);
+          console.error('Failed to fetch traffic flow summary:', err);
+          console.error('Error details:', err.response?.data || err.message);
           setTrafficFlowSummary(null);
         }
+
+        // TOP 10 조회 구간 데이터 가져오기
+        try {
+          console.log('Fetching top viewed intersections...');
+          const topViewed = await getTopViewedIntersections();
+          console.log('Top viewed intersections fetched:', topViewed);
+          setTopViewedIntersections(topViewed);
+        } catch (err: any) {
+          console.error('Failed to fetch top viewed intersections:', err);
+          console.error('Error details:', err.response?.data || err.message);
+          setTopViewedIntersections([]);
+        }
+
       } catch (err: any) {
-        console.error("Failed to fetch admin stats:", err);
-        setError("통계 데이터를 불러오는데 실패했습니다.");
+        console.error('Failed to fetch admin stats:', err);
+        setError('통계 데이터를 불러오는데 실패했습니다.');
         // 에러 시 기본 데이터 사용
         setAdminStats({
           top_viewed_areas: [],
@@ -91,8 +151,9 @@ const AdminDashboard = () => {
           top_ai_report_areas: [],
           total_views: 0,
           total_favorites: 0,
-          total_ai_reports: 0,
+          total_ai_reports: 0
         });
+        setIntersectionStats([]);
       } finally {
         setLoading(false);
       }
@@ -120,11 +181,31 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="bg-green-100 px-3 py-1 rounded-full">
-                <span className="text-green-800 text-sm font-medium">
-                  실시간 업데이트
-                </span>
-              </div>
+              <button
+                onClick={() => window.location.href = '/dashboard'}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200 shadow-sm"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
+                  />
+                </svg>
+                <span className="text-sm font-medium">대시보드</span>
+              </button>
               <div className="text-sm text-gray-500">
                 마지막 업데이트: {new Date().toLocaleTimeString("ko-KR")}
               </div>
@@ -141,9 +222,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 조회수</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading
-                    ? "..."
-                    : adminStats?.total_views.toLocaleString() || "0"}
+                  {loading ? "..." : adminStats?.total_views.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
@@ -172,9 +251,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 즐겨찾기</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading
-                    ? "..."
-                    : adminStats?.total_favorites.toLocaleString() || "0"}
+                  {loading ? "..." : adminStats?.total_favorites.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -196,9 +273,7 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">
-                  총 정책 제안
-                </p>
+                <p className="text-sm font-medium text-gray-600">총 정책 제안</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {loading ? "..." : "0"}
                 </p>
@@ -226,13 +301,9 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-lg shadow-sm p-6 border">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">
-                  AI 분석 요청
-                </p>
+                <p className="text-sm font-medium text-gray-600">AI 분석 요청</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading
-                    ? "..."
-                    : adminStats?.total_ai_reports.toLocaleString() || "0"}
+                  {loading ? "..." : adminStats?.total_ai_reports.toLocaleString() || "0"}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -257,118 +328,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* 메인 콘텐츠 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 실시간 최다 조회 구간 TOP 10 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                실시간 최다 조회 구간 TOP 10
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                세종시 시민들이 가장 많이 조회하는 지역
-              </p>
-            </div>
-            <div className="p-6">
-              {loading ? (
-                <div className="flex justify-center items-center h-32">
-                  <div className="text-gray-500">데이터 로딩 중...</div>
-                </div>
-              ) : error ? (
-                <div className="flex justify-center items-center h-32">
-                  <div className="text-red-500">{error}</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {adminStats?.top_viewed_areas.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      조회 데이터가 없습니다.
-                    </div>
-                  ) : (
-                    adminStats?.top_viewed_areas.map((item: TopArea) => (
-                      <div
-                        key={item.rank}
-                        className="flex items-center justify-between py-2"
-                      >
-                        <div className="flex items-center space-x-3">
-                          <span
-                            className={`text-sm font-bold w-6 ${
-                              item.rank <= 3
-                                ? "text-red-600"
-                                : item.rank <= 5
-                                ? "text-orange-600"
-                                : "text-gray-600"
-                            }`}
-                          >
-                            {item.rank}
-                          </span>
-                          <span className="text-gray-900 font-medium">
-                            {item.area}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">
-                            {(item.views ?? 0).toLocaleString()}
-                          </span>
-                          <span
-                            className={`text-xs px-1 ${
-                              (item.change ?? 0) > 0
-                                ? "text-red-600"
-                                : (item.change ?? 0) < 0
-                                ? "text-blue-600"
-                                : "text-gray-600"
-                            }`}
-                          >
-                            {(item.change ?? 0) > 0
-                              ? "▲"
-                              : (item.change ?? 0) < 0
-                              ? "▼"
-                              : "—"}{" "}
-                            {Math.abs(item.change ?? 0)}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* 트래픽 차트 */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                시민 관심도 추이
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">일주일간 조회수 변화</p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">라인 차트 영역 (시간별 트래픽)</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 두 번째 행 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 관심도 히트맵 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                관심도 히트맵
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                세종시 지역별 시민 관심도 분포
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">세종시 히트맵 영역</p>
-              </div>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* 최다 즐겨찾기 등록 구간 */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
@@ -390,11 +350,9 @@ const AdminDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {!adminStats?.top_favorite_areas ||
-                  adminStats?.top_favorite_areas.length === 0 ? (
+                  {(!adminStats?.top_favorite_areas || adminStats?.top_favorite_areas.length === 0) ? (
                     <div className="text-center text-gray-500 py-8">
-                      즐겨찾기 데이터가 없습니다. (Length:{" "}
-                      {adminStats?.top_favorite_areas?.length})
+                      즐겨찾기 데이터가 없습니다. (Length: {adminStats?.top_favorite_areas?.length})
                     </div>
                   ) : (
                     adminStats?.top_favorite_areas.map((item: TopArea) => (
@@ -404,13 +362,12 @@ const AdminDashboard = () => {
                       >
                         <div className="flex items-center space-x-3">
                           <span
-                            className={`text-sm font-bold w-6 ${
-                              item.rank <= 2
-                                ? "text-yellow-600"
-                                : item.rank <= 4
+                            className={`text-sm font-bold w-6 ${item.rank <= 2
+                              ? "text-yellow-600"
+                              : item.rank <= 4
                                 ? "text-blue-600"
                                 : "text-gray-600"
-                            }`}
+                              }`}
                           >
                             {item.rank}
                           </span>
@@ -420,22 +377,17 @@ const AdminDashboard = () => {
                         </div>
                         <div className="flex items-center space-x-2">
                           <span className="text-sm text-gray-600">
-                            {item.favorites ?? 0}명
+                            {(item.favorites ?? 0)}명
                           </span>
                           <span
-                            className={`text-xs px-1 ${
-                              (item.growth ?? 0) > 0
-                                ? "text-green-600"
-                                : (item.growth ?? 0) < 0
+                            className={`text-xs px-1 ${(item.growth ?? 0) > 0
+                              ? "text-green-600"
+                              : (item.growth ?? 0) < 0
                                 ? "text-red-600"
                                 : "text-gray-600"
-                            }`}
+                              }`}
                           >
-                            {(item.growth ?? 0) > 0
-                              ? "▲"
-                              : (item.growth ?? 0) < 0
-                              ? "▼"
-                              : "—"}{" "}
+                            {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
                             {Math.abs(item.growth ?? 0)}
                           </span>
                         </div>
@@ -447,41 +399,200 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* 인기 검색어 클라우드 */}
-          <div className="bg-white rounded-lg shadow-sm border">
+          {/* 트래픽 차트 */}
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
-                인기 검색어
+                시민 관심도 추이
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">일주일간 조회수 변화</p>
+            </div>
+            <div className="p-6 flex-1 flex">
+              {loading ? (
+                <div className="w-full min-h-[400px] bg-gray-50 rounded-lg flex items-center justify-center">
+                  <div className="text-gray-500">차트 데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="w-full min-h-[400px] bg-gray-50 rounded-lg flex items-center justify-center">
+                  <div className="text-red-500">차트 데이터 로드 실패</div>
+                </div>
+              ) : (
+                <div className="w-full min-h-[400px] flex-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={dailyViewData}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 20,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: "#666" }}
+                        stroke="#888"
+                        tickLine={{ stroke: "#ddd" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#666" }}
+                        stroke="#888"
+                        tickLine={{ stroke: "#ddd" }}
+                        domain={[0, 'dataMax + 200']}
+                        tickFormatter={(value) => `${(value / 1000).toFixed(1)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "#ffffff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          fontSize: "14px",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                        }}
+                        labelStyle={{
+                          fontWeight: "600",
+                          color: "#374151"
+                        }}
+                        formatter={(value: number, name: string) => [
+                          `${value.toLocaleString()}회`,
+                          "조회수"
+                        ]}
+                        labelFormatter={(label: string) => {
+                          const item = dailyViewData.find(d => d.date === label);
+                          return `${label} (${item?.day})`;
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="views"
+                        stroke="#3b82f6"
+                        strokeWidth={3}
+                        dot={{
+                          fill: "#3b82f6",
+                          strokeWidth: 2,
+                          r: 5,
+                        }}
+                        activeDot={{
+                          r: 7,
+                          fill: "#1d4ed8",
+                          stroke: "#ffffff",
+                          strokeWidth: 2,
+                        }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 두 번째 행 */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* 관심도 히트맵 */}
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                관심도 히트맵
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                시민들이 자주 검색하는 키워드
+                세종시 지역별 시민 관심도 분포
               </p>
             </div>
-            <div className="p-6">
-              <div className="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">워드 클라우드 영역</p>
-              </div>
+            <div className="p-6 flex-1 flex">
+              <SejongHeatmap 
+                className="w-full h-full min-h-[400px] relative"
+                topViewedData={topViewedIntersections}
+              />
+            </div>
+          </div>
+
+          {/* 실시간 최다 조회 구간 TOP 10 */}
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
+            <div className="p-6 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                실시간 최다 조회 구간 TOP 10
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                세종시 시민들이 가장 많이 조회하는 지역
+              </p>
+            </div>
+            <div className="p-6 flex-1 flex flex-col justify-start">
+              {loading ? (
+                <div className="flex justify-center items-center min-h-[400px]">
+                  <div className="text-gray-500">데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="flex justify-center items-center min-h-[400px]">
+                  <div className="text-red-500">{error}</div>
+                </div>
+              ) : (
+                <div className="space-y-3 flex-1">
+                  {topViewedIntersections.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      조회 데이터가 없습니다.
+                    </div>
+                  ) : (
+                    topViewedIntersections.map((item: TopViewedIntersection) => (
+                      <div
+                        key={item.rank}
+                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => {
+                          // 교차로 상세 페이지로 이동하거나 지도에서 해당 위치로 이동
+                          console.log('Clicked intersection:', item.intersection_name);
+                        }}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span
+                            className={`text-sm font-bold w-6 ${item.rank <= 3
+                              ? "text-red-600"
+                              : item.rank <= 5
+                                ? "text-orange-600"
+                                : "text-gray-600"
+                              }`}
+                          >
+                            {item.rank}
+                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-medium">
+                              {item.intersection_name}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              즐겨찾기: {item.favorite_count}명
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex flex-col items-end">
+                            <span className="text-sm text-gray-600 font-medium">
+                              {item.view_count.toLocaleString()}회
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor: `rgba(255, ${Math.floor(255 * (1 - item.intensity))}, ${Math.floor(255 * (1 - item.intensity))}, ${item.intensity})`
+                                }}
+                                title={`인기도: ${Math.round(item.intensity * 100)}%`}
+                              />
+                              <span className="text-xs text-gray-400">
+                                {Math.round(item.intensity * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* 세 번째 행 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 문제 제기 키워드 분석 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                문제 제기 키워드 분석
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">시민 불편사항 분석</p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">키워드 빈도 차트</p>
-              </div>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
           {/* AI 리포트 다발 지역 */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
@@ -503,13 +614,12 @@ const AdminDashboard = () => {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {!adminStats?.top_ai_report_areas ||
-                  adminStats?.top_ai_report_areas.length === 0 ? (
+                  {(!adminStats?.top_ai_report_areas || adminStats?.top_ai_report_areas.length === 0) ? (
                     <div className="text-center text-gray-500 py-8">
                       AI 리포트 데이터가 없습니다.
                     </div>
                   ) : (
-                    adminStats.top_ai_report_areas.map((area, index) => (
+                    adminStats.top_ai_report_areas.map((area: TopArea, index: number) => (
                       <div
                         key={index}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -538,32 +648,6 @@ const AdminDashboard = () => {
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* 네 번째 행 - 교차로별 즐겨찾기 현황 (비활성화됨 - 성능상 이유) */}
-        <div className="bg-white rounded-lg shadow-sm border">
-          <div className="p-6 border-b">
-            <h3 className="text-lg font-semibold text-gray-900">
-              교차로별 즐겨찾기 현황
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              각 교차로의 조회수와 즐겨찾기 등록 수 현황 (성능상 이유로
-              비활성화)
-            </p>
-          </div>
-          <div className="p-6">
-            <div className="flex justify-center items-center h-32">
-              <div className="text-center">
-                <div className="text-gray-500 mb-2">📊</div>
-                <div className="text-gray-500">
-                  성능 최적화를 위해 일시적으로 비활성화되었습니다.
-                </div>
-                <div className="text-sm text-gray-400 mt-1">
-                  필요시 개별 교차로 상세 페이지에서 확인 가능합니다.
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -614,9 +698,7 @@ const AdminDashboard = () => {
                     </div>
                     <div className="text-center p-3 bg-orange-50 rounded-lg">
                       <div className="text-lg font-bold text-orange-600">
-                        {trafficFlowSummary.summary.avg_favorites_per_route.toFixed(
-                          1
-                        )}
+                        {trafficFlowSummary.summary.avg_favorites_per_route.toFixed(1)}
                       </div>
                       <div className="text-sm text-gray-600">경로당 평균</div>
                     </div>
@@ -658,25 +740,20 @@ const AdminDashboard = () => {
                     >
                       <div className="flex items-center space-x-3">
                         <span
-                          className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                            flow.rank <= 3
-                              ? "bg-yellow-100 text-yellow-800"
-                              : flow.rank <= 5
+                          className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${flow.rank <= 3
+                            ? "bg-yellow-100 text-yellow-800"
+                            : flow.rank <= 5
                               ? "bg-blue-100 text-blue-800"
                               : "bg-gray-100 text-gray-800"
-                          }`}
+                            }`}
                         >
                           {flow.rank}
                         </span>
                         <div>
                           <div className="font-medium text-gray-900">
-                            <span className="text-blue-600">
-                              {flow.start_intersection.name}
-                            </span>
+                            <span className="text-blue-600">{flow.start_intersection.name}</span>
                             <span className="mx-2 text-gray-400">→</span>
-                            <span className="text-orange-600">
-                              {flow.end_intersection.name}
-                            </span>
+                            <span className="text-orange-600">{flow.end_intersection.name}</span>
                           </div>
                           <div className="text-sm text-gray-500">
                             {flow.unique_users}명의 사용자가 이용
@@ -689,17 +766,13 @@ const AdminDashboard = () => {
                             <div className="text-lg font-bold text-blue-600">
                               {flow.total_favorites}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              즐겨찾기
-                            </div>
+                            <div className="text-xs text-gray-500">즐겨찾기</div>
                           </div>
                           <div className="text-center">
                             <div className="text-lg font-bold text-green-600">
                               {flow.total_accesses}
                             </div>
-                            <div className="text-xs text-gray-500">
-                              접근 횟수
-                            </div>
+                            <div className="text-xs text-gray-500">접근 횟수</div>
                           </div>
                           <div className="text-center">
                             <div className="text-lg font-bold text-purple-600">
@@ -769,26 +842,21 @@ const AdminDashboard = () => {
                       <tr key={flow.rank} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
-                            className={`text-sm font-bold ${
-                              flow.rank <= 3
-                                ? "text-yellow-600"
-                                : flow.rank <= 5
+                            className={`text-sm font-bold ${flow.rank <= 3
+                              ? "text-yellow-600"
+                              : flow.rank <= 5
                                 ? "text-blue-600"
                                 : "text-gray-600"
-                            }`}
+                              }`}
                           >
                             {flow.rank}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
-                            <span className="text-blue-600">
-                              {flow.start_intersection.name}
-                            </span>
+                            <span className="text-blue-600">{flow.start_intersection.name}</span>
                             <span className="mx-2 text-gray-400">→</span>
-                            <span className="text-orange-600">
-                              {flow.end_intersection.name}
-                            </span>
+                            <span className="text-orange-600">{flow.end_intersection.name}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -796,9 +864,7 @@ const AdminDashboard = () => {
                             <span className="text-sm font-medium text-blue-600">
                               {flow.total_favorites}
                             </span>
-                            <span className="text-sm text-gray-500 ml-1">
-                              명
-                            </span>
+                            <span className="text-sm text-gray-500 ml-1">명</span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -814,34 +880,29 @@ const AdminDashboard = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <span
-                              className={`text-sm font-bold ${
-                                flow.popularity_score >= 50
-                                  ? "text-red-600"
-                                  : flow.popularity_score >= 20
+                              className={`text-sm font-bold ${flow.popularity_score >= 50
+                                ? "text-red-600"
+                                : flow.popularity_score >= 20
                                   ? "text-orange-600"
                                   : flow.popularity_score >= 10
-                                  ? "text-green-600"
-                                  : "text-gray-600"
-                              }`}
+                                    ? "text-green-600"
+                                    : "text-gray-600"
+                                }`}
                             >
                               {flow.popularity_score}
                             </span>
                             <div className="ml-2 w-16 bg-gray-200 rounded-full h-2">
                               <div
-                                className={`h-2 rounded-full ${
-                                  flow.popularity_score >= 50
-                                    ? "bg-red-600"
-                                    : flow.popularity_score >= 20
+                                className={`h-2 rounded-full ${flow.popularity_score >= 50
+                                  ? "bg-red-600"
+                                  : flow.popularity_score >= 20
                                     ? "bg-orange-600"
                                     : flow.popularity_score >= 10
-                                    ? "bg-green-600"
-                                    : "bg-gray-600"
-                                }`}
+                                      ? "bg-green-600"
+                                      : "bg-gray-600"
+                                  }`}
                                 style={{
-                                  width: `${Math.min(
-                                    (flow.popularity_score / 100) * 100,
-                                    100
-                                  )}%`,
+                                  width: `${Math.min((flow.popularity_score / 100) * 100, 100)}%`,
                                 }}
                               ></div>
                             </div>
@@ -849,16 +910,13 @@ const AdminDashboard = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {flow.last_accessed
-                            ? new Date(flow.last_accessed).toLocaleDateString(
-                                "ko-KR",
-                                {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                }
-                              )
-                            : t("common.noAccess", "접근 없음")}
+                            ? new Date(flow.last_accessed).toLocaleDateString("ko-KR", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                            : "접근 없음"}
                         </td>
                       </tr>
                     ))}
@@ -870,41 +928,6 @@ const AdminDashboard = () => {
                 교통 흐름 분석 데이터가 없습니다.
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 일곱 번째 행 - 정책 제안 섹션 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 정책 제안 공감 순위 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                정책 제안 공감 순위
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                시민 지지도가 높은 제안
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">공감 순위 리스트</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 정책 제안 처리 현황 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                정책 제안 처리 현황
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">단계별 처리 상태</p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">퍼널 차트 영역</p>
-              </div>
-            </div>
           </div>
         </div>
 

@@ -32,6 +32,16 @@ interface GoogleMapWrapperProps {
     source: string;
     coordinates: { lat: number; lng: number }[];
   }) => void;
+  showHeatmap?: boolean;
+  heatmapData?: Array<{
+    intersection_id: number;
+    intersection_name: string;
+    latitude: number;
+    longitude: number;
+    view_count: number;
+    intensity: number;
+    weight: number;
+  }>;
 }
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyBzlJSrUcsUQ4ygHlaQNhPVrgFmlqTyw_o";
