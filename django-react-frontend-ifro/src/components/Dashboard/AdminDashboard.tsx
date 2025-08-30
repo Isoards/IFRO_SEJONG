@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from "react";
 import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend
+} from "recharts";
+import {
   getAdminStats,
   getAdminIntersections,
   getTrafficFlowFavoritesStats,
@@ -13,11 +23,47 @@ import {
   TrafficFlowSummary
 } from "../../types/global.types";
 
+// 일별 조회수 데이터 타입
+interface DailyViewData {
+  date: string;
+  views: number;
+  day: string;
+}
+
+// 테스트 데이터 생성 함수
+const generateDailyViewData = (): DailyViewData[] => {
+  const data: DailyViewData[] = [];
+  const today = new Date();
+  
+  // 고정된 패턴 데이터 (요일별로 다른 패턴)
+  const fixedPatterns = [1850, 1650, 1750, 1950, 2100, 2350, 2200]; // 7일간 고정 패턴
+  
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    
+    const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = dayNames[date.getDay()];
+    
+    // 고정된 패턴 사용 (6-i는 0부터 6까지의 인덱스)
+    const views = fixedPatterns[6 - i];
+    
+    data.push({
+      date: `${date.getMonth() + 1}/${date.getDate()}`,
+      views: views,
+      day: dayName
+    });
+  }
+  
+  return data;
+};
+
 const AdminDashboard = () => {
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [intersectionStats, setIntersectionStats] = useState<IntersectionStats[]>([]);
   const [trafficFlowStats, setTrafficFlowStats] = useState<TrafficFlowFavoriteStats[]>([]);
   const [trafficFlowSummary, setTrafficFlowSummary] = useState<TrafficFlowSummary | null>(null);
+  const [dailyViewData, setDailyViewData] = useState<DailyViewData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +82,9 @@ const AdminDashboard = () => {
 
         setAdminStats(stats);
         setError(null);
+
+        // 일별 조회수 데이터 초기화
+        setDailyViewData(generateDailyViewData());
 
         // 교차로 목록과 교통 흐름 데이터는 백그라운드에서 로드 (덜 중요한 데이터)
         console.log('Starting to fetch additional data...');
@@ -116,11 +165,31 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="bg-green-100 px-3 py-1 rounded-full">
-                <span className="text-green-800 text-sm font-medium">
-                  실시간 업데이트
-                </span>
-              </div>
+              <button
+                onClick={() => window.location.href = '/dashboard'}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200 shadow-sm"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"
+                  />
+                </svg>
+                <span className="text-sm font-medium">대시보드</span>
+              </button>
               <div className="text-sm text-gray-500">
                 마지막 업데이트: {new Date().toLocaleTimeString("ko-KR")}
               </div>
@@ -323,9 +392,82 @@ const AdminDashboard = () => {
               <p className="text-sm text-gray-500 mt-1">일주일간 조회수 변화</p>
             </div>
             <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">라인 차트 영역 (시간별 트래픽)</p>
-              </div>
+              {loading ? (
+                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                  <div className="text-gray-500">차트 데이터 로딩 중...</div>
+                </div>
+              ) : error ? (
+                <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
+                  <div className="text-red-500">차트 데이터 로드 실패</div>
+                </div>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={dailyViewData}
+                      margin={{
+                        top: 20,
+                        right: 30,
+                        left: 20,
+                        bottom: 20,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: "#666" }}
+                        stroke="#888"
+                        tickLine={{ stroke: "#ddd" }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#666" }}
+                        stroke="#888"
+                        tickLine={{ stroke: "#ddd" }}
+                        domain={[0, 'dataMax + 200']}
+                        tickFormatter={(value) => `${(value / 1000).toFixed(1)}k`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "#ffffff",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "8px",
+                          fontSize: "14px",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
+                        }}
+                        labelStyle={{ 
+                          fontWeight: "600",
+                          color: "#374151"
+                        }}
+                        formatter={(value: number, name: string) => [
+                          `${value.toLocaleString()}회`,
+                          "조회수"
+                        ]}
+                        labelFormatter={(label: string) => {
+                          const item = dailyViewData.find(d => d.date === label);
+                          return `${label} (${item?.day})`;
+                        }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="views"
+                        stroke="#3b82f6"
+                        strokeWidth={3}
+                        dot={{
+                          fill: "#3b82f6",
+                          strokeWidth: 2,
+                          r: 5,
+                        }}
+                        activeDot={{
+                          r: 7,
+                          fill: "#1d4ed8",
+                          stroke: "#ffffff",
+                          strokeWidth: 2,
+                        }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           </div>
         </div>
