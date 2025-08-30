@@ -7,9 +7,9 @@ import { FavoritesSidebar } from "../../../shared/components/sidebars/FavoritesS
 import { TrafficFlowSidebar } from "../../../shared/components/sidebars/TrafficFlowSidebar";
 import { IncidentSidebar } from "../../../shared/components/sidebars/IncidentSidebar";
 import { GoogleMapWrapper } from "./GoogleMapWrapper";
-import { IntersectionDetailPanel } from "../../../shared/components/panels/IntersectionDetailPanel";
-import { IncidentDetailPanel } from "../../../shared/components/panels/IncidentDetailPanel";
-import { TrafficFlowDetailPanel } from "../../../shared/components/panels/TrafficFlowDetailPanel";
+import { IntersectionDetailPanel } from "./IntersectionDetailPanel";
+import { IncidentDetailPanel } from "./IncidentDetailPanel";
+import { TrafficFlowDetailPanel } from "./TrafficFlowDetailPanel";
 import { TableauDashboard } from "../../../shared/components/panels/TableauDashboard";
 import {
   Intersection,
@@ -497,6 +497,25 @@ export default function Dashboard() {
 
   const [isDetailPanelFullscreen] = useState(false);
 
+  // Panel width management
+  const [panelWidthPercentage, setPanelWidthPercentage] = useState(35); // 기본 35%
+  const minPanelWidth = 20; // 최소 20%
+  const maxPanelWidth = 60; // 최대 60%
+
+  const handlePanelWidthIncrease = () => {
+    setPanelWidthPercentage((prev) => Math.min(prev + 5, maxPanelWidth));
+  };
+
+  const handlePanelWidthDecrease = () => {
+    setPanelWidthPercentage((prev) => Math.max(prev - 5, minPanelWidth));
+  };
+
+  const handlePanelWidthChange = (widthPercentage: number) => {
+    setPanelWidthPercentage(
+      Math.max(minPanelWidth, Math.min(maxPanelWidth, widthPercentage))
+    );
+  };
+
   useEffect(() => {
     if (selectedIntersection && currentDate) {
       const fetchStat = async () => {
@@ -809,22 +828,31 @@ export default function Dashboard() {
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
-                  borderRight: "1px solid #ECECEC",
+                  borderLeft: "1px solid #ECECEC",
                   zIndex: 60,
-                  width: isDetailPanelFullscreen ? "100vw" : "min(700px, 90vw)",
+                  width: isDetailPanelFullscreen
+                    ? "100vw"
+                    : `${panelWidthPercentage}vw`,
+                  minWidth: `${minPanelWidth}vw`,
+                  maxWidth: `${maxPanelWidth}vw`,
                 }}
               >
                 <div
                   className="h-full overflow-y-auto relative flex justify-center"
                   style={{ width: "100%" }}
                 >
-                  <div className="w-full max-w-[700px]">
+                  <div className="w-full" style={{ maxWidth: "none" }}>
                     <IntersectionDetailPanel
                       intersection={selectedIntersection}
                       favoriteIntersections={favoriteIntersections}
                       onToggleFavorite={handleToggleFavorite}
                       onClose={handleCloseIntersectionPanel}
                       isFullscreen={isDetailPanelFullscreen}
+                      onWidthIncrease={handlePanelWidthIncrease}
+                      onWidthDecrease={handlePanelWidthDecrease}
+                      canIncreaseWidth={panelWidthPercentage < maxPanelWidth}
+                      canDecreaseWidth={panelWidthPercentage > minPanelWidth}
+                      onWidthChange={handlePanelWidthChange}
                       trafficStat={trafficStat}
                       trafficChartData={trafficChartData}
                     />
@@ -847,16 +875,18 @@ export default function Dashboard() {
                 style={{
                   boxShadow: "0px 4px 12.8px 0px rgba(0, 0, 0, 0.30)",
                   backdropFilter: "blur(5px)",
-                  borderRight: "1px solid #ECECEC",
+                  borderLeft: "1px solid #ECECEC",
                   zIndex: 60,
-                  width: "min(700px, 90vw)",
+                  width: `${panelWidthPercentage}vw`,
+                  minWidth: `${minPanelWidth}vw`,
+                  maxWidth: `${maxPanelWidth}vw`,
                 }}
               >
                 <div
                   className="h-full overflow-y-auto relative flex justify-center"
                   style={{ width: "100%" }}
                 >
-                  <div className="w-full max-w-[700px] p-8 pt-20">
+                  <div className="w-full" style={{ maxWidth: "none" }}>
                     <TrafficFlowDetailPanel
                       selectedPoints={selectedPoints}
                       onClose={handleCloseRoutePanel}
@@ -866,6 +896,12 @@ export default function Dashboard() {
                       isFullscreen={isDetailPanelFullscreen}
                       onAddFlowToFavorites={handleAddFlowToFavorites}
                       favoriteFlows={favoriteFlows}
+                      onWidthIncrease={handlePanelWidthIncrease}
+                      onWidthDecrease={handlePanelWidthDecrease}
+                      canIncreaseWidth={panelWidthPercentage < maxPanelWidth}
+                      canDecreaseWidth={panelWidthPercentage > minPanelWidth}
+                      onWidthChange={handlePanelWidthChange}
+                      routeData={routeData}
                     />
                   </div>
                 </div>
@@ -887,17 +923,22 @@ export default function Dashboard() {
                   backdropFilter: "blur(5px)",
                   borderLeft: "1px solid #ECECEC",
                   zIndex: 60,
-                  width: isDetailPanelFullscreen ? "100vw" : "min(700px, 90vw)",
+                  width: isDetailPanelFullscreen
+                    ? "100vw"
+                    : `${panelWidthPercentage}vw`,
+                  minWidth: `${minPanelWidth}vw`,
+                  maxWidth: `${maxPanelWidth}vw`,
                 }}
               >
                 <div
                   className="h-full overflow-y-auto relative flex justify-center"
                   style={{ width: "100%" }}
                 >
-                  <div className="w-full max-w-[700px] p-8 pt-20">
+                  <div className="w-full" style={{ maxWidth: "none" }}>
                     <IncidentDetailPanel
                       incident={selectedIncident}
                       onClose={handleCloseIncidentPanel}
+                      onWidthChange={handlePanelWidthChange}
                     />
                   </div>
                 </div>

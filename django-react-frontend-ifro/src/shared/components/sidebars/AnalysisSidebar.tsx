@@ -217,7 +217,7 @@ export const AnalysisSidebar: React.FC<AnalysisSidebarProps> = ({
                 {t("traffic.analysis")}
               </h2>
               <p className="text-xs text-gray-500">
-                Encryption Enabled: {encryptionEnabled ? "On" : "Off"}
+                암호화 여부: {encryptionEnabled ? "활성화" : "비활성화"}
               </p>
             </div>
             <div className="relative">
