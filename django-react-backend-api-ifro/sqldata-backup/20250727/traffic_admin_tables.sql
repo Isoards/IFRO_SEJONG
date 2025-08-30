@@ -96,13 +96,13 @@ INSERT INTO `traffic_intersectionfavoritelog` (`intersection_id`, `user_id`, `is
 (1199, 2, 1, '2025-08-30 02:15:00'),
 (1788, 3, 1, '2025-08-30 02:20:00');
 
--- 교통 흐름 분석 즐겨찾기 테스트 데이터 (TOP 5)
-INSERT INTO `traffic_trafficflowanalysisfavorite` (`start_intersection_id`, `end_intersection_id`, `total_favorites`, `total_accesses`, `unique_users`, `last_accessed`, `popularity_score`, `created_at`, `updated_at`) VALUES
-(3799, 493, 15, 120, 8, '2025-08-30 02:45:00', 95, '2025-08-30 01:00:00', '2025-08-30 02:45:00'),
-(6506, 6028, 12, 98, 6, '2025-08-30 02:40:00', 88, '2025-08-30 01:05:00', '2025-08-30 02:40:00'),
-(5517, 5019, 10, 85, 5, '2025-08-30 02:35:00', 82, '2025-08-30 01:10:00', '2025-08-30 02:35:00'),
-(1788, 4177, 8, 72, 4, '2025-08-30 02:30:00', 75, '2025-08-30 01:15:00', '2025-08-30 02:30:00'),
-(4589, 4100, 6, 58, 3, '2025-08-30 02:25:00', 68, '2025-08-30 01:20:00', '2025-08-30 02:25:00');
+-- 교통 흐름 분석 즐겨찾기 테스트 데이터 (TOP 5) - 주석처리
+-- INSERT INTO `traffic_trafficflowanalysisfavorite` (`start_intersection_id`, `end_intersection_id`, `total_favorites`, `total_accesses`, `unique_users`, `last_accessed`, `popularity_score`, `created_at`, `updated_at`) VALUES
+-- (3799, 493, 15, 120, 8, '2025-08-30 02:45:00', 95, '2025-08-30 01:00:00', '2025-08-30 02:45:00'),
+-- (6506, 6028, 12, 98, 6, '2025-08-30 02:40:00', 88, '2025-08-30 01:05:00', '2025-08-30 02:40:00'),
+-- (5517, 5019, 10, 85, 5, '2025-08-30 02:35:00', 82, '2025-08-30 01:10:00', '2025-08-30 02:35:00'),
+-- (1788, 4177, 8, 72, 4, '2025-08-30 02:30:00', 75, '2025-08-30 01:15:00', '2025-08-30 02:30:00'),
+-- (4589, 4100, 6, 58, 3, '2025-08-30 02:25:00', 68, '2025-08-30 01:20:00', '2025-08-30 02:25:00');
 
 -- 교통 흐름 분석 통계 테스트 데이터
 INSERT INTO `traffic_trafficflowanalysisstats` (`start_intersection_id`, `end_intersection_id`, `total_favorites`, `total_accesses`, `created_at`, `updated_at`) VALUES
