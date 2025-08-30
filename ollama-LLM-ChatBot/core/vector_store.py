@@ -128,10 +128,14 @@ class FAISSVectorStore(VectorStoreInterface):
         Returns:
             (TextChunk, 유사도 점수) 튜플 리스트
         """
+        import time
+        search_start = time.time()
+        
         if len(self.chunks) == 0:
             return []
         
         # 1. 벡터 유사도 검색
+        vector_start = time.time()
         if self.normalize_embeddings:
             query_embedding = query_embedding / np.linalg.norm(query_embedding)
         
@@ -140,15 +144,23 @@ class FAISSVectorStore(VectorStoreInterface):
             query_embedding.reshape(1, -1), 
             min(top_k * 2, len(self.chunks))  # 더 많은 후보 검색
         )
+        vector_time = time.time() - vector_start
         
         # 2. 하이브리드 검색 (키워드 매칭 + 벡터 유사도)
+        hybrid_start = time.time()
         if use_hybrid_search:
             results = self._hybrid_search(query_embedding, scores[0], indices[0], top_k)
         else:
             results = [(self.chunks[i], float(s)) for s, i in zip(scores[0], indices[0])]
+        hybrid_time = time.time() - hybrid_start
         
         # 3. 결과 필터링 및 정렬
+        filter_start = time.time()
         filtered_results = self._filter_and_rank_results(results, top_k)
+        filter_time = time.time() - filter_start
+        
+        total_time = time.time() - search_start
+        print(f"    📊 FAISS 검색 세부: 벡터({vector_time:.3f}s) | 하이브리드({hybrid_time:.3f}s) | 필터({filter_time:.3f}s) | 총({total_time:.3f}s)")
         
         return filtered_results[:top_k]
     
@@ -210,7 +222,13 @@ class FAISSVectorStore(VectorStoreInterface):
             '설정', '구성', '환경', '옵션',
             '백업', '복구', '저장', '보관',
             '네트워크', '통신', '연결', '전송',
-            '데이터베이스', 'DB', '테이블', '쿼리'
+            '데이터베이스', 'DB', '테이블', '쿼리',
+            # 교통 시스템 관련 키워드 추가
+            '분석', '뷰', '활성화', '교차로', '교통',
+            '네비게이션', '사이드바', '목록', '검색',
+            '선택', '마커', '지도', '패널',
+            '버튼', '클릭', '위치', '방법',
+            '좌측', '우측', '상단', '하단'
         ]
         
         content_lower = chunk.content.lower()
@@ -700,7 +718,8 @@ class HybridVectorStore:
     
     def search(self, query_embedding: np.ndarray, top_k: int = 5,
                use_metadata_filter: bool = False,
-               filter_metadata: Optional[Dict] = None) -> List[Tuple[TextChunk, float]]:
+               filter_metadata: Optional[Dict] = None,
+               similarity_threshold: float = 0.1) -> List[Tuple[TextChunk, float]]:
         """
         하이브리드 검색
         
@@ -713,12 +732,23 @@ class HybridVectorStore:
         Returns:
             검색 결과
         """
+        import time
+        search_start = time.time()
+        
         if use_metadata_filter and filter_metadata:
             # 메타데이터 필터가 필요한 경우 ChromaDB 사용
-            return self.chroma_store.search(query_embedding, top_k, filter_metadata)
+            result = self.chroma_store.search(query_embedding, top_k, filter_metadata)
         else:
             # 빠른 검색이 필요한 경우 FAISS 사용
-            return self.faiss_store.search(query_embedding, top_k)
+            result = self.faiss_store.search(query_embedding, top_k)
+        
+        # 유사도 임계값 필터링 추가
+        filtered_result = [(chunk, score) for chunk, score in result if score >= similarity_threshold]
+        
+        search_time = time.time() - search_start
+        print(f"  🔍 벡터 검색: {search_time:.3f}초 (FAISS 사용, 임계값: {similarity_threshold})")
+        
+        return filtered_result
     
     def save(self, path: Optional[str] = None) -> None:
         """두 저장소 모두 저장"""
