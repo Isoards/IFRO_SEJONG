@@ -1,9 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  X,
-  GripVertical,
-} from "lucide-react";
+import { X, GripVertical } from "lucide-react";
 import { Incident } from "../../../shared/types/global.types";
 
 interface IncidentDetailPanelProps {
@@ -197,8 +194,17 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">위치:</span>
-                  <span className="text-sm font-medium text-gray-900 max-w-xs truncate" title={incident.location_name || incident.intersection_name || "N/A"}>
-                    {incident.location_name || incident.intersection_name || "N/A"}
+                  <span
+                    className="text-sm font-medium text-gray-900 max-w-xs truncate"
+                    title={
+                      incident.location_name ||
+                      incident.intersection_name ||
+                      "N/A"
+                    }
+                  >
+                    {incident.location_name ||
+                      incident.intersection_name ||
+                      "N/A"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -216,13 +222,20 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               </h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{t("incidents.managedBy")}:</span>
-                  <span className="text-sm font-medium text-gray-900 max-w-xs truncate" title={incident.managed_by}>
+                  <span className="text-sm text-gray-600">
+                    {t("incidents.managedBy")}:
+                  </span>
+                  <span
+                    className="text-sm font-medium text-gray-900 max-w-xs truncate"
+                    title={incident.managed_by}
+                  >
                     {incident.managed_by}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{t("incidents.assignedTo")}:</span>
+                  <span className="text-sm text-gray-600">
+                    {t("incidents.assignedTo")}:
+                  </span>
                   <span className="text-sm font-medium text-green-700 bg-green-100 px-2 py-1 rounded">
                     {incident.assigned_to}
                   </span>
@@ -254,7 +267,9 @@ export const IncidentDetailPanel: React.FC<IncidentDetailPanelProps> = ({
               </div>
               {incident.incident_number && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Incident Number:</span>
+                  <span className="text-sm text-gray-600">
+                    Incident Number:
+                  </span>
                   <span className="text-sm font-medium text-gray-900">
                     {String(incident.incident_number)}
                   </span>
