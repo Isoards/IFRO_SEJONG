@@ -50,10 +50,16 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "craco start",
+    "build": "craco build",
+    "build:analyze": "npm run build && npx serve -s build",
+    "test": "craco test",
+    "test:coverage": "craco test --coverage --watchAll=false",
+    "eject": "react-scripts eject",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "performance:analyze": "npm run build && npx webpack-bundle-analyzer build/static/js/*.js"
   },
   "eslintConfig": {
     "extends": [
@@ -74,9 +80,11 @@
     ]
   },
   "devDependencies": {
+    "@craco/craco": "^7.1.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@types/google.maps": "^3.58.1",
     "autoprefixer": "^10.4.21",
+    "babel-plugin-import": "^1.13.8",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.3"
   }
