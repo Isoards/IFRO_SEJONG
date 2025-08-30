@@ -20,8 +20,8 @@ from .schemas import (
     ProposalListResponseSchema, ProposalVoteRequestSchema, ProposalVoteResponseSchema, ProposalStatsSchema,
     ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema
 )
-from django.db.models import Sum, OuterRef, Subquery, Count, Q, F
-from django.db import transaction
+from django.db.models import Sum, OuterRef, Subquery, Count, Q, F, Max
+from django.db import transaction, models
 from datetime import datetime
 from django.utils import timezone
 import django.db.models
@@ -2388,3 +2388,77 @@ def get_proposals_by_intersection(request):
         
     except Exception as e:
         raise HttpError(500, f"교차로별 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+# TOP 10 조회 구간 API
+@router.get("/admin/top-viewed-intersections", response=List[dict])
+def get_top_viewed_intersections(request):
+    """
+    실시간 최다 조회 구간 TOP 10을 반환합니다.
+    히트맵에서 색 스펙트럼으로 표시하기 위한 데이터를 포함합니다.
+    """
+    try:
+        # IntersectionStats에서 조회수 기준으로 TOP 10 가져오기
+        top_intersections = IntersectionStats.objects.select_related('intersection').filter(
+            view_count__gt=0
+        ).order_by('-view_count')[:10]
+        
+        result = []
+        max_views = top_intersections[0].view_count if top_intersections else 1
+        
+        for idx, stats in enumerate(top_intersections):
+            # 색상 강도 계산 (0.3 ~ 1.0 범위)
+            intensity = 0.3 + (stats.view_count / max_views) * 0.7
+            
+            result.append({
+                'rank': idx + 1,
+                'intersection_id': stats.intersection.id,
+                'intersection_name': stats.intersection.name,
+                'latitude': float(stats.intersection.latitude),
+                'longitude': float(stats.intersection.longitude),
+                'view_count': stats.view_count,
+                'favorite_count': stats.favorite_count,
+                'intensity': intensity,  # 히트맵 색상 강도
+                'last_viewed': stats.last_viewed.isoformat() if stats.last_viewed else None
+            })
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error getting top viewed intersections: {str(e)}")
+        return []
+
+@router.get("/admin/heatmap-data", response=List[dict])
+def get_heatmap_data(request):
+    """
+    히트맵 표시를 위한 모든 교차로의 조회수 데이터를 반환합니다.
+    """
+    try:
+        # 모든 교차로의 통계 데이터 가져오기
+        all_intersections = IntersectionStats.objects.select_related('intersection').all()
+        
+        # 최대 조회수 계산
+        max_views = all_intersections.aggregate(
+            max_views=models.Max('view_count')
+        )['max_views'] or 1
+        
+        result = []
+        for stats in all_intersections:
+            if stats.view_count > 0:  # 조회수가 있는 교차로만 포함
+                # 색상 강도 계산 (0.1 ~ 1.0 범위)
+                intensity = max(0.1, stats.view_count / max_views)
+                
+                result.append({
+                    'intersection_id': stats.intersection.id,
+                    'intersection_name': stats.intersection.name,
+                    'latitude': float(stats.intersection.latitude),
+                    'longitude': float(stats.intersection.longitude),
+                    'view_count': stats.view_count,
+                    'intensity': intensity,
+                    'weight': stats.view_count  # 히트맵 가중치
+                })
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error getting heatmap data: {str(e)}")
+        return []

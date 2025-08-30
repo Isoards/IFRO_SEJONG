@@ -284,6 +284,18 @@ export const recordTrafficFlowAccess = async (
   return response.data;
 };
 
+// TOP 10 조회 구간 API
+export const getTopViewedIntersections = async () => {
+  const response = await api.get('/traffic/admin/top-viewed-intersections');
+  return response.data;
+};
+
+// 히트맵 데이터 API
+export const getHeatmapData = async () => {
+  const response = await api.get('/traffic/admin/heatmap-data');
+  return response.data;
+};
+
 // 호환성을 위한 별칭 함수들
 export const getIntersectionFavoriteStatus = getFavoriteStatus;
 export const toggleIntersectionFavorite = toggleFavorite;
