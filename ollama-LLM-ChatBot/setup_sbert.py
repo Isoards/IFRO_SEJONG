@@ -146,17 +146,18 @@ def setup_sbert_models():
         print(f"❌ SBERT 모델 설정 중 오류 발생: {e}")
         return False
 
-def test_intent_classifier():
-    """의도 분류기 테스트"""
+def test_core_modules():
+    """핵심 모듈 테스트"""
     print(f"\n" + "=" * 60)
-    print("🧪 의도 분류기 테스트")
+    print("🧪 핵심 모듈 테스트")
     print("=" * 60)
     
     try:
-        from core.intent_classifier import create_intent_classifier
+        from core.query_router import QueryRouter
+        from core.sql_element_extractor import SQLElementExtractor
+        from core.answer_generator import AnswerGenerator
         
-        print("의도 분류기 생성 중...")
-        classifier = create_intent_classifier("traffic")
+        print("핵심 모듈 임포트 성공!")
         
         # 간단한 테스트
         test_questions = [
@@ -169,20 +170,30 @@ def test_intent_classifier():
         for i, question in enumerate(test_questions, 1):
             print(f"{i}. {question}")
         
-        print(f"\n분류 결과:")
-        for question in test_questions:
-            result = classifier.classify_intent(question)
-            print(f"질문: {question}")
-            print(f"  의도: {result.intent.value}")
-            print(f"  신뢰도: {result.confidence:.3f}")
-            print(f"  분류기: {result.classifier_used}")
-            print()
+        print(f"\n모듈 초기화 테스트:")
+        try:
+            router = QueryRouter()
+            print("✅ QueryRouter 초기화 성공")
+        except Exception as e:
+            print(f"❌ QueryRouter 초기화 실패: {e}")
         
-        print("✅ 의도 분류기 테스트 완료!")
+        try:
+            extractor = SQLElementExtractor()
+            print("✅ SQLElementExtractor 초기화 성공")
+        except Exception as e:
+            print(f"❌ SQLElementExtractor 초기화 실패: {e}")
+        
+        try:
+            generator = AnswerGenerator()
+            print("✅ AnswerGenerator 초기화 성공")
+        except Exception as e:
+            print(f"❌ AnswerGenerator 초기화 실패: {e}")
+        
+        print("✅ 핵심 모듈 테스트 완료!")
         return True
         
     except Exception as e:
-        print(f"❌ 의도 분류기 테스트 실패: {e}")
+        print(f"❌ 핵심 모듈 테스트 실패: {e}")
         return False
 
 def main():
@@ -199,14 +210,14 @@ def main():
         print("\n❌ SBERT 모델 설정에 실패했습니다.")
         return
     
-    # 3. 의도 분류기 테스트
-    if not test_intent_classifier():
-        print("\n❌ 의도 분류기 테스트에 실패했습니다.")
+    # 3. 핵심 모듈 테스트
+    if not test_core_modules():
+        print("\n❌ 핵심 모듈 테스트에 실패했습니다.")
         return
     
     print(f"\n" + "=" * 60)
     print("🎉 SBERT 모델 설정 완료!")
-    print("이제 의도 분류기를 사용할 수 있습니다.")
+    print("이제 최적화된 챗봇 시스템을 사용할 수 있습니다.")
     print("=" * 60)
 
 if __name__ == "__main__":

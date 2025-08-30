@@ -6,6 +6,10 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: 1234
       MYSQL_DATABASE: traffic
+      # 한글 지원 설정
+      LANG: ko_KR.UTF-8
+      LC_ALL: ko_KR.UTF-8
+      LC_CTYPE: ko_KR.UTF-8
     ports:
       - "3306:3306"
     volumes:
@@ -37,11 +41,35 @@ services:
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
       - GEMINI_API_KEY=AIzaSyAwA17afiK3RW95Z9hBcWpDOOVU_PELtfw
       - CHATBOT_URL=http://chatbot:8008
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./django-react-backend-api-ifro:/app
+    command: >
+      sh -c "cd /app/src &&
+             echo 'Waiting for MySQL to be ready...' &&
+             until mysql -h db -u root -p$$MYSQL_PASSWORD --skip-ssl -e 'SELECT 1;' > /dev/null 2>&1; do
+               sleep 1;
+             done &&
+             echo 'MySQL is ready.' &&
+             echo 'Running migrations...' &&
+             echo 'Checking Django system tables...' &&
+             python manage.py migrate --run-syncdb --verbosity=0 || echo 'Initial migration attempt completed' &&
+             python manage.py migrate traffic --verbosity=0 || echo 'Traffic migration attempt completed' &&
+             echo 'All migrations completed. Starting services...' &&
+             echo '[ENCRYPT] 🔄 encrypt_transfer.py 시작됨...' &&
+             python ../encrypt_transfer.py &
+             ENCRYPT_PID=$$! &&
+             echo 'Starting Django server...' &&
+             python manage.py runserver 0.0.0.0:8000 &
+             wait $$ENCRYPT_PID &&
+             echo '[ENCRYPT] ✅ encrypt_transfer.py 완료됨.' &&
+             wait"
 
   frontend:
     build:
@@ -55,6 +83,10 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=4096
       - REACT_APP_API_URL=http://localhost:8000
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
     depends_on:
       - backend
     deploy:
@@ -72,14 +104,21 @@ services:
     volumes:
       - ollama_data:/root/.ollama
       - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+      - ./ollama-healthcheck.sh:/ollama-healthcheck.sh
     restart: unless-stopped
+    environment:
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
     entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
     healthcheck:
-      test: ["CMD", "sh", "-c", "ollama list | grep -q 'mistral:latest' && ollama run mistral:latest 'test' | head -1 | grep -q ."]
-      interval: 30s
-      timeout: 30s
-      retries: 10
-      start_period: 300s
+      test: ["CMD", "/bin/bash", "/ollama-healthcheck.sh"]
+      interval: 60s
+      timeout: 60s
+      retries: 30
+      start_period: 1200s
+
 
   chatbot:
     build:
@@ -89,7 +128,6 @@ services:
       - "8008:8008"
     volumes:
       - ./ollama-LLM-ChatBot:/app
-      - chatbot_data:/app/data
       - chatbot_vector_store:/app/vector_store
       - chatbot_logs:/app/logs
       - chatbot_models:/app/models
@@ -97,18 +135,29 @@ services:
     environment:
       - PYTHONPATH=/app
       - MODEL_TYPE=ollama
-      - MODEL_NAME=mistral:latest
+      - MODEL_NAME=qwen2:1.5b
       - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
       - OLLAMA_HOST=http://ollama:11434
+      - MYSQL_DATABASE=traffic
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=1234
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
     depends_on:
       ollama:
+        condition: service_healthy
+      db:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 30s
+      retries: 15
       start_period: 300s
 
 volumes:

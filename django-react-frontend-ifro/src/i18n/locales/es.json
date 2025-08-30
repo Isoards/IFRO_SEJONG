@@ -21,7 +21,8 @@
     "today": "Hoy",
     "all": "Todos",
     "time": "Tiempo",
-    "lastUpdate": "Última Actualización"
+    "lastUpdate": "Última Actualización",
+    "noAccess": "Sin acceso"
   },
   "auth": {
     "login": "Iniciar Sesión",
@@ -51,7 +52,10 @@
     "intersectionView": "Flujo de Tráfico entre Intersecciones",
     "incidentsView": "Incidentes y Eventos",
     "favorites": "Favoritos",
-    "tableau": "Tableau"
+    "tableau": "Tableau",
+    "policy": "Propuestas de Política",
+    "admin": "Admin",
+    "logout": "Cerrar Sesión"
   },
   "dashboard": {
     "title": "Panel de Análisis de Datos de Tráfico de Sejong (Modern API v3)",
@@ -140,7 +144,11 @@
     "moderate": "Moderado",
     "congested": "Congestionado",
     "loading": "Cargando mapa...",
-    "loadError": "No se pudo cargar el mapa."
+    "loadError": "No se pudo cargar el mapa.",
+    "publicTransport": "Transporte Público",
+    "routes": "Rutas",
+    "showRoutes": "Mostrar Rutas",
+    "hideRoutes": "Ocultar Rutas"
   },
   "incidents": {
     "title": "Incidentes",
@@ -157,9 +165,52 @@
     "timeline": "Cronología"
   },
   "favorites": {
+    "add": "Añadir a Favoritos",
+    "remove": "Quitar de Favoritos",
+    "addToFavorites": "Añadir Flujo a Favoritos",
     "empty": {
       "title": "No hay favoritos",
       "description": "Haz clic en el icono de estrella para agregar favoritos"
+    }
+  },
+  "policy": {
+    "createProposal": "Crear Propuesta de Política",
+    "createDescription": "Comparta sus opiniones o sugerencias para mejoras del sistema de tráfico con el administrador.",
+    "proposal": "Propuesta de Política",
+    "submit": "Registrar Propuesta de Política",
+    "submitting": "Registrando...",
+    "draft": "Borrador",
+    "title": "Título",
+    "titlePlaceholder": "Ingrese el título de la propuesta de política",
+    "category": "Categoría",
+    "priority": "Prioridad",
+    "relatedIntersection": "Intersección Relacionada",
+    "selectIntersection": "Seleccionar intersección (opcional)",
+    "locationDescription": "Descripción de Ubicación",
+    "locationPlaceholder": "Ubicación específica o dirección (opcional)",
+    "content": "Contenido",
+    "contentPlaceholder": "Describa en detalle el contenido de su propuesta de política. Incluir problemas actuales, planes de mejora y efectos esperados será aún mejor.",
+    "tags": "Etiquetas",
+    "categories": {
+      "trafficSignal": "Relacionado con Semáforos",
+      "roadSafety": "Seguridad Vial",
+      "trafficFlow": "Flujo de Tráfico",
+      "infrastructure": "Mejora de Infraestructura",
+      "policy": "Política de Tráfico",
+      "other": "Otros"
+    },
+    "priorities": {
+      "low": "Bajo",
+      "medium": "Medio",
+      "high": "Alto",
+      "urgent": "Urgente"
+    },
+    "statuses": {
+      "pending": "Pendiente",
+      "underReview": "En Revisión",
+      "inProgress": "En Progreso",
+      "completed": "Completado",
+      "rejected": "Rechazado"
     }
   },
   "dates": {
