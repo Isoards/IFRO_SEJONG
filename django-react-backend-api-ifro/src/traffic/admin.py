@@ -3,10 +3,8 @@ from django.utils.html import format_html
 from django.db.models import Count
 from django.utils import timezone
 from .models import (
-    (
     Intersection, TrafficVolume, TotalTrafficVolume, 
-    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag
-), 
+    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag,
     IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog,
     TrafficFlowAnalysisFavorite, TrafficFlowAnalysisStats
 )

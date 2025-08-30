@@ -12,7 +12,8 @@ echo "MySQL is ready."
 
 echo "Running migrations..."
 # 기존 테이블이 있으므로 fake로 처리
-python manage.py migrate --fake
+python manage.py migrate traffic --fake
+python manage.py migrate
 
 echo "[ENCRYPT] 🔄 encrypt_transfer.py 시작됨..."
 python ../encrypt_transfer.py &
