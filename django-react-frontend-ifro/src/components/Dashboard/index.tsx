@@ -23,7 +23,6 @@ import {
 import { getIncidents } from "../../api/incidents";
 
 import { ChatBotButton } from "../common/ChatBotButton";
-import ProposalButton from "../common/ProposalButton";
 import { debugLog } from "../../utils/debugUtils";
 
 export default function Dashboard() {
@@ -906,9 +905,6 @@ export default function Dashboard() {
 
       {/* AI 챗봇 플로팅 버튼 */}
       <ChatBotButton />
-
-      {/* 정책제안 플로팅 버튼 */}
-      <ProposalButton />
     </div>
   );
 }

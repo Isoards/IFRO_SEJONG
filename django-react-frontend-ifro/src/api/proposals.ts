@@ -7,7 +7,7 @@ import {
   ProposalFilters,
 } from "../types/global.types";
 
-const PROPOSALS_BASE_URL = "proposals";
+const PROPOSALS_BASE_URL = "traffic/proposals";
 
 // 정책제안 목록 조회 (페이지네이션, 필터링 지원)
 export async function getProposals(

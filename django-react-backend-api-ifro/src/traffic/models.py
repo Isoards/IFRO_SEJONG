@@ -302,3 +302,195 @@ class IntersectionFavoriteLog(models.Model):
     def __str__(self):
         status = "추가" if self.is_favorite else "제거"
         return f"{self.intersection.name} - {self.user.username} - {status}"
+
+# 정책제안 관련 모델들
+class PolicyProposal(models.Model):
+    """정책제안 모델"""
+    CATEGORY_CHOICES = [
+        ('traffic_signal', '신호등 관련'),
+        ('road_safety', '도로 안전'),
+        ('traffic_flow', '교통 흐름'),
+        ('infrastructure', '인프라 개선'),
+        ('policy', '교통 정책'),
+        ('other', '기타'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', '대기 중'),
+        ('under_review', '검토 중'),
+        ('in_progress', '진행 중'),
+        ('completed', '완료'),
+        ('rejected', '반려'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', '낮음'),
+        ('medium', '보통'),
+        ('high', '높음'),
+        ('urgent', '긴급'),
+    ]
+
+    title = models.CharField(max_length=200, verbose_name="제목")
+    description = models.TextField(verbose_name="내용")
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, verbose_name="카테고리")
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium', verbose_name="우선순위")
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending', verbose_name="상태")
+    
+    # 위치 관련 필드
+    location = models.CharField(max_length=500, blank=True, verbose_name="위치 설명")
+    intersection = models.ForeignKey(
+        Intersection, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='proposals',
+        verbose_name="관련 교차로"
+    )
+    latitude = models.FloatField(null=True, blank=True, verbose_name="위도")
+    longitude = models.FloatField(null=True, blank=True, verbose_name="경도")
+    
+    # 제안자 정보
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='submitted_proposals',
+        verbose_name="제안자"
+    )
+    
+    # 관리자 응답
+    admin_response = models.TextField(blank=True, verbose_name="관리자 답변")
+    admin_response_date = models.DateTimeField(null=True, blank=True, verbose_name="답변일")
+    admin_response_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='admin_responses',
+        verbose_name="답변자"
+    )
+    
+    # 통계
+    votes_count = models.IntegerField(default=0, verbose_name="투표수")
+    views_count = models.IntegerField(default=0, verbose_name="조회수")
+    
+    # 시간 필드
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="작성일")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정일")
+
+    class Meta:
+        verbose_name = "정책제안"
+        verbose_name_plural = "정책제안들"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['category']),
+            models.Index(fields=['status']),
+            models.Index(fields=['priority']),
+            models.Index(fields=['intersection']),
+            models.Index(fields=['submitted_by']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} - {self.get_status_display()}"
+
+class ProposalAttachment(models.Model):
+    """정책제안 첨부파일 모델"""
+    proposal = models.ForeignKey(
+        PolicyProposal, 
+        on_delete=models.CASCADE, 
+        related_name='attachments',
+        verbose_name="정책제안"
+    )
+    file = models.FileField(upload_to='proposal_attachments/%Y/%m/%d/', verbose_name="파일")
+    file_name = models.CharField(max_length=255, verbose_name="파일명")
+    file_size = models.PositiveIntegerField(verbose_name="파일 크기")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="업로드일")
+
+    class Meta:
+        verbose_name = "정책제안 첨부파일"
+        verbose_name_plural = "정책제안 첨부파일들"
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.proposal.title} - {self.file_name}"
+
+class ProposalVote(models.Model):
+    """정책제안 투표 모델"""
+    VOTE_CHOICES = [
+        ('up', '추천'),
+        ('down', '비추천'),
+    ]
+
+    proposal = models.ForeignKey(
+        PolicyProposal, 
+        on_delete=models.CASCADE, 
+        related_name='votes',
+        verbose_name="정책제안"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE,
+        verbose_name="투표자"
+    )
+    vote_type = models.CharField(max_length=4, choices=VOTE_CHOICES, verbose_name="투표 타입")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="투표일")
+
+    class Meta:
+        verbose_name = "정책제안 투표"
+        verbose_name_plural = "정책제안 투표들"
+        unique_together = ['proposal', 'user']  # 한 사용자는 한 제안에 하나의 투표만
+        indexes = [
+            models.Index(fields=['proposal', 'vote_type']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.proposal.title} - {self.user.username} - {self.get_vote_type_display()}"
+
+class ProposalViewLog(models.Model):
+    """정책제안 조회 로그 모델"""
+    proposal = models.ForeignKey(
+        PolicyProposal, 
+        on_delete=models.CASCADE, 
+        related_name='view_logs',
+        verbose_name="정책제안"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        verbose_name="사용자"
+    )
+    ip_address = models.GenericIPAddressField(verbose_name="IP 주소")
+    viewed_at = models.DateTimeField(auto_now_add=True, verbose_name="조회일")
+
+    class Meta:
+        verbose_name = "정책제안 조회 로그"
+        verbose_name_plural = "정책제안 조회 로그들"
+        indexes = [
+            models.Index(fields=['proposal', 'viewed_at']),
+            models.Index(fields=['user']),
+            models.Index(fields=['ip_address']),
+        ]
+
+    def __str__(self):
+        return f"{self.proposal.title} - {self.viewed_at}"
+
+class ProposalTag(models.Model):
+    """정책제안 태그 모델"""
+    name = models.CharField(max_length=50, unique=True, verbose_name="태그명")
+    proposals = models.ManyToManyField(
+        PolicyProposal, 
+        related_name='tags',
+        verbose_name="정책제안들"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="생성일")
+
+    class Meta:
+        verbose_name = "정책제안 태그"
+        verbose_name_plural = "정책제안 태그들"
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name

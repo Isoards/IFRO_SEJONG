@@ -113,6 +113,11 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 이미 처리 중이면 중복 요청 방지
+    if (isLoading) {
+      return;
+    }
+
     if (!validateForm()) {
       return;
     }

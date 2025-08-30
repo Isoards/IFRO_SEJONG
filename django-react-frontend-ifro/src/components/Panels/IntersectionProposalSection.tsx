@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -122,7 +122,7 @@ export const IntersectionProposalSection: React.FC<
   };
 
   // 데이터 새로고침 함수
-  const refreshProposals = async () => {
+  const refreshProposals = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -139,14 +139,19 @@ export const IntersectionProposalSection: React.FC<
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [intersection.id]);
 
   // 외부에서 새로고침 요청 시 처리
   useEffect(() => {
     if (onRefresh) {
       onRefresh(refreshProposals);
     }
-  }, [onRefresh]);
+  }, [onRefresh, refreshProposals]);
+
+  // 컴포넌트 마운트 시 정책제안 목록 로드
+  useEffect(() => {
+    refreshProposals();
+  }, [refreshProposals]);
 
   // 정책제안 상세 페이지로 이동
   const handleViewProposal = (proposalId: number) => {

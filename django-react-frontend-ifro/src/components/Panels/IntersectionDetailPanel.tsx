@@ -187,7 +187,23 @@ export const IntersectionDetailPanel: React.FC<
     setShowCreateProposal(false);
     // 정책제안 목록 새로고침
     if (proposalRefreshFunction) {
-      proposalRefreshFunction();
+      try {
+        (proposalRefreshFunction as () => void)();
+      } catch (error) {
+        console.error('정책제안 새로고침 중 오류 발생:', error);
+      }
+    } else {
+      console.warn('정책제안 새로고침 함수가 아직 설정되지 않았습니다.');
+      // 잠시 후 다시 시도
+      setTimeout(() => {
+        if (proposalRefreshFunction) {
+          try {
+            (proposalRefreshFunction as () => void)();
+          } catch (error) {
+            console.error('정책제안 새로고침 중 오류 발생:', error);
+          }
+        }
+      }, 100);
     }
   };
 
