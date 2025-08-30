@@ -1,0 +1,89 @@
+# Git 관련
+.git
+.gitignore
+.gitattributes
+
+# Python 관련
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# 개발 환경
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 운영체제 관련
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 프로젝트 특정
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 로그 파일
+*.log
+logs/
+
+# 임시 파일
+*.tmp
+*.temp
+temp/
+tmp/
+
+# 데이터 파일 (볼륨으로 마운트)
+data/
+vector_store/
+models/
+
+# 캐시 파일
+.cache/
+*.cache
+
+# 환경 변수 파일
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 문서 파일
+README.md
+*.md
+docs/
+
+# 테스트 파일
+tests/
+test_*
+*_test.py
+
+# 개발 스크립트
+setup_sbert.py
+analyze_dataset.py
+train_intent_classifier.py
