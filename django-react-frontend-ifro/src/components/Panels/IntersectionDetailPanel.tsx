@@ -172,27 +172,25 @@ export const IntersectionDetailPanel: React.FC<
   };
 
   return (
-    <div
-      className={`h-full p-8 ${
-        isFullscreen ? "pt-12" : "pt-20"
-      } relative overflow-y-auto`}
-    >
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-blue-600">
-          {t("traffic.intersections")} {t("traffic.analysis")}
-        </h2>
-        <div className="flex items-center space-x-2">
+    <div className="h-full w-full max-w-2xl mx-auto p-4 pt-3 bg-white relative overflow-y-auto">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex-1">
+          <h2 className="text-xl font-bold text-blue-600 mb-1">
+            {t("traffic.intersections")} {t("traffic.analysis")}
+          </h2>
+        </div>
+        <div className="flex items-center space-x-1 ml-4">
           {isSupported && (
             <>
               <AIEnhancedPDFButton
                 reportData={actualReportData || reportData}
-                className="bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300"
+                className="bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 text-xs h-8 px-2 rounded-md inline-flex items-center justify-center"
                 buttonText="AI PDF"
                 timePeriod="24h"
               />
               <button
                 onClick={handleDownloadPDF}
-                className="inline-flex items-center justify-center h-9 px-3 bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:pointer-events-none"
+                className="inline-flex items-center justify-center h-8 px-2 bg-blue-600/50 hover:bg-blue-600 text-white transition-all duration-300 rounded-md text-xs font-medium disabled:opacity-50 disabled:pointer-events-none"
                 disabled={status.isGenerating || isLoadingReportData}
               >
                 {isLoadingReportData ? "Loading..." : "PDF"}
@@ -201,44 +199,44 @@ export const IntersectionDetailPanel: React.FC<
           )}
           <button
             onClick={() => onToggleFavorite(intersection.id)}
-            className={`inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+            className={`inline-flex items-center justify-center h-8 w-8 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
               isFavorited
                 ? "bg-primary text-primary-foreground hover:bg-primary/90 text-yellow-400"
                 : "hover:bg-accent hover:text-accent-foreground text-gray-400"
             }`}
             title={isFavorited ? "즐겨찾기 해제" : "즐겨찾기 추가"}
           >
-            <Star size={20} fill={isFavorited ? "currentColor" : "none"} />
+            <Star size={16} fill={isFavorited ? "currentColor" : "none"} />
           </button>
           <button
             onClick={onClose}
             aria-label="Close panel"
-            className="inline-flex items-center justify-center h-10 w-10 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
           >
-            <X size={24} className="text-gray-500" />
+            <X size={20} className="text-gray-500" />
           </button>
         </div>
       </div>
 
-      <div className="space-y-6">
-        <div className="p-6 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
+      <div className="space-y-4">
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h3 className="text-base font-semibold text-gray-800 mb-2">
             {intersection.name}
           </h3>
-          <div className="grid grid-cols-2 gap-4 my-4">
-            <div className="p-4 bg-white rounded-lg shadow-sm">
-              <p className="text-sm text-gray-500">{t("traffic.speed")}</p>
-              <p className="text-xl font-bold text-gray-800">{`${displaySpeed.toFixed(
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3">
+            <div className="p-3 bg-white rounded-lg shadow-sm">
+              <p className="text-xs text-gray-500">{t("traffic.speed")}</p>
+              <p className="text-lg font-bold text-gray-800">{`${displaySpeed.toFixed(
                 1
               )} km/h`}</p>
             </div>
-            <div className="p-4 bg-white rounded-lg shadow-sm">
-              <p className="text-sm text-gray-500">{t("traffic.volume")}</p>
-              <p className="text-xl font-bold text-gray-800">{`${displayVolume} vph`}</p>
+            <div className="p-3 bg-white rounded-lg shadow-sm">
+              <p className="text-xs text-gray-500">{t("traffic.volume")}</p>
+              <p className="text-lg font-bold text-gray-800">{`${displayVolume} vph`}</p>
             </div>
           </div>
 
-          <div className="w-full h-40 bg-white rounded-lg flex items-center justify-center shadow-sm">
+          <div className="w-full h-32 bg-white rounded-lg flex items-center justify-center shadow-sm">
             <MiniChart
               data={chartData}
               dataKey="volume"
@@ -248,11 +246,11 @@ export const IntersectionDetailPanel: React.FC<
           </div>
         </div>
 
-        <div className="p-6 bg-gray-50 rounded-lg">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        <div className="p-4 bg-gray-50 rounded-lg">
+          <h3 className="text-base font-semibold text-gray-800 mb-3">
             {t("incidents.location")}
           </h3>
-          <div className="flex flex-row items-center space-x-6 text-gray-700 text-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-6 text-gray-700 text-sm">
             <span>
               Lat:{" "}
               <span className="font-medium">

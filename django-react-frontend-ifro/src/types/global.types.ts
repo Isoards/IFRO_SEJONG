@@ -221,3 +221,88 @@ export interface AdminStats {
   total_favorites: number;
   total_ai_reports: number;
 }
+
+// 정책제안/문의 관련 타입들
+export type ProposalCategory =
+  | "traffic_signal"
+  | "road_safety"
+  | "traffic_flow"
+  | "infrastructure"
+  | "policy"
+  | "other";
+
+export type ProposalStatus =
+  | "pending"
+  | "under_review"
+  | "in_progress"
+  | "completed"
+  | "rejected";
+
+export type ProposalPriority = "low" | "medium" | "high" | "urgent";
+
+export interface PolicyProposal {
+  id: number;
+  title: string;
+  description: string;
+  category: ProposalCategory;
+  priority: ProposalPriority;
+  status: ProposalStatus;
+  location?: string;
+  intersection_id?: number;
+  intersection_name?: string;
+  coordinates?: Coordinates;
+  submitted_by: number;
+  submitted_by_name: string;
+  submitted_by_email: string;
+  created_at: string;
+  updated_at: string;
+  admin_response?: string;
+  admin_response_date?: string;
+  admin_response_by?: string;
+  attachments?: ProposalAttachment[];
+  tags?: string[];
+  votes_count?: number;
+  views_count?: number;
+}
+
+export interface ProposalAttachment {
+  id: number;
+  file_name: string;
+  file_url: string;
+  file_size: number;
+  uploaded_at: string;
+}
+
+export interface CreateProposalRequest {
+  title: string;
+  description: string;
+  category: ProposalCategory;
+  priority: ProposalPriority;
+  location?: string;
+  intersection_id?: number;
+  coordinates?: Coordinates;
+  tags?: string[];
+}
+
+export interface UpdateProposalStatusRequest {
+  status: ProposalStatus;
+  admin_response?: string;
+}
+
+export interface ProposalListResponse {
+  results: PolicyProposal[];
+  count: number;
+  next?: string;
+  previous?: string;
+}
+
+export interface ProposalFilters {
+  category?: ProposalCategory;
+  status?: ProposalStatus;
+  priority?: ProposalPriority;
+  intersection_id?: number;
+  search?: string;
+  submitted_by?: number;
+  date_from?: string;
+  date_to?: string;
+}
