@@ -328,80 +328,68 @@ const AdminDashboard = () => {
         </div>
 
         {/* 메인 콘텐츠 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 실시간 최다 조회 구간 TOP 10 */}
-          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* 최다 즐겨찾기 등록 구간 */}
+          <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
-                실시간 최다 조회 구간 TOP 10
+                최다 즐겨찾기 등록 구간
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                세종시 시민들이 가장 많이 조회하는 지역
+                시민들이 꾸준히 모니터링하는 지역
               </p>
             </div>
-            <div className="p-6 flex-1 flex flex-col justify-start">
+            <div className="p-6">
               {loading ? (
-                <div className="flex justify-center items-center min-h-[400px]">
+                <div className="flex justify-center items-center h-32">
                   <div className="text-gray-500">데이터 로딩 중...</div>
                 </div>
               ) : error ? (
-                <div className="flex justify-center items-center min-h-[400px]">
+                <div className="flex justify-center items-center h-32">
                   <div className="text-red-500">{error}</div>
                 </div>
               ) : (
-                <div className="space-y-3 flex-1">
-                  {topViewedIntersections.length === 0 ? (
+                <div className="space-y-3">
+                  {(!adminStats?.top_favorite_areas || adminStats?.top_favorite_areas.length === 0) ? (
                     <div className="text-center text-gray-500 py-8">
-                      조회 데이터가 없습니다.
+                      즐겨찾기 데이터가 없습니다. (Length: {adminStats?.top_favorite_areas?.length})
                     </div>
                   ) : (
-                    topViewedIntersections.map((item: TopViewedIntersection) => (
+                    adminStats?.top_favorite_areas.map((item: TopArea) => (
                       <div
                         key={item.rank}
-                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-                        onClick={() => {
-                          // 교차로 상세 페이지로 이동하거나 지도에서 해당 위치로 이동
-                          console.log('Clicked intersection:', item.intersection_name);
-                        }}
+                        className="flex items-center justify-between py-2"
                       >
                         <div className="flex items-center space-x-3">
                           <span
-                            className={`text-sm font-bold w-6 ${item.rank <= 3
-                              ? "text-red-600"
-                              : item.rank <= 5
-                                ? "text-orange-600"
+                            className={`text-sm font-bold w-6 ${item.rank <= 2
+                              ? "text-yellow-600"
+                              : item.rank <= 4
+                                ? "text-blue-600"
                                 : "text-gray-600"
                               }`}
                           >
                             {item.rank}
                           </span>
-                          <div className="flex flex-col">
-                            <span className="text-gray-900 font-medium">
-                              {item.intersection_name}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              즐겨찾기: {item.favorite_count}명
-                            </span>
-                          </div>
+                          <span className="text-gray-900 font-medium">
+                            {item.area}
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <div className="flex flex-col items-end">
-                            <span className="text-sm text-gray-600 font-medium">
-                              {item.view_count.toLocaleString()}회
-                            </span>
-                            <div className="flex items-center space-x-1">
-                              <div
-                                className="w-3 h-3 rounded-full"
-                                style={{
-                                  backgroundColor: `rgba(255, ${Math.floor(255 * (1 - item.intensity))}, ${Math.floor(255 * (1 - item.intensity))}, ${item.intensity})`
-                                }}
-                                title={`인기도: ${Math.round(item.intensity * 100)}%`}
-                              />
-                              <span className="text-xs text-gray-400">
-                                {Math.round(item.intensity * 100)}%
-                              </span>
-                            </div>
-                          </div>
+                          <span className="text-sm text-gray-600">
+                            {(item.favorites ?? 0)}명
+                          </span>
+                          <span
+                            className={`text-xs px-1 ${(item.growth ?? 0) > 0
+                              ? "text-green-600"
+                              : (item.growth ?? 0) < 0
+                                ? "text-red-600"
+                                : "text-gray-600"
+                              }`}
+                          >
+                            {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
+                            {Math.abs(item.growth ?? 0)}
+                          </span>
                         </div>
                       </div>
                     ))
@@ -412,7 +400,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* 트래픽 차트 */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border flex flex-col">
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
                 시민 관심도 추이
@@ -501,7 +489,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* 두 번째 행 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* 관심도 히트맵 */}
           <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
@@ -520,67 +508,79 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* 최다 즐겨찾기 등록 구간 */}
-          <div className="bg-white rounded-lg shadow-sm border">
+          {/* 실시간 최다 조회 구간 TOP 10 */}
+          <div className="bg-white rounded-lg shadow-sm border flex flex-col">
             <div className="p-6 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
-                최다 즐겨찾기 등록 구간
+                실시간 최다 조회 구간 TOP 10
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                시민들이 꾸준히 모니터링하는 지역
+                세종시 시민들이 가장 많이 조회하는 지역
               </p>
             </div>
-            <div className="p-6">
+            <div className="p-6 flex-1 flex flex-col justify-start">
               {loading ? (
-                <div className="flex justify-center items-center h-32">
+                <div className="flex justify-center items-center min-h-[400px]">
                   <div className="text-gray-500">데이터 로딩 중...</div>
                 </div>
               ) : error ? (
-                <div className="flex justify-center items-center h-32">
+                <div className="flex justify-center items-center min-h-[400px]">
                   <div className="text-red-500">{error}</div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {(!adminStats?.top_favorite_areas || adminStats?.top_favorite_areas.length === 0) ? (
+                <div className="space-y-3 flex-1">
+                  {topViewedIntersections.length === 0 ? (
                     <div className="text-center text-gray-500 py-8">
-                      즐겨찾기 데이터가 없습니다. (Length: {adminStats?.top_favorite_areas?.length})
+                      조회 데이터가 없습니다.
                     </div>
                   ) : (
-                    adminStats?.top_favorite_areas.map((item: TopArea) => (
+                    topViewedIntersections.map((item: TopViewedIntersection) => (
                       <div
                         key={item.rank}
-                        className="flex items-center justify-between py-2"
+                        className="flex items-center justify-between py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => {
+                          // 교차로 상세 페이지로 이동하거나 지도에서 해당 위치로 이동
+                          console.log('Clicked intersection:', item.intersection_name);
+                        }}
                       >
                         <div className="flex items-center space-x-3">
                           <span
-                            className={`text-sm font-bold w-6 ${item.rank <= 2
-                              ? "text-yellow-600"
-                              : item.rank <= 4
-                                ? "text-blue-600"
+                            className={`text-sm font-bold w-6 ${item.rank <= 3
+                              ? "text-red-600"
+                              : item.rank <= 5
+                                ? "text-orange-600"
                                 : "text-gray-600"
                               }`}
                           >
                             {item.rank}
                           </span>
-                          <span className="text-gray-900 font-medium">
-                            {item.area}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="text-gray-900 font-medium">
+                              {item.intersection_name}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              즐겨찾기: {item.favorite_count}명
+                            </span>
+                          </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-600">
-                            {(item.favorites ?? 0)}명
-                          </span>
-                          <span
-                            className={`text-xs px-1 ${(item.growth ?? 0) > 0
-                              ? "text-green-600"
-                              : (item.growth ?? 0) < 0
-                                ? "text-red-600"
-                                : "text-gray-600"
-                              }`}
-                          >
-                            {(item.growth ?? 0) > 0 ? "▲" : (item.growth ?? 0) < 0 ? "▼" : "—"}{" "}
-                            {Math.abs(item.growth ?? 0)}
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-sm text-gray-600 font-medium">
+                              {item.view_count.toLocaleString()}회
+                            </span>
+                            <div className="flex items-center space-x-1">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor: `rgba(255, ${Math.floor(255 * (1 - item.intensity))}, ${Math.floor(255 * (1 - item.intensity))}, ${item.intensity})`
+                                }}
+                                title={`인기도: ${Math.round(item.intensity * 100)}%`}
+                              />
+                              <span className="text-xs text-gray-400">
+                                {Math.round(item.intensity * 100)}%
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -589,42 +589,10 @@ const AdminDashboard = () => {
               )}
             </div>
           </div>
-
-          {/* 인기 검색어 클라우드 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                인기 검색어
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                시민들이 자주 검색하는 키워드
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="h-80 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">워드 클라우드 영역</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* 세 번째 행 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 문제 제기 키워드 분석 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                문제 제기 키워드 분석
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">시민 불편사항 분석</p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">키워드 빈도 차트</p>
-              </div>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
           {/* AI 리포트 다발 지역 */}
           <div className="bg-white rounded-lg shadow-sm border">
             <div className="p-6 border-b">
@@ -680,31 +648,6 @@ const AdminDashboard = () => {
                   )}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-
-        {/* 네 번째 행 - 교차로별 즐겨찾기 현황 (비활성화됨 - 성능상 이유) */}
-        <div className="bg-white rounded-lg shadow-sm border">
-          <div className="p-6 border-b">
-            <h3 className="text-lg font-semibold text-gray-900">
-              교차로별 즐겨찾기 현황
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              각 교차로의 조회수와 즐겨찾기 등록 수 현황 (성능상 이유로 비활성화)
-            </p>
-          </div>
-          <div className="p-6">
-            <div className="flex justify-center items-center h-32">
-              <div className="text-center">
-                <div className="text-gray-500 mb-2">📊</div>
-                <div className="text-gray-500">
-                  성능 최적화를 위해 일시적으로 비활성화되었습니다.
-                </div>
-                <div className="text-sm text-gray-400 mt-1">
-                  필요시 개별 교차로 상세 페이지에서 확인 가능합니다.
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -985,41 +928,6 @@ const AdminDashboard = () => {
                 교통 흐름 분석 데이터가 없습니다.
               </div>
             )}
-          </div>
-        </div>
-
-        {/* 일곱 번째 행 - 정책 제안 섹션 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 정책 제안 공감 순위 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                정책 제안 공감 순위
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                시민 지지도가 높은 제안
-              </p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">공감 순위 리스트</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 정책 제안 처리 현황 */}
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold text-gray-900">
-                정책 제안 처리 현황
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">단계별 처리 상태</p>
-            </div>
-            <div className="p-6">
-              <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-                <p className="text-gray-500">퍼널 차트 영역</p>
-              </div>
-            </div>
           </div>
         </div>
 
