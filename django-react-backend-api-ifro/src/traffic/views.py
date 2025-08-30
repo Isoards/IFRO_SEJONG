@@ -1386,6 +1386,122 @@ def get_traffic_flow_summary(request):
         
     except Exception as e:
         raise HttpError(500, f"교통 흐름 요약 통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+# 교통 흐름 즐겨찾기 추가/제거 API
+@router.post("/traffic-flow/favorite", response=dict)
+def add_traffic_flow_favorite(request, start_intersection_id: int, end_intersection_id: int, favorite_name: str = None):
+    """교통 흐름 즐겨찾기 추가"""
+    try:
+        from django.db import connection
+        from django.utils import timezone
+        
+        # 사용자 정보 (임시로 user_id=1 사용, 실제로는 JWT에서 추출)
+        user_id = 1
+        
+        # 이미 존재하는지 확인
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT id FROM traffic_trafficflowanalysisfavorite 
+                WHERE start_intersection_id = %s AND end_intersection_id = %s
+            """, [start_intersection_id, end_intersection_id])
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 기존 데이터 업데이트 (즐겨찾기 수, 접근 횟수, 사용자 수 증가)
+                cursor.execute("""
+                    UPDATE traffic_trafficflowanalysisfavorite 
+                    SET total_favorites = total_favorites + 1,
+                        total_accesses = total_accesses + 1,
+                        unique_users = unique_users + 1,
+                        last_accessed = %s,
+                        popularity_score = (total_favorites + 1) * 2 + (total_accesses + 1),
+                        updated_at = %s
+                    WHERE id = %s
+                """, [timezone.now(), timezone.now(), existing[0]])
+                
+                return {
+                    'success': True,
+                    'message': '교통 흐름 즐겨찾기가 업데이트되었습니다.',
+                    'is_favorite': True,
+                    'flow_id': existing[0]
+                }
+            else:
+                # 새로운 데이터 생성
+                cursor.execute("""
+                    INSERT INTO traffic_trafficflowanalysisfavorite 
+                    (start_intersection_id, end_intersection_id, total_favorites, total_accesses, 
+                     unique_users, last_accessed, popularity_score, created_at, updated_at)
+                    VALUES (%s, %s, 1, 1, 1, %s, 3, %s, %s)
+                """, [
+                    start_intersection_id, end_intersection_id, 
+                    timezone.now(), timezone.now(), timezone.now()
+                ])
+                
+                # 새로 생성된 ID 가져오기
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                new_id = cursor.fetchone()[0]
+                
+                return {
+                    'success': True,
+                    'message': '교통 흐름 즐겨찾기가 추가되었습니다.',
+                    'is_favorite': True,
+                    'flow_id': new_id
+                }
+                
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 즐겨찾기 추가 중 오류가 발생했습니다: {str(e)}")
+
+@router.delete("/traffic-flow/favorite", response=dict)
+def remove_traffic_flow_favorite(request, start_intersection_id: int, end_intersection_id: int):
+    """교통 흐름 즐겨찾기 제거"""
+    try:
+        from django.db import connection
+        from django.utils import timezone
+        
+        with connection.cursor() as cursor:
+            # 기존 데이터 찾기
+            cursor.execute("""
+                SELECT id, total_favorites FROM traffic_trafficflowanalysisfavorite 
+                WHERE start_intersection_id = %s AND end_intersection_id = %s
+            """, [start_intersection_id, end_intersection_id])
+            
+            existing = cursor.fetchone()
+            
+            if existing:
+                flow_id, current_favorites = existing
+                
+                if current_favorites > 1:
+                    # 즐겨찾기 수가 1보다 크면 감소
+                    cursor.execute("""
+                        UPDATE traffic_trafficflowanalysisfavorite 
+                        SET total_favorites = total_favorites - 1,
+                            unique_users = GREATEST(unique_users - 1, 0),
+                            popularity_score = GREATEST((total_favorites - 1) * 2 + total_accesses, 0),
+                            updated_at = %s
+                        WHERE id = %s
+                    """, [timezone.now(), flow_id])
+                else:
+                    # 즐겨찾기 수가 1이면 완전 삭제
+                    cursor.execute("""
+                        DELETE FROM traffic_trafficflowanalysisfavorite 
+                        WHERE id = %s
+                    """, [flow_id])
+                
+                return {
+                    'success': True,
+                    'message': '교통 흐름 즐겨찾기가 제거되었습니다.',
+                    'is_favorite': False
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': '해당 교통 흐름 즐겨찾기를 찾을 수 없습니다.',
+                    'is_favorite': False
+                }
+                
+    except Exception as e:
+        raise HttpError(500, f"교통 흐름 즐겨찾기 제거 중 오류가 발생했습니다: {str(e)}")
 # 관리자 통계 API들
 @router.get("/admin/stats", response=AdminStatsSchema)
 def get_admin_stats(request):
