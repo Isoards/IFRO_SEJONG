@@ -12,6 +12,8 @@ import time
 import pymysql
 import asyncio
 import concurrent.futures
+import re
+from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -66,16 +68,218 @@ class DatabaseSchema:
 
 @dataclass
 class SQLQuery:
-    """생성된 SQL 쿼리"""
+    """SQL 쿼리 정보"""
     query: str
-    query_type: str  # SELECT, INSERT, UPDATE, DELETE
+    query_type: str
     confidence_score: float
     execution_time: float
     model_name: str
     validation_passed: bool = False
     error_message: Optional[str] = None
-    metadata: Optional[Dict] = None
-    is_valid: bool = False # 추가된 필드
+    is_valid: bool = False
+    metadata: Optional[Dict[str, Any]] = None
+
+class TimeExpressionProcessor:
+    """상대적 시간 표현 처리기"""
+    
+    def __init__(self):
+        """시간 표현 처리기 초기화"""
+        # 한국어 시간 표현 패턴
+        self.time_patterns = {
+            # 일 단위
+            '오늘': self._get_today,
+            '어제': self._get_yesterday,
+            '내일': self._get_tomorrow,
+            '그저께': self._get_day_before_yesterday,
+            '모레': self._get_day_after_tomorrow,
+            
+            # 주 단위
+            '이번주': self._get_this_week,
+            '지난주': self._get_last_week,
+            '다음주': self._get_next_week,
+            '금주': self._get_this_week,
+            '전주': self._get_last_week,
+            '차주': self._get_next_week,
+            '1주전': self._get_last_week,
+            '2주전': self._get_two_weeks_ago,
+            
+            # 월 단위
+            '이번달': self._get_this_month,
+            '지난달': self._get_last_month,
+            '다음달': self._get_next_month,
+            '금월': self._get_this_month,
+            '전월': self._get_last_month,
+            '차월': self._get_next_month,
+            '1개월전': self._get_last_month,
+            '2개월전': self._get_two_months_ago,
+            
+            # 년 단위
+            '올해': self._get_this_year,
+            '작년': self._get_last_year,
+            '내년': self._get_next_year,
+            '금년': self._get_this_year,
+            '전년': self._get_last_year,
+            '차년': self._get_next_year,
+            '1년전': self._get_last_year,
+            '2년전': self._get_two_years_ago,
+        }
+        
+        logger.info("시간 표현 처리기 초기화 완료")
+    
+    def process_time_expressions(self, question: str) -> str:
+        """
+        질문에서 상대적 시간 표현을 실제 날짜로 변환
+        
+        Args:
+            question: 원본 질문
+            
+        Returns:
+            시간 표현이 변환된 질문
+        """
+        processed_question = question
+        
+        # 각 시간 패턴에 대해 처리
+        for pattern, processor_func in self.time_patterns.items():
+            if pattern in question:
+                try:
+                    start_date, end_date = processor_func()
+                    # 질문에서 패턴을 실제 날짜로 교체
+                    processed_question = processed_question.replace(
+                        pattern, 
+                        f"{start_date}부터 {end_date}까지"
+                    )
+                    logger.info(f"시간 표현 변환: '{pattern}' → '{start_date}부터 {end_date}까지'")
+                except Exception as e:
+                    logger.warning(f"시간 표현 처리 실패: {pattern}, 오류: {e}")
+        
+        return processed_question
+    
+    def _get_today(self) -> Tuple[str, str]:
+        """오늘 날짜 반환"""
+        today = datetime.now()
+        return today.strftime('%Y-%m-%d'), today.strftime('%Y-%m-%d')
+    
+    def _get_yesterday(self) -> Tuple[str, str]:
+        """어제 날짜 반환"""
+        yesterday = datetime.now() - timedelta(days=1)
+        return yesterday.strftime('%Y-%m-%d'), yesterday.strftime('%Y-%m-%d')
+    
+    def _get_tomorrow(self) -> Tuple[str, str]:
+        """내일 날짜 반환"""
+        tomorrow = datetime.now() + timedelta(days=1)
+        return tomorrow.strftime('%Y-%m-%d'), tomorrow.strftime('%Y-%m-%d')
+    
+    def _get_day_before_yesterday(self) -> Tuple[str, str]:
+        """그저께 날짜 반환"""
+        day_before = datetime.now() - timedelta(days=2)
+        return day_before.strftime('%Y-%m-%d'), day_before.strftime('%Y-%m-%d')
+    
+    def _get_day_after_tomorrow(self) -> Tuple[str, str]:
+        """모레 날짜 반환"""
+        day_after = datetime.now() + timedelta(days=2)
+        return day_after.strftime('%Y-%m-%d'), day_after.strftime('%Y-%m-%d')
+    
+    def _get_this_week(self) -> Tuple[str, str]:
+        """이번주 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_week = today - timedelta(days=today.weekday())
+        end_of_week = start_of_week + timedelta(days=6)
+        return start_of_week.strftime('%Y-%m-%d'), end_of_week.strftime('%Y-%m-%d')
+    
+    def _get_last_week(self) -> Tuple[str, str]:
+        """지난주 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_last_week = today - timedelta(days=today.weekday() + 7)
+        end_of_last_week = start_of_last_week + timedelta(days=6)
+        return start_of_last_week.strftime('%Y-%m-%d'), end_of_last_week.strftime('%Y-%m-%d')
+    
+    def _get_next_week(self) -> Tuple[str, str]:
+        """다음주 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_next_week = today + timedelta(days=7 - today.weekday())
+        end_of_next_week = start_of_next_week + timedelta(days=6)
+        return start_of_next_week.strftime('%Y-%m-%d'), end_of_next_week.strftime('%Y-%m-%d')
+    
+    def _get_two_weeks_ago(self) -> Tuple[str, str]:
+        """2주전 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_two_weeks_ago = today - timedelta(days=today.weekday() + 14)
+        end_of_two_weeks_ago = start_of_two_weeks_ago + timedelta(days=6)
+        return start_of_two_weeks_ago.strftime('%Y-%m-%d'), end_of_two_weeks_ago.strftime('%Y-%m-%d')
+    
+    def _get_this_month(self) -> Tuple[str, str]:
+        """이번달 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_month = today.replace(day=1)
+        if today.month == 12:
+            end_of_month = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            end_of_month = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+        return start_of_month.strftime('%Y-%m-%d'), end_of_month.strftime('%Y-%m-%d')
+    
+    def _get_last_month(self) -> Tuple[str, str]:
+        """지난달 날짜 범위 반환"""
+        today = datetime.now()
+        if today.month == 1:
+            start_of_last_month = today.replace(year=today.year - 1, month=12, day=1)
+        else:
+            start_of_last_month = today.replace(month=today.month - 1, day=1)
+        end_of_last_month = today.replace(day=1) - timedelta(days=1)
+        return start_of_last_month.strftime('%Y-%m-%d'), end_of_last_month.strftime('%Y-%m-%d')
+    
+    def _get_next_month(self) -> Tuple[str, str]:
+        """다음달 날짜 범위 반환"""
+        today = datetime.now()
+        if today.month == 12:
+            start_of_next_month = today.replace(year=today.year + 1, month=1, day=1)
+        else:
+            start_of_next_month = today.replace(month=today.month + 1, day=1)
+        if start_of_next_month.month == 12:
+            end_of_next_month = start_of_next_month.replace(year=start_of_next_month.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            end_of_next_month = start_of_next_month.replace(month=start_of_next_month.month + 1, day=1) - timedelta(days=1)
+        return start_of_next_month.strftime('%Y-%m-%d'), end_of_next_month.strftime('%Y-%m-%d')
+    
+    def _get_two_months_ago(self) -> Tuple[str, str]:
+        """2개월전 날짜 범위 반환"""
+        today = datetime.now()
+        if today.month <= 2:
+            start_of_two_months_ago = today.replace(year=today.year - 1, month=today.month + 10, day=1)
+        else:
+            start_of_two_months_ago = today.replace(month=today.month - 2, day=1)
+        if start_of_two_months_ago.month == 12:
+            end_of_two_months_ago = start_of_two_months_ago.replace(year=start_of_two_months_ago.year + 1, month=1, day=1) - timedelta(days=1)
+        else:
+            end_of_two_months_ago = start_of_two_months_ago.replace(month=start_of_two_months_ago.month + 1, day=1) - timedelta(days=1)
+        return start_of_two_months_ago.strftime('%Y-%m-%d'), end_of_two_months_ago.strftime('%Y-%m-%d')
+    
+    def _get_this_year(self) -> Tuple[str, str]:
+        """올해 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_year = today.replace(month=1, day=1)
+        end_of_year = today.replace(month=12, day=31)
+        return start_of_year.strftime('%Y-%m-%d'), end_of_year.strftime('%Y-%m-%d')
+    
+    def _get_last_year(self) -> Tuple[str, str]:
+        """작년 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_last_year = today.replace(year=today.year - 1, month=1, day=1)
+        end_of_last_year = today.replace(year=today.year - 1, month=12, day=31)
+        return start_of_last_year.strftime('%Y-%m-%d'), end_of_last_year.strftime('%Y-%m-%d')
+    
+    def _get_next_year(self) -> Tuple[str, str]:
+        """내년 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_next_year = today.replace(year=today.year + 1, month=1, day=1)
+        end_of_next_year = today.replace(year=today.year + 1, month=12, day=31)
+        return start_of_next_year.strftime('%Y-%m-%d'), end_of_next_year.strftime('%Y-%m-%d')
+    
+    def _get_two_years_ago(self) -> Tuple[str, str]:
+        """2년전 날짜 범위 반환"""
+        today = datetime.now()
+        start_of_two_years_ago = today.replace(year=today.year - 2, month=1, day=1)
+        end_of_two_years_ago = today.replace(year=today.year - 2, month=12, day=31)
+        return start_of_two_years_ago.strftime('%Y-%m-%d'), end_of_two_years_ago.strftime('%Y-%m-%d')
 
 class SQLGenerator:
     """
@@ -86,6 +290,7 @@ class SQLGenerator:
     2. SQL 구문 검증
     3. Few-shot 예시를 통한 정확도 향상
     4. 오류 발생 시 자동 수정
+    5. 상대적 시간 표현 처리
     """
     
     def __init__(self, 
@@ -105,19 +310,15 @@ class SQLGenerator:
         self.cache_enabled = cache_enabled and CACHE_AVAILABLE
         self.query_cache = get_sql_cache() if self.cache_enabled else None
         
+        # 시간 표현 처리기 초기화
+        self.time_processor = TimeExpressionProcessor()
+        
         # SQL 검증을 위한 설정
         self.max_retries = 3
         self.validation_enabled = True
         
-        # 규칙 기반 SQL 요소 추출기 초기화
-        self.element_extractor = None
-        if ELEMENT_EXTRACTOR_AVAILABLE:
-            try:
-                self.element_extractor = SQLElementExtractor()
-                logger.info("✅ 규칙 기반 SQL 요소 추출기 초기화 완료")
-            except Exception as e:
-                logger.warning(f"SQL 요소 추출기 초기화 실패: {e}")
-                self.element_extractor = None
+        # Ollama 모델 자동 다운로드
+        self._ensure_model_available()
         
         # 데이터베이스 연결 설정
         self.db_config = {
@@ -131,6 +332,47 @@ class SQLGenerator:
         
         logger.info(f"SQL Generator 초기화: {model_name}")
         logger.info(f"데이터베이스 연결 설정: {self.db_config['host']}:{self.db_config['port']}/{self.db_config['database']}")
+    
+    def _ensure_model_available(self):
+        """SQLCoder 모델이 사용 가능한지 확인하고 필요시 다운로드"""
+        try:
+            import requests
+            
+            # Ollama API 엔드포인트 (로컬 환경에서는 localhost 사용)
+            ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            
+            # 모델이 이미 설치되어 있는지 확인
+            try:
+                response = requests.get(f"{ollama_host}/api/tags", timeout=10)
+                if response.status_code == 200:
+                    models = response.json().get("models", [])
+                    for model in models:
+                        if model.get("name") == self.model_name:
+                            logger.info(f"SQLCoder 모델 {self.model_name}이 이미 설치되어 있습니다.")
+                            return
+            except Exception as e:
+                logger.warning(f"모델 목록 확인 실패: {e}")
+            
+            # 모델 다운로드
+            logger.info(f"SQLCoder 모델 {self.model_name} 다운로드 중...")
+            download_data = {"name": self.model_name}
+            
+            response = requests.post(
+                f"{ollama_host}/api/pull",
+                json=download_data,
+                timeout=600,  # 10분 타임아웃
+                stream=True
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"SQLCoder 모델 {self.model_name} 다운로드 완료!")
+            else:
+                logger.error(f"SQLCoder 모델 다운로드 실패: {response.status_code} - {response.text}")
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"SQLCoder 모델 다운로드 시간 초과: {self.model_name}")
+        except Exception as e:
+            logger.error(f"SQLCoder 모델 다운로드 중 오류: {e}")
     
     def generate_sql_parallel(self,
                              questions: List[str],
@@ -198,54 +440,26 @@ class SQLGenerator:
         """
         start_time = time.time()
         
+        # 1. 상대적 시간 표현 처리
+        time_process_start = time.time()
+        processed_question = self.time_processor.process_time_expressions(question)
+        time_process_time = time.time() - time_process_start
+        
+        if processed_question != question:
+            logger.info(f"시간 표현 처리: '{question}' → '{processed_question}' ({time_process_time:.3f}초)")
+        
         # 캐시 확인 (빠른 SQL 응답)
         if self.cache_enabled and self.query_cache:
             schema_key = f"{schema.table_name}_{len(schema.columns)}"
-            cached_sql = self.query_cache.get(question, schema_key)
+            cached_sql = self.query_cache.get(processed_question, schema_key)
             if cached_sql:
                 logger.info(f"캐시된 SQL 쿼리 사용: {time.time() - start_time:.3f}초")
                 return cached_sql
         
-        # 규칙 기반 빠른 SQL 생성 (우선 시도)
-        if self.element_extractor:
-            try:
-                elements = self.element_extractor.extract_elements(question)
-                if elements.confidence > 0.7:  # 신뢰도가 높은 경우 규칙 기반 사용
-                    fast_sql = self.element_extractor.generate_sql(elements)
-                    
-                    # 빠른 검증
-                    validation_result = self._validate_sql(fast_sql)
-                    if validation_result['valid']:
-                        execution_time = time.time() - start_time
-                        
-                        sql_query = SQLQuery(
-                            query=fast_sql,
-                            query_type=elements.query_type.value,
-                            confidence_score=elements.confidence,
-                            execution_time=execution_time,
-                            model_name=f"{self.model_name}_rule_based",
-                            validation_passed=True,
-                            is_valid=True,
-                            metadata={"method": "rule_based", "elements": elements}
-                        )
-                        
-                        # 캐시에 저장
-                        if self.cache_enabled and self.query_cache:
-                            self.query_cache.put(question, sql_query, schema_key)
-                        
-                        logger.info(f"🚀 규칙 기반 빠른 SQL 생성: {execution_time:.3f}초, 신뢰도: {elements.confidence:.2f}")
-                        return sql_query
-                    else:
-                        logger.debug(f"규칙 기반 SQL 검증 실패, LLM으로 폴백: {validation_result['error']}")
-                else:
-                    logger.debug(f"규칙 기반 신뢰도 낮음 ({elements.confidence:.2f}), LLM으로 폴백")
-            except Exception as e:
-                logger.warning(f"규칙 기반 SQL 생성 실패, LLM으로 폴백: {e}")
-        
-        # LLM 기반 SQL 생성 (폴백)
+        # LLM 기반 SQL 생성
         
         # 프롬프트 생성
-        prompt = self._create_sql_prompt(question, schema, few_shot_examples)
+        prompt = self._create_sql_prompt(processed_question, schema, few_shot_examples)
         
         # SQL 생성
         raw_sql = self._call_sql_model(prompt)
@@ -286,7 +500,7 @@ class SQLGenerator:
         # 캐시에 저장 (빠른 후속 SQL 생성을 위해)
         if self.cache_enabled and self.query_cache and sql_query.is_valid:
             schema_key = f"{schema.table_name}_{len(schema.columns)}"
-            self.query_cache.put(question, sql_query, schema_key)
+            self.query_cache.put(processed_question, sql_query, schema_key)
         
         logger.info(f"SQL 생성 완료: {sql_query.query_type}, 유효성: {sql_query.is_valid}")
         return sql_query
@@ -502,22 +716,55 @@ class SQLGenerator:
             for i, sample in enumerate(schema.sample_data[:3]):  # 최대 3개 샘플
                 schema_info += f"  {i+1}: {sample}\n"
         
+        # 기본 Few-shot 예시 (MySQL 호환)
+        default_examples = [
+            {
+                "question": "조치원읍 교차로 목록을 보여주세요",
+                "sql": "SELECT id, name, latitude, longitude FROM traffic_intersection WHERE name LIKE '%조치원읍%'"
+            },
+            {
+                "question": "어제 통행량이 가장 많은 교차로는?",
+                "sql": "SELECT i.name, SUM(t.volume) as total_volume FROM traffic_trafficvolume t JOIN traffic_intersection i ON t.intersection_id = i.id WHERE DATE(t.datetime) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) GROUP BY t.intersection_id ORDER BY total_volume DESC LIMIT 1"
+            },
+            {
+                "question": "이번주 평균 통행량을 계산해주세요",
+                "sql": "SELECT AVG(t.volume) as avg_volume FROM traffic_trafficvolume t WHERE DATE(t.datetime) BETWEEN DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY) AND DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 6 DAY)"
+            },
+            {
+                "question": "지난주 조치원읍의 통행량을 요약해줘",
+                "sql": "SELECT i.name, SUM(t.volume) as total_volume, AVG(t.volume) as avg_volume FROM traffic_trafficvolume t JOIN traffic_intersection i ON t.intersection_id = i.id WHERE i.name LIKE '%조치원읍%' AND DATE(t.datetime) BETWEEN '2025-08-18' AND '2025-08-24' GROUP BY t.intersection_id ORDER BY total_volume DESC"
+            }
+        ]
+        
         # Few-shot 예시 추가
-        examples_text = ""
+        examples_text = "\n예시:\n"
+        for example in default_examples:
+            examples_text += f"질문: {example['question']}\n"
+            examples_text += f"SQL: {example['sql']}\n\n"
+        
+        # 사용자 제공 예시 추가
         if few_shot_examples:
-            examples_text = "\n예시:\n"
             for example in few_shot_examples:
                 examples_text += f"질문: {example['question']}\n"
                 examples_text += f"SQL: {example['sql']}\n\n"
         
         # 최종 프롬프트 생성
-        prompt = f"""당신은 SQL 전문가입니다. 주어진 스키마를 기반으로 자연어 질문을 SQL로 변환하세요.
+        prompt = f"""당신은 MySQL 데이터베이스 전문가입니다. 주어진 스키마를 기반으로 자연어 질문을 MySQL 호환 SQL로 변환하세요.
+
+중요한 제약사항:
+- MySQL 8.0 문법만 사용하세요
+- PostgreSQL 전용 함수 사용 금지 (예: date_trunc, to_date 등)
+- MySQL 함수 사용: DATE(), YEAR(), MONTH(), DAY(), HOUR(), MINUTE()
+- 날짜 비교: DATE(datetime_column) = 'YYYY-MM-DD' 형식 사용
+- 문자열 함수: CONCAT(), SUBSTRING(), UPPER(), LOWER() 등
+- 컬럼명을 정확히 사용하세요 (latitude, longitude, datetime, volume 등)
+- 테이블 JOIN 시 올바른 컬럼명 사용: traffic_intersection.id = traffic_trafficvolume.intersection_id
 
 {schema_info}
 
 {examples_text}질문: {question}
 
-SQL 쿼리만 출력하세요 (설명 없이):"""
+MySQL 호환 SQL 쿼리만 출력하세요 (설명 없이):"""
         
         return prompt
     
@@ -533,7 +780,13 @@ SQL 쿼리만 출력하세요 (설명 없이):"""
         for col in schema.columns:
             schema_info += f"  - {col['name']} ({col['type']})\n"
         
-        prompt = f"""SQL 쿼리에 오류가 있습니다. 수정해주세요.
+        prompt = f"""SQL 쿼리에 오류가 있습니다. MySQL 호환으로 수정해주세요.
+
+중요한 제약사항:
+- MySQL 8.0 문법만 사용하세요
+- PostgreSQL 전용 함수 사용 금지 (예: date_trunc, to_date 등)
+- MySQL 함수 사용: DATE(), YEAR(), MONTH(), DAY(), HOUR(), MINUTE()
+- 날짜 비교: DATE(datetime_column) = 'YYYY-MM-DD' 형식 사용
 
 스키마:
 {schema_info}
@@ -544,7 +797,7 @@ SQL 쿼리만 출력하세요 (설명 없이):"""
 
 오류: {error_message}
 
-수정된 SQL 쿼리만 출력하세요:"""
+수정된 MySQL 호환 SQL 쿼리만 출력하세요:"""
         
         return prompt
     
@@ -591,7 +844,7 @@ SQL 쿼리만 출력하세요 (설명 없이):"""
         return sql
     
     def _validate_sql(self, sql: str) -> Dict[str, Any]:
-        """SQL 구문 검증"""
+        """SQL 구문 검증 및 MySQL 호환성 검사"""
         if not self.validation_enabled:
             return {'valid': True}
         
@@ -607,6 +860,19 @@ SQL 쿼리만 출력하세요 (설명 없이):"""
             tokens = [token.value.upper() for token in parsed[0].tokens if token.is_keyword]
             if not tokens:
                 return {'valid': False, 'error': 'SQL 키워드를 찾을 수 없음'}
+            
+            # MySQL 호환성 검사
+            mysql_incompatible_functions = [
+                'date_trunc', 'to_date', 'to_timestamp', 'extract', 'date_part'
+            ]
+            
+            sql_lower = sql.lower()
+            for func in mysql_incompatible_functions:
+                if func in sql_lower:
+                    return {
+                        'valid': False, 
+                        'error': f'MySQL에서 지원하지 않는 함수: {func}. MySQL 함수를 사용하세요.'
+                    }
             
             return {'valid': True}
             
