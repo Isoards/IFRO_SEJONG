@@ -38,10 +38,9 @@ EXPOSE 8008
 
 # 환경 변수 설정
 ENV PYTHONPATH=/app
-ENV MODEL_TYPE=ollama
-ENV MODEL_NAME=qwen2:1.5b
+ENV MODEL_TYPE=local
+ENV MODEL_NAME=monologg/koelectra-small-v3-discriminator
 ENV EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
-ENV OLLAMA_HOST=http://ollama:11434
 
 # 엔트리포인트 스크립트 실행
 ENTRYPOINT ["./docker-entrypoint.sh"]

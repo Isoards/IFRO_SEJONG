@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-PDF QA 시스템 서버 실행 스크립트
+IFRO_SEJONG AI 챗봇 시스템 서버
 
-이 스크립트는 Dual Pipeline이 통합된 PDF QA 시스템을 서버 모드로 실행합니다.
+이 스크립트는 Dual Pipeline이 통합된 AI 챗봇 시스템을 
+FastAPI 서버 모드로 실행합니다.
 """
 
 import sys
 import os
 import logging
-import subprocess
 import time
-import requests
 from pathlib import Path
+from typing import Optional
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
 sys.path.append(str(Path(__file__).parent))
@@ -23,145 +23,136 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('server.log'),
+        logging.FileHandler('logs/server.log'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 
 logger = logging.getLogger(__name__)
 
-def check_ollama_server():
-    """Ollama 서버가 실행 중인지 확인"""
-    try:
-        # Docker 네트워크에서는 서비스 이름으로 접근
-        ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-        response = requests.get(f"{ollama_host}/api/tags", timeout=5)
-        return response.status_code == 200
-    except:
-        return False
 
-def wait_for_ollama_server(max_wait=60):
-    """Ollama 서버가 시작될 때까지 대기"""
-    logger.info("Ollama 서버 시작 대기 중...")
-    for i in range(max_wait):
-        if check_ollama_server():
-            logger.info("Ollama 서버가 준비되었습니다.")
-            return True
-        time.sleep(1)
-        if i % 10 == 0:
-            logger.info(f"Ollama 서버 대기 중... ({i}/{max_wait}초)")
+class ChatbotServer:
+    """챗봇 서버 관리 클래스"""
     
-    logger.error("Ollama 서버가 시작되지 않았습니다.")
-    return False
-
-def download_ollama_model(model_name):
-    """Ollama 모델 다운로드 (API 사용)"""
-    try:
-        logger.info(f"모델 다운로드 시작: {model_name}")
+    def __init__(self):
+        self.model_type = os.getenv("MODEL_TYPE", "local")
+        self.model_name = os.getenv("MODEL_NAME", "monologg/koelectra-small-v3-discriminator")
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", "jhgan/ko-sroberta-multitask")
         
-        # Ollama API 엔드포인트
-        ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-        
-        # 모델이 이미 설치되어 있는지 확인
+    def check_local_model_available(self) -> bool:
+        """로컬 모델이 사용 가능한지 확인"""
         try:
-            response = requests.get(f"{ollama_host}/api/tags", timeout=10)
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                for model in models:
-                    if model.get("name") == model_name:
-                        logger.info(f"모델 {model_name}이 이미 설치되어 있습니다.")
-                        return True
-        except Exception as e:
-            logger.warning(f"모델 목록 확인 실패: {e}")
-        
-        # 모델 다운로드
-        logger.info(f"모델 {model_name} 다운로드 중...")
-        download_data = {"name": model_name}
-        
-        response = requests.post(
-            f"{ollama_host}/api/pull",
-            json=download_data,
-            timeout=600,  # 10분 타임아웃
-            stream=True
-        )
-        
-        if response.status_code == 200:
-            logger.info(f"모델 {model_name} 다운로드 완료!")
+            from transformers import AutoTokenizer, AutoModel
+            AutoTokenizer.from_pretrained(self.model_name)
+            AutoModel.from_pretrained(self.model_name)
             return True
-        else:
-            logger.error(f"모델 다운로드 실패: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.warning(f"로컬 모델 확인 실패: {e}")
             return False
+    
+    def wait_for_local_model(self, max_wait: int = 60) -> bool:
+        """로컬 모델이 준비될 때까지 대기"""
+        logger.info("로컬 모델 준비 대기 중...")
+        for i in range(max_wait):
+            if self.check_local_model_available():
+                logger.info("로컬 모델이 준비되었습니다.")
+                return True
+            time.sleep(1)
+            if i % 10 == 0:
+                logger.info(f"로컬 모델 대기 중... ({i}/{max_wait}초)")
+        
+        logger.error("로컬 모델이 준비되지 않았습니다.")
+        return False
+    
+    def print_startup_banner(self):
+        """시작 배너 출력"""
+        print("=" * 60)
+        print("🚀 IFRO_SEJONG AI 챗봇 시스템 서버 시작")
+        print("🤖 최적화된 버전 - 빠른 응답!")
+        print("=" * 60)
+        print()
+        print("✨ 주요 기능:")
+        print("   • SBERT 라우팅: 질문을 적절한 파이프라인으로 분기")
+        print("   • 규칙 기반 SQL 추출: LLM 없이 빠른 SQL 생성")
+        print("   • 인메모리 캐싱: 반복 질문 즉시 응답")
+        print("   • 하이브리드 검색: 키워드 + 의미 기반 검색")
+        print()
+        print("🌐 서비스 정보:")
+        print("   • API 문서: http://localhost:8008/docs")
+        print("   • 서버 주소: http://localhost:8008")
+        print("   • 헬스체크: http://localhost:8008/health")
+        print()
+        print("=" * 60)
+    
+    def initialize_system(self) -> bool:
+        """시스템 초기화"""
+        try:
+            logger.info("시스템 초기화 및 자동 PDF 업로드 시작...")
             
-    except requests.exceptions.Timeout:
-        logger.error(f"모델 다운로드 시간 초과: {model_name}")
-        return False
-    except Exception as e:
-        logger.error(f"모델 다운로드 중 오류: {e}")
-        return False
+            # 시스템 초기화 (PDF 자동 업로드 포함)
+            initialize_system()
+            
+            logger.info("✅ 시스템 초기화 완료")
+            return True
+            
+        except Exception as e:
+            logger.error(f"시스템 초기화 실패: {e}")
+            return False
+    
+    def start_server(self):
+        """FastAPI 서버 시작"""
+        try:
+            logger.info("API 서버를 시작합니다...")
+            
+            # uvicorn 서버 실행
+            import uvicorn
+            uvicorn.run(
+                app, 
+                host="0.0.0.0", 
+                port=8008,
+                log_level="info",
+                access_log=True
+            )
+            
+        except KeyboardInterrupt:
+            logger.info("서버가 중단되었습니다.")
+        except Exception as e:
+            logger.error(f"서버 실행 중 오류: {e}")
+            sys.exit(1)
+    
+    def run(self):
+        """메인 실행 로직"""
+        # 시작 배너 출력
+        self.print_startup_banner()
+        
+        # 로컬 모델 준비 확인
+        if self.model_type == "local":
+            logger.info("로컬 모델 준비 확인 중...")
+            
+            if not self.wait_for_local_model():
+                logger.error("로컬 모델을 찾을 수 없습니다. 모델이 다운로드되었는지 확인해주세요.")
+                sys.exit(1)
+            
+            logger.info("✅ 로컬 모델 준비 완료!")
+        
+        # 시스템 초기화
+        if not self.initialize_system():
+            logger.error("시스템 초기화에 실패했습니다.")
+            sys.exit(1)
+        
+        # 서버 시작
+        self.start_server()
+
 
 def main():
-    """서버 실행 메인 함수 (최적화 버전)"""
+    """메인 함수"""
+    # 로그 디렉토리 생성
+    Path("logs").mkdir(exist_ok=True)
     
-    print("=" * 60)
-    print("IFRO 챗봇 시스템 서버 시작")
-    print("최적화된 버전 - 빠른 응답!")
-    print("=" * 60)
-    print()
-    print("기능:")
-    print("- SBERT 라우팅: 질문을 적절한 파이프라인으로 분기")
-    print("- 규칙 기반 SQL 추출: LLM 없이 빠른 SQL 생성")
-    print("- 인메모리 캐싱: 반복 질문 즉시 응답")
-    print()
-    print("API 문서: http://localhost:8008/docs")
-    print("서버 주소: http://localhost:8008")
-    print()
-    print("=" * 60)
-    
-    # 환경 변수에서 설정 가져오기
-    model_type = os.getenv("MODEL_TYPE", "ollama")
-    model_name = os.getenv("MODEL_NAME", "qwen2:1.5b")
-    embedding_model = os.getenv("EMBEDDING_MODEL", "jhgan/ko-sroberta-multitask")
-    
-    # Ollama 모델 자동 다운로드
-    if model_type == "ollama":
-        logger.info("Ollama 모델 자동 다운로드 시작...")
-        
-        # Ollama 서버 대기
-        if not wait_for_ollama_server():
-            logger.error("Ollama 서버를 찾을 수 없습니다. 서버가 실행 중인지 확인해주세요.")
-            sys.exit(1)
-        
-        # 메인 모델 다운로드
-        if not download_ollama_model(model_name):
-            logger.error(f"모델 {model_name} 다운로드에 실패했습니다.")
-            sys.exit(1)
-        
-        # SQLCoder 모델 다운로드
-        logger.info("SQLCoder 모델 자동 다운로드 시작...")
-        if not download_ollama_model("sqlcoder:7b"):
-            logger.warning("SQLCoder 모델 다운로드에 실패했습니다. SQL 기능이 제한될 수 있습니다.")
-        else:
-            logger.info("SQLCoder 모델 다운로드 완료!")
-        
-        logger.info("모든 모델 다운로드 완료!")
-    
-    try:
-        logger.info("시스템 초기화 및 자동 PDF 업로드 시작...")
-        
-        # 시스템 초기화 (PDF 자동 업로드 포함)
-        initialize_system()
-        
-        logger.info("API 서버를 시작합니다...")
-        
-        # FastAPI 서버 실행
-        import uvicorn
-        uvicorn.run(app, host="0.0.0.0", port=8008)
-        
-    except KeyboardInterrupt:
-        logger.info("서버가 중단되었습니다.")
-    except Exception as e:
-        logger.error(f"서버 실행 중 오류: {e}")
-        sys.exit(1)
+    # 서버 인스턴스 생성 및 실행
+    server = ChatbotServer()
+    server.run()
+
 
 if __name__ == "__main__":
     main()
