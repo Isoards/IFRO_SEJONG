@@ -1,244 +1,298 @@
-# IFRO 챗봇 시스템 (최적화 버전)
+# 🤖 IFRO_SEJONG AI 챗봇 시스템
 
-🚀 **빠른 응답을 위한 최적화된 IFRO 교통 시스템 챗봇**
+## 📋 프로젝트 개요
 
-## 📊 최적화 성과
+IFRO_SEJONG AI 챗봇 시스템은 교통 데이터 분석과 PDF 문서 처리를 위한 지능형 대화형 AI 시스템입니다. Dual Pipeline 아키텍처를 통해 문서 검색과 SQL 질의를 통합한 하이브리드 답변을 생성합니다.
 
-### ⚡ 성능 향상
-- **응답 속도**: 평균 0.5초 → 0.1초 (80% 향상)
-- **메모리 사용량**: 2GB → 800MB (60% 감소)
-- **파일 크기**: 1200줄 → 210줄 (82% 감소)
-- **의존성**: 15개 → 8개 (47% 감소)
-
-### 🎯 핵심 기능
-- **SBERT 라우팅**: 질문을 적절한 파이프라인으로 분기
-- **규칙 기반 SQL 추출**: LLM 없이 빠른 SQL 생성
-- **인메모리 캐싱**: 반복 질문 즉시 응답
-- **병렬 처리**: SQL 생성 시 멀티스레딩
-
-## 🏗️ 아키텍처
+## 🏗️ 시스템 아키텍처
 
 ```
-사용자 질문
-    ↓
-📍 SBERT 라우팅 (0.001초)
-    ↓
-🚀 규칙 기반 처리
-    ├── 인사말: 템플릿 응답 (0.001초)
-    ├── SQL 쿼리: 규칙 기반 생성 (0.003초)
-    └── PDF 검색: LLM 답변 생성 (0.1초)
-    ↓
-💾 인메모리 캐싱
+ollama-LLM-ChatBot/
+├── 🚀 run_server.py              # 메인 서버 실행 파일
+├── 🐳 Dockerfile                 # Docker 컨테이너 설정
+├── 🔧 docker-entrypoint.sh       # Docker 초기화 스크립트
+├── 📦 requirements.txt            # Python 의존성
+├── 📚 README.md                  # 프로젝트 문서
+├── 🔒 .dockerignore              # Docker 빌드 제외 파일
+├── 🧠 core/                      # 핵심 처리 모듈
+│   ├── __init__.py
+│   ├── cache/                    # 캐싱 시스템
+│   ├── database/                 # 데이터베이스 처리
+│   ├── document/                 # 문서 처리
+│   ├── llm/                      # LLM 통합
+│   ├── movement/                 # 데이터 이동 처리
+│   └── query/                    # 질의 처리
+├── 🌐 api/                       # API 엔드포인트
+│   ├── __init__.py
+│   ├── endpoints.py              # FastAPI 엔드포인트
+│   ├── django_client.py          # Django 연동 클라이언트
+│   └── typescript_client.ts      # TypeScript 클라이언트
+├── 📊 data/                      # 데이터 및 벡터 저장소
+│   ├── pdfs/                     # PDF 문서 저장소
+│   ├── conversation_history.db    # 대화 기록 데이터베이스
+│   └── intent_training_dataset.json # 의도 분석 데이터셋
+├── 🗄️ vector_store/              # 벡터 저장소
+│   ├── chroma/                   # ChromaDB 벡터 저장소
+│   └── faiss/                    # FAISS 벡터 저장소
+├── 🤖 models/                    # AI 모델 저장소
+├── 📝 logs/                      # 시스템 로그
+└── 🧪 setup_sbert.py             # SBERT 모델 설정
 ```
 
 ## 🚀 빠른 시작
 
-### 1. 환경 설정
+### 1. Docker를 통한 실행 (권장)
 
-#### 환경 변수 설정
 ```bash
-# 로컬 환경에서 실행할 경우
-export OLLAMA_HOST=http://localhost:11434
+# 전체 시스템과 함께 실행
+cd ../
+docker-compose up -d chatbot
 
-# Docker 환경에서 실행할 경우
-export OLLAMA_HOST=http://ollama:11434
-
-# 또는 .env 파일 생성
-echo "OLLAMA_HOST=http://localhost:11434" > .env
+# 챗봇만 독립 실행
+docker build -t ifro-chatbot .
+docker run -p 8008:8008 ifro-chatbot
 ```
 
-#### 의존성 설치
+### 2. 로컬 개발 환경
+
 ```bash
 # 의존성 설치
 pip install -r requirements.txt
 
-# Ollama 모델 다운로드 (자동으로 다운로드되지만 수동으로도 가능)
-ollama pull qwen2:1.5b
-ollama pull sqlcoder:7b
-```
+# SBERT 모델 설정
+python setup_sbert.py
 
-### 2. 서버 실행
-```bash
+# 서버 실행
 python run_server.py
 ```
 
-### 3. API 테스트
-```bash
-curl -X POST "http://localhost:8008/ask" \
-  -H "Content-Type: application/json" \
-  -d '{"question": "강남구 교차로가 몇 개인가요?"}'
-```
+### 3. 서비스 접속
 
-## 📁 프로젝트 구조
+- **API 서버**: http://localhost:8008
+- **API 문서**: http://localhost:8008/docs
+- **헬스체크**: http://localhost:8008/health
 
-```
-ollama-LLM-ChatBot/
-├── core/                          # 핵심 모듈
-│   ├── answer_generator.py        # 답변 생성기 (최적화)
-│   ├── question_analyzer.py       # 질문 분석기 (최적화)
-│   ├── sql_generator.py          # SQL 생성기
-│   ├── sql_element_extractor.py  # 규칙 기반 SQL 추출
-│   ├── query_router.py           # SBERT 라우터
-│   ├── fast_cache.py             # 인메모리 캐시
-│   ├── vector_store.py           # 벡터 저장소
-│   └── pdf_processor.py          # PDF 처리기
-├── api/
-│   └── endpoints.py              # FastAPI 엔드포인트 (최적화)
-├── utils/
-│   ├── chatbot_logger.py         # 로깅 시스템
-│   ├── file_manager.py           # 파일 관리
-│   └── performance_monitor.py    # 성능 모니터링
-├── data/                         # 데이터 저장소
-├── logs/                         # 로그 파일
-└── requirements.txt              # 의존성 (최적화)
-```
+## 🏛️ 핵심 기능
 
-## 🔧 주요 모듈
+### 📄 PDF 문서 처리
+- **다양한 형식 지원**: PyPDF2, PyMuPDF, pdfplumber 통합
+- **자동 텍스트 추출**: 구조화된 텍스트 및 메타데이터 추출
+- **벡터 임베딩**: Sentence Transformers 기반 의미 분석
 
-### 1. Query Router (`query_router.py`)
-- **SBERT 기반 라우팅**: 질문을 적절한 파이프라인으로 분기
-- **3가지 경로**: PDF_SEARCH, SQL_QUERY, GREETING
-- **폴백 지원**: SBERT 실패 시 규칙 기반 라우팅
+### 🔍 지능형 검색
+- **하이브리드 검색**: 키워드 + 의미 기반 검색
+- **벡터 저장소**: ChromaDB와 FAISS 통합
+- **실시간 인덱싱**: 문서 업로드 시 자동 벡터화
 
-### 2. SQL Element Extractor (`sql_element_extractor.py`)
-- **규칙 기반 추출**: LLM 없이 빠른 SQL 생성
-- **NER 방식**: 한국어 패턴 매칭으로 엔티티 추출
-- **슬롯 채우기**: 테이블, 컬럼, 조건 자동 식별
+### 💬 대화형 인터페이스
+- **컨텍스트 유지**: 이전 대화 기반 연속성
+- **의도 분석**: 질문 유형 자동 분류
+- **개인화**: 사용자별 대화 기록 관리
 
-### 3. Fast Cache (`fast_cache.py`)
-- **인메모리 캐싱**: LRU + TTL 기반
-- **3가지 캐시**: 질문, SQL, 벡터 검색
-- **자동 정리**: 만료된 항목 자동 제거
+### 🗄️ SQL 데이터 통합
+- **자동 SQL 생성**: 자연어를 SQL로 변환
+- **스키마 인식**: 데이터베이스 구조 자동 파악
+- **실시간 실행**: 생성된 SQL 즉시 실행
 
-### 4. Answer Generator (`answer_generator.py`)
-- **최적화된 LLM**: qwen2:1.5b 사용
+## 🔧 API 엔드포인트
 
-### 5. SQL Generator (`sql_generator.py`)
-- **SQLCoder 모델**: sqlcoder:7b 사용
-- **자동 다운로드**: 서버 시작 시 모델 자동 다운로드
-- **상대적 시간 처리**: "어제", "지난주" 등의 표현 자동 변환
-- **스키마 기반 SQL 생성**: 데이터베이스 구조 기반 정확한 SQL 생성
-- **빠른 생성**: 짧은 답변, 낮은 temperature
-- **멀티스레딩**: 4개 스레드, GPU 가속
-
-## 📈 성능 최적화
-
-### 1. 모델 최적화
-- **LLM**: mistral:latest → qwen2:1.5b (더 빠름)
-- **생성 설정**: max_length=128, temperature=0.3
-- **멀티스레딩**: num_thread=4, num_gpu=1
-
-### 2. 캐싱 전략
-- **질문 캐시**: 30분 TTL, 500개 항목
-- **SQL 캐시**: 1시간 TTL, 200개 항목
-- **벡터 캐시**: 2시간 TTL, 100개 항목
-
-### 3. 라우팅 최적화
-- **SBERT**: 라우팅만 담당 (경량화)
-- **규칙 기반**: 폴백으로 빠른 의사결정
-- **신뢰도 임계값**: 0.7 이상 시 규칙 기반 사용
-
-## 🔌 API 엔드포인트
-
-### 핵심 엔드포인트
-- `POST /ask` - 질문 답변 생성
-- `POST /upload-pdf` - PDF 업로드
-- `GET /status` - 시스템 상태
+### 📋 기본 엔드포인트
+- `GET /` - 서버 상태 확인
+- `GET /docs` - Swagger UI API 문서
 - `GET /health` - 헬스 체크
 
-### 관리 엔드포인트
-- `GET /cache/stats` - 캐시 통계
-- `POST /cache/clear` - 캐시 초기화
-- `GET /router/stats` - 라우터 통계
-- `POST /router/test` - 라우팅 테스트
+### 📄 PDF 관리
+- `POST /upload-pdf` - PDF 파일 업로드
+- `GET /pdfs` - 등록된 PDF 목록
+- `DELETE /pdfs/{pdf_id}` - PDF 삭제
 
-## 🐳 Docker 실행
+### 💬 질의응답
+- `POST /ask` - 일반 질문
+- `POST /ask-with-context` - 컨텍스트 기반 질문
+- `GET /conversation-history` - 대화 기록
+
+### 🗄️ 데이터베이스
+- `POST /sql-query` - SQL 질의 실행
+- `GET /database-schema` - 데이터베이스 스키마
+- `POST /analyze-data` - 데이터 분석 요청
+
+## ⚙️ 환경 변수
 
 ```bash
-# 전체 시스템 실행
-docker-compose up -d
+# 모델 설정
+MODEL_TYPE=local                    # local/ollama/huggingface
+MODEL_NAME=koelectra-small-v3      # 사용할 모델명
+EMBEDDING_MODEL=ko-sroberta        # 임베딩 모델
 
-# 개별 서비스 실행
-docker-compose up chatbot
+# 데이터베이스 설정
+MYSQL_DATABASE=traffic
+MYSQL_USER=root
+MYSQL_PASSWORD=1234
+MYSQL_HOST=db
+MYSQL_PORT=3306
+
+# 시스템 설정
+PYTHONPATH=/app
 ```
 
-## 📊 모니터링
+## 🧠 AI 모델
 
-### 성능 지표
-- **응답 시간**: 평균 0.1초
-- **캐시 히트율**: 70% 이상
-- **메모리 사용량**: 800MB 이하
-- **CPU 사용률**: 20% 이하
+### 지원하는 모델 타입
+
+1. **로컬 모델 (권장)**
+   - **KoElectra**: 한국어 텍스트 분류 및 분석
+   - **Ko-SRoBERTa**: 한국어 의미 임베딩
+   - **장점**: 빠른 응답, 오프라인 작동, 데이터 보안
+
+2. **Ollama 모델**
+   - **qwen2:1.5b**: 범용 질의응답
+   - **sqlcoder:7b**: SQL 생성 특화
+   - **장점**: 높은 품질, 다양한 모델 지원
+
+3. **Hugging Face 모델**
+   - **장점**: 최신 모델, 커스터마이징 가능
+   - **단점**: 높은 리소스 요구사항
+
+## 📊 성능 최적화
+
+### 응답 시간
+- **캐시된 질문**: 0.1-0.5초
+- **일반 질문**: 1-3초
+- **복잡한 분석**: 5-10초
+
+### 메모리 사용량
+- **기본 시스템**: 2-3GB RAM
+- **모델 로딩**: 1-2GB RAM
+- **벡터 저장소**: 0.5-1GB RAM
+
+### 스토리지 요구사항
+- **시스템**: 2-3GB
+- **모델**: 3-5GB
+- **데이터**: 사용량에 따라 증가
+
+## 🛠️ 개발 가이드
+
+### 모듈 구조
+
+#### Core 모듈
+- **`cache/`**: 인메모리 및 영구 캐싱
+- **`database/`**: MySQL 연결 및 쿼리 실행
+- **`document/`**: PDF 처리 및 텍스트 분석
+- **`llm/`**: AI 모델 통합 및 관리
+- **`query/`**: 질의 처리 및 라우팅
+
+#### API 모듈
+- **`endpoints.py`**: FastAPI 엔드포인트 정의
+- **`django_client.py`**: Django 백엔드 연동
+- **`typescript_client.ts`**: 프론트엔드 연동
+
+### 확장 방법
+
+1. **새로운 모델 추가**
+   ```python
+   # core/llm/에 새 모델 클래스 생성
+   class NewModel(LLMInterface):
+       def generate_response(self, prompt: str) -> str:
+           # 구현
+           pass
+   ```
+
+2. **새로운 검색 방법 추가**
+   ```python
+   # core/query/에 새 검색 클래스 생성
+   class NewSearch(SearchInterface):
+       def search(self, query: str) -> List[Document]:
+           # 구현
+           pass
+   ```
+
+## 🐛 문제 해결
+
+### 일반적인 문제들
+
+1. **모델 로딩 실패**
+   ```bash
+   # 모델 다운로드 확인
+   python setup_sbert.py
+   
+   # 캐시 정리
+   rm -rf ~/.cache/huggingface/
+   ```
+
+2. **메모리 부족**
+   ```bash
+   # Docker 메모리 제한 확인
+   docker stats chatbot
+   
+   # 시스템 메모리 확인
+   free -h
+   ```
+
+3. **벡터 저장소 오류**
+   ```bash
+   # ChromaDB 재설정
+   rm -rf vector_store/chroma/
+   python run_server.py
+   ```
 
 ### 로그 확인
+
 ```bash
 # 실시간 로그
 docker-compose logs -f chatbot
 
-# 성능 로그
-tail -f logs/performance.log
+# 특정 시간 로그
+docker-compose logs --since="2024-01-01T00:00:00" chatbot
+
+# 로그 파일 직접 확인
+tail -f logs/chatbot_detailed.log
 ```
 
-## 🔧 설정 옵션
+## 📈 모니터링
 
-### 환경 변수
+### 헬스체크
 ```bash
-MODEL_NAME=qwen2:1.5b          # LLM 모델
-EMBEDDING_MODEL=jhgan/ko-sroberta-multitask  # 임베딩 모델
-OLLAMA_HOST=http://ollama:11434  # Ollama 서버
-CACHE_ENABLED=true              # 캐시 활성화
+# 서비스 상태 확인
+curl http://localhost:8008/health
+
+# 상세 상태 확인
+curl http://localhost:8008/system-status
 ```
 
-### 성능 튜닝
-```python
-# answer_generator.py
-GenerationConfig(
-    max_length=128,        # 짧은 답변
-    temperature=0.3,       # 빠른 생성
-    top_p=0.8,            # 범위 축소
-    top_k=20              # 빠른 추론
-)
-```
+### 성능 메트릭
+- **응답 시간**: 평균, 95th percentile
+- **처리량**: 초당 요청 수
+- **오류율**: 실패한 요청 비율
+- **리소스 사용량**: CPU, 메모리, 디스크
 
-## 🚨 문제 해결
+## 🔒 보안 고려사항
 
-### 일반적인 문제
-1. **모델 로드 실패**: `ollama pull qwen2:1.5b`
-2. **메모리 부족**: 캐시 크기 조정
-3. **응답 지연**: 캐시 히트율 확인
+### 데이터 보안
+- **로컬 처리**: 민감한 데이터는 로컬에서만 처리
+- **암호화**: 전송 및 저장 시 데이터 암호화
+- **접근 제어**: API 키 기반 인증
 
-### 디버깅
-```bash
-# 상세 로그 활성화
-export LOG_LEVEL=DEBUG
-
-# 성능 모니터링
-python -m utils.performance_monitor
-```
-
-## 📝 변경 사항
-
-### v2.0.0 (최적화 버전)
-- ✅ 파일 크기 82% 감소
-- ✅ 응답 속도 80% 향상
-- ✅ 메모리 사용량 60% 감소
-- ✅ 의존성 47% 감소
-- ✅ SBERT 라우팅 추가
-- ✅ 규칙 기반 SQL 추출 추가
-- ✅ 인메모리 캐싱 추가
+### 모델 보안
+- **신뢰할 수 있는 모델**: 검증된 오픈소스 모델만 사용
+- **정기 업데이트**: 보안 패치 및 모델 업데이트
+- **취약점 스캔**: 정기적인 보안 검사
 
 ## 🤝 기여하기
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-## 📄 라이선스
+## 📞 지원
 
-MIT License - 자유롭게 사용하세요!
+- **GitHub Issues**: 버그 리포트 및 기능 요청
+- **문서**: `/docs` 폴더의 상세 문서
+- **로그**: `logs/` 폴더의 시스템 로그
 
 ---
 
-**IFRO 챗봇 시스템** - 빠르고 정확한 교통 정보 제공 🚗💨
+**개발팀**: IFRO_SEJONG Team  
+**최종 업데이트**: 2024년 12월  
+**버전**: 2.0.0

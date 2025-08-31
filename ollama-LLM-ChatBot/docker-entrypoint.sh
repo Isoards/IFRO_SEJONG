@@ -10,8 +10,8 @@ echo "🚀 IFRO 챗봇 서버 시작 중..."
 
 # 환경 변수 설정
 export PYTHONPATH=/app
-export MODEL_TYPE=${MODEL_TYPE:-ollama}
-export MODEL_NAME=${MODEL_NAME:-qwen2:1.5b}
+export MODEL_TYPE=${MODEL_TYPE:-local}
+export MODEL_NAME=${MODEL_NAME:-monologg/koelectra-small-v3-discriminator}
 export EMBEDDING_MODEL=${EMBEDDING_MODEL:-jhgan/ko-sroberta-multitask}
 
 # 로그 디렉토리 생성
@@ -81,101 +81,55 @@ if [ $? -ne 0 ]; then
     echo "⚠️ 핵심 모듈 초기화 실패, 계속 진행합니다..."
 fi
 
-# 4단계: Ollama 서버 확인
-echo "🔍 4단계: Ollama 서버 확인 중..."
+# 4단계: 로컬 모델 다운로드
+echo "📥 4단계: 로컬 모델 다운로드 중..."
 python -c "
 import sys
 import os
-import time
-import requests
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-def check_ollama_server():
+def download_local_model(model_name):
     try:
-        ollama_host = os.getenv('OLLAMA_HOST', 'http://ollama:11434')
-        response = requests.get(f'{ollama_host}/api/tags', timeout=5)
-        return response.status_code == 200
-    except:
-        return False
-
-def wait_for_ollama_server(max_wait=120):
-    print('Ollama 서버 시작 대기 중...')
-    for i in range(max_wait):
-        if check_ollama_server():
-            print('✅ Ollama 서버가 준비되었습니다.')
-            return True
-        time.sleep(2)
-        if i % 20 == 0:
-            print(f'Ollama 서버 대기 중... ({i}/{max_wait}초)')
-    
-    print('⚠️ Ollama 서버 시간 초과, 계속 진행합니다...')
-    return False
-
-if not wait_for_ollama_server():
-    print('⚠️ Ollama 서버 연결 실패, 계속 진행합니다...')
-"
-
-if [ $? -ne 0 ]; then
-    echo "⚠️ Ollama 서버 연결 실패, 계속 진행합니다..."
-fi
-
-# 5단계: Ollama 모델 다운로드
-echo "📥 5단계: Ollama 모델 다운로드 중..."
-python -c "
-import sys
-import os
-import requests
-import time
-
-def download_ollama_model(model_name):
-    try:
-        print(f'모델 다운로드 시작: {model_name}')
-        ollama_host = os.getenv('OLLAMA_HOST', 'http://ollama:11434')
+        print(f'로컬 모델 다운로드 시작: {model_name}')
         
-        # 모델이 이미 존재하는지 확인
-        try:
-            response = requests.get(f'{ollama_host}/api/tags', timeout=10)
-            if response.status_code == 200:
-                models = response.json().get('models', [])
-                for model in models:
-                    if model.get('name') == model_name:
-                        print(f'✅ 모델 {model_name}이 이미 존재합니다.')
-                        return True
-        except Exception as e:
-            print(f'⚠️ 모델 목록 확인 실패: {e}')
-        
-        # 모델 다운로드
-        print(f'모델 {model_name} 다운로드 중...')
-        download_data = {'name': model_name}
-        
-        response = requests.post(
-            f'{ollama_host}/api/pull',
-            json=download_data,
-            timeout=600,
-            stream=True
+        # 토크나이저 다운로드
+        print('토크나이저 다운로드 중...')
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            cache_dir='/app/models'
         )
+        print('✅ 토크나이저 다운로드 완료')
         
-        if response.status_code == 200:
-            print(f'✅ 모델 {model_name} 다운로드 완료!')
-            return True
-        else:
-            print(f'❌ 모델 다운로드 실패: {response.status_code}')
-            return False
-            
+        # KoELECTRA 모델 다운로드
+        print('KoELECTRA 모델 다운로드 중...')
+        from transformers import AutoModel
+        model = AutoModel.from_pretrained(
+            model_name,
+            torch_dtype='auto',
+            cache_dir='/app/models',
+            low_cpu_mem_usage=True
+        )
+        print('✅ KoELECTRA 모델 다운로드 완료')
+        
+        return True
+        
     except Exception as e:
         print(f'❌ 모델 다운로드 오류: {e}')
         return False
 
-model_name = os.getenv('MODEL_NAME', 'qwen2:1.5b')
-if not download_ollama_model(model_name):
+model_name = os.getenv('MODEL_NAME', 'monologg/koelectra-small-v3-discriminator')
+if not download_local_model(model_name):
     print(f'⚠️ 모델 {model_name} 다운로드 실패, 계속 진행합니다...')
+else:
+    print(f'✅ 모델 {model_name} 다운로드 완료!')
 "
 
 if [ $? -ne 0 ]; then
-    echo "⚠️ Ollama 모델 다운로드 실패, 계속 진행합니다..."
+    echo "⚠️ 로컬 모델 다운로드 실패, 계속 진행합니다..."
 fi
 
-# 6단계: 서버 시작
-echo "🚀 6단계: 챗봇 서버 시작 중..."
+# 5단계: 서버 시작
+echo "🚀 5단계: 챗봇 서버 시작 중..."
 echo "============================================================"
 echo "🎉 모든 초기화 단계가 완료되었습니다!"
 echo "챗봇 서버를 시작합니다..."

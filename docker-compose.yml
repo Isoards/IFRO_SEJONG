@@ -96,30 +96,6 @@ services:
     stdin_open: true
     tty: true
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
-      - ./ollama-healthcheck.sh:/ollama-healthcheck.sh
-    restart: unless-stopped
-    environment:
-      # 한글 지원 설정
-      - LANG=ko_KR.UTF-8
-      - LC_ALL=ko_KR.UTF-8
-      - LC_CTYPE=ko_KR.UTF-8
-    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
-    healthcheck:
-      test: ["CMD", "/bin/bash", "/ollama-healthcheck.sh"]
-      interval: 60s
-      timeout: 60s
-      retries: 30
-      start_period: 1200s
-
-
   chatbot:
     build:
       context: ./ollama-LLM-ChatBot
@@ -134,10 +110,9 @@ services:
       - sbert_cache:/root/.cache/torch/sentence_transformers
     environment:
       - PYTHONPATH=/app
-      - MODEL_TYPE=ollama
-      - MODEL_NAME=qwen2:1.5b
+      - MODEL_TYPE=local
+      - MODEL_NAME=monologg/koelectra-small-v3-discriminator
       - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
-      - OLLAMA_HOST=http://ollama:11434
       - MYSQL_DATABASE=traffic
       - MYSQL_USER=root
       - MYSQL_PASSWORD=1234
@@ -148,8 +123,6 @@ services:
       - LC_ALL=ko_KR.UTF-8
       - LC_CTYPE=ko_KR.UTF-8
     depends_on:
-      ollama:
-        condition: service_healthy
       db:
         condition: service_healthy
     restart: unless-stopped
@@ -167,7 +140,6 @@ volumes:
   chatbot_logs:
   chatbot_models:
   sbert_cache:
-  ollama_data:
 
 networks:
   default:
