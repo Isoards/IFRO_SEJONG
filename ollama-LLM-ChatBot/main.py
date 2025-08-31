@@ -25,10 +25,14 @@ from core.answer_generator import AnswerGenerator, ModelType, GenerationConfig
 from core.sql_generator import SQLGenerator, DatabaseSchema
 from core.query_router import QueryRouter
 from core.sql_element_extractor import SQLElementExtractor
+from core.time_based_query_handler import TimeBasedQueryHandler
+from core.data_analysis_generator import DataAnalysisGenerator
+from core.real_database_executor import RealDatabaseExecutor
 from api.endpoints import app
 import uvicorn
 from utils.file_manager import PDFFileManager, setup_pdf_storage
 from utils.chatbot_logger import chatbot_logger, QuestionType
+from core.fast_cache import initialize_instant_answers
 
 # 로깅 설정
 logging.basicConfig(
@@ -139,9 +143,10 @@ class PDFQASystem:
             # )
             # logger.info("✓ 평가기 초기화 완료")
             
-            # 6. SQL 생성기 초기화
+            # 6. SQL 생성기 초기화 (SQLCoder 모델 자동 다운로드 포함)
+            logger.info("SQL 생성기 초기화 중... (SQLCoder 모델 자동 다운로드)")
             self.sql_generator = SQLGenerator()
-            logger.info("✓ SQL 생성기 초기화 완료")
+            logger.info("✓ SQL 생성기 초기화 완료 (SQLCoder 모델 준비됨)")
             
             # 7. Dual Pipeline 처리기 초기화 (임시 비활성화)
             # 샘플 데이터베이스 스키마 설정
@@ -174,7 +179,7 @@ class PDFQASystem:
             self.file_manager = setup_pdf_storage()
             logger.info("✓ 파일 매니저 초기화 완료")
 
-            # 9. 키워드 향상기 초기화 (임시 비활성화)
+            # 11. 키워드 향상기 초기화 (임시 비활성화)
             # self.keyword_enhancer = KeywordEnhancer(domain="traffic")
             # logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
             
@@ -808,4 +813,17 @@ def main():
         system.cleanup()
 
 if __name__ == "__main__":
-    main()
+    # 즉시 답변 초기화
+    logger.info("🚀 즉시 답변 캐시 초기화 중...")
+    initialize_instant_answers()
+    logger.info("✅ 즉시 답변 캐시 초기화 완료")
+    
+    # 서버 시작
+    logger.info("🚀 IFRO 챗봇 서버 시작 중...")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

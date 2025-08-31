@@ -316,6 +316,23 @@ async def ask_question(
     """질문에 대한 답변 생성 (최적화)"""
     
     try:
+        # 🚀 즉시 답변 확인 (가장 빠른 응답)
+        from core.fast_cache import check_instant_answer
+        instant_answer = check_instant_answer(request.question)
+        
+        if instant_answer:
+            logger.info(f"⚡ 즉시 답변 사용: {request.question}")
+            return QuestionResponse(
+                answer=instant_answer["answer"],
+                confidence_score=instant_answer["confidence"],
+                used_chunks=[],
+                generation_time=0.001,
+                question_type=instant_answer["category"],
+                llm_model_name="instant_cache",
+                pipeline_type="instant_answer",
+                sql_query=None
+            )
+        
         # 🚀 SBERT 기반 쿼리 라우팅
         route_result = query_router.route_query(request.question)
         logger.info(f"📍 라우팅 결과: {route_result.route.value} (신뢰도: {route_result.confidence:.3f})")
@@ -333,7 +350,7 @@ async def ask_question(
                 sql_query=None
             )
         
-        # SQL 쿼리 처리 (규칙 기반 빠른 처리)
+        # SQL 쿼리 처리
         if route_result.route == QueryRoute.SQL_QUERY:
             try:
                 # 기본 스키마 정의

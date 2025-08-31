@@ -1,7 +1,7 @@
 """
 SQL 요소 추출기 - 규칙 기반/NER/슬롯 채우기 방식
 
-SBERT는 라우팅용으로만 사용하고, SQL 요소 추출은 빠르고 정확한 규칙 기반 방식 사용
+실제 데이터베이스 스키마를 기반으로 SQL 요소를 추출하는 규칙 기반 방식
 """
 
 import re
@@ -63,7 +63,7 @@ class SQLElementExtractor:
     
     기능:
     1. 한국어 질문에서 SQL 요소 추출
-    2. 테이블/컬럼 매핑
+    2. 실제 테이블/컬럼 매핑
     3. 조건절 추출
     4. 집계 함수 식별
     """
@@ -71,99 +71,120 @@ class SQLElementExtractor:
     def __init__(self):
         """SQL 요소 추출기 초기화"""
         
-        # 교통 도메인 스키마 정의
+        # 실제 데이터베이스 스키마 정의
         self.schema = {
             "traffic_intersection": {
                 "columns": {
-                    "id": ["ID", "식별자", "번호"],
-                    "name": ["이름", "명칭", "교차로명"],
-                    "location": ["위치", "장소", "지역", "곳"],
-                    "traffic_volume": ["교통량", "통행량", "차량수", "대수"],
-                    "accident_count": ["사고수", "사고건수", "사고", "접촉사고"],
-                    "signal_type": ["신호", "신호등", "신호기"],
-                    "coordinates": ["좌표", "위경도"],
-                    "district": ["구", "지역", "행정구역"],
-                    "road_type": ["도로", "도로유형", "차로"]
+                    "id": ["ID", "식별자", "번호", "교차로ID"],
+                    "name": ["이름", "명칭", "교차로명", "교차로이름", "위치명"],
+                    "latitude": ["위도", "위도좌표", "lat"],
+                    "longitude": ["경도", "경도좌표", "lng", "lon"],
+                    "created_at": ["생성일", "생성시간", "등록일"],
+                    "updated_at": ["수정일", "수정시간", "업데이트일"]
                 },
-                "aliases": ["교차로", "교차점", "신호등", "신호", "사거리", "삼거리"]
+                "aliases": ["교차로", "교차점", "신호등", "신호", "사거리", "삼거리", "intersection"]
+            },
+            "traffic_trafficvolume": {
+                "columns": {
+                    "id": ["ID", "식별자", "번호", "교통량ID"],
+                    "intersection_id": ["교차로ID", "교차로번호", "intersection_id"],
+                    "datetime": ["시간", "일시", "날짜", "시간대", "timestamp"],
+                    "direction": ["방향", "진행방향", "dir"],
+                    "volume": ["교통량", "통행량", "차량수", "대수", "traffic_volume"],
+                    "is_simulated": ["시뮬레이션", "가상", "실제여부", "simulated"],
+                    "created_at": ["생성일", "생성시간", "등록일"],
+                    "updated_at": ["수정일", "수정시간", "업데이트일"]
+                },
+                "aliases": ["교통량", "통행량", "차량수", "traffic", "volume"]
             },
             "traffic_incident": {
                 "columns": {
-                    "id": ["ID", "식별자", "번호"],
-                    "incident_type": ["사고유형", "사고종류", "유형"],
-                    "location": ["위치", "장소", "발생지"],
-                    "timestamp": ["시간", "일시", "발생시간", "날짜"],
-                    "severity": ["심각도", "등급", "피해"],
-                    "description": ["설명", "내용", "상세"]
+                    "incident_id": ["사고ID", "사건ID", "incident_id"],
+                    "incident_type": ["사고유형", "사고종류", "유형", "사건유형"],
+                    "intersection_id": ["교차로ID", "교차로번호", "intersection_id"],
+                    "district": ["구", "지역", "행정구역", "district"],
+                    "intersection_name": ["교차로명", "교차로이름", "intersection_name"],
+                    "status": ["상태", "처리상태", "진행상태"],
+                    "registered_at": ["등록일", "신고일", "발생일", "registered_at"],
+                    "created_at": ["생성일", "생성시간"],
+                    "updated_at": ["수정일", "수정시간"]
                 },
-                "aliases": ["사고", "접촉사고", "교통사고", "사건"]
-            },
-            "traffic_volume": {
-                "columns": {
-                    "id": ["ID", "식별자"],
-                    "intersection_id": ["교차로ID", "교차로"],
-                    "volume": ["교통량", "통행량", "차량수"],
-                    "timestamp": ["시간", "일시", "측정시간"],
-                    "direction": ["방향", "진행방향"],
-                    "vehicle_type": ["차종", "차량유형"]
-                },
-                "aliases": ["교통량", "통행량", "차량수", "볼륨"]
+                "aliases": ["사고", "접촉사고", "교통사고", "사건", "incident", "accident"]
             }
         }
         
-        # 쿼리 유형 패턴
-        self.query_patterns = {
-            QueryType.COUNT: [
-                r'몇\s*개', r'몇\s*곳', r'몇\s*건', r'개수', r'수량', r'건수',
-                r'갯수', r'총\s*\w+', r'전체\s*\w+'
-            ],
-            QueryType.SUM: [
-                r'총\s*교통량', r'전체\s*교통량', r'합계', r'총합', r'누적'
-            ],
-            QueryType.AVG: [
-                r'평균', r'평균적', r'보통', r'일반적'
-            ],
-            QueryType.MAX: [
-                r'최대', r'최고', r'가장\s*많', r'제일\s*많', r'최다'
-            ],
-            QueryType.MIN: [
-                r'최소', r'최저', r'가장\s*적', r'제일\s*적', r'최소한'
-            ],
-            QueryType.SELECT: [
-                r'보여', r'알려', r'찾아', r'검색', r'조회', r'확인'
-            ]
+        # 지역 키워드 매핑
+        self.region_keywords = {
+            "세종": ["세종", "세종특별자치시", "sejong"],
+            "조치원": ["조치원", "조치원읍", "jochiwon"],
+            "부강": ["부강", "부강면", "bugang"],
+            "금남": ["금남", "금남면", "geumnam"],
+            "전의": ["전의", "전의면", "jeonui"],
+            "전동": ["전동", "전동면", "jeondong"],
+            "연동": ["연동", "연동면", "yeondong"],
+            "연서": ["연서", "연서면", "yeonseo"],
+            "장군": ["장군", "장군면", "janggun"],
+            "소정": ["소정", "소정면", "sojeong"],
+            "한솔": ["한솔", "한솔동", "hansol"],
+            "새롬": ["새롬", "새롬동", "saerom"],
+            "도담": ["도담", "도담동", "dodam"],
+            "아름": ["아름", "아름동", "areum"],
+            "종촌": ["종촌", "종촌동", "jongchon"],
+            "고운": ["고운", "고운동", "goun"],
+            "보람": ["보람", "보람동", "boram"],
+            "대평": ["대평", "대평동", "daepyeong"],
+            "소담": ["소담", "소담동", "sodam"],
+            "반곡": ["반곡", "반곡동", "bangok"],
+            "다정": ["다정", "다정동", "dajeong"],
+            "어진": ["어진", "어진동", "eojin"],
+            "나성": ["나성", "나성동", "naseong"],
+            "새뜸": ["새뜸", "새뜸동", "saettum"],
+            "다솜": ["다솜", "다솜동", "dasom"],
+            "한별": ["한별", "한별동", "hanbyeol"],
+            "가람": ["가람", "가람동", "garam"],
+            "도움": ["도움", "도움동", "doum"],
+            "비전": ["비전", "비전동", "bijeon"],
+            "새움": ["새움", "새움동", "saeeum"]
         }
         
-        # 조건 패턴
-        self.condition_patterns = {
-            ComparisonOperator.GREATER: [
-                r'(\w+)이?\s*(\d+)\s*이상', r'(\w+)이?\s*(\d+)\s*초과',
-                r'(\d+)\s*이상의?\s*(\w+)', r'(\d+)\s*초과의?\s*(\w+)'
-            ],
-            ComparisonOperator.LESS: [
-                r'(\w+)이?\s*(\d+)\s*이하', r'(\w+)이?\s*(\d+)\s*미만',
-                r'(\d+)\s*이하의?\s*(\w+)', r'(\d+)\s*미만의?\s*(\w+)'
-            ],
-            ComparisonOperator.EQUAL: [
-                r'(\w+)이?\s*(\d+)', r'(\w+)이?\s*["\']([^"\']+)["\']',
-                r'(\w+)이?\s*(\w+)', r'(\w+)\s*=\s*(\w+)'
-            ],
-            ComparisonOperator.LIKE: [
-                r'(\w+)이?\s*포함', r'(\w+)이?\s*들어간', r'(\w+)이?\s*있는'
-            ]
+        # 시간 관련 키워드
+        self.time_keywords = {
+            "오늘": "CURDATE()",
+            "어제": "DATE_SUB(CURDATE(), INTERVAL 1 DAY)",
+            "내일": "DATE_ADD(CURDATE(), INTERVAL 1 DAY)",
+            "이번주": "YEARWEEK(CURDATE())",
+            "지난주": "YEARWEEK(DATE_SUB(CURDATE(), INTERVAL 1 WEEK))",
+            "이번달": "MONTH(CURDATE())",
+            "지난달": "MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))",
+            "올해": "YEAR(CURDATE())",
+            "작년": "YEAR(DATE_SUB(CURDATE(), INTERVAL 1 YEAR))"
         }
         
-        # 시간 패턴
-        self.time_patterns = [
-            r'(\d{4})년', r'(\d{1,2})월', r'(\d{1,2})일',
-            r'오늘', r'어제', r'이번\s*주', r'지난\s*주', r'이번\s*달', r'지난\s*달'
-        ]
+        # 집계 함수 키워드
+        self.aggregate_keywords = {
+            "개수": "COUNT",
+            "수": "COUNT", 
+            "건수": "COUNT",
+            "총합": "SUM",
+            "합계": "SUM",
+            "평균": "AVG",
+            "최대": "MAX",
+            "최소": "MIN",
+            "최고": "MAX",
+            "최저": "MIN"
+        }
         
-        # 장소 패턴
-        self.location_patterns = [
-            r'(\w+구)', r'(\w+동)', r'(\w+로)', r'(\w+대로)', r'(\w+역)',
-            r'강남', r'서초', r'송파', r'강동', r'마포', r'용산', r'중구'
-        ]
+        # 방향 키워드
+        self.direction_keywords = {
+            "북쪽": "N",
+            "남쪽": "S", 
+            "동쪽": "E",
+            "서쪽": "W",
+            "북": "N",
+            "남": "S",
+            "동": "E", 
+            "서": "W"
+        }
         
         logger.info("SQL 요소 추출기 초기화 완료")
     
@@ -172,356 +193,278 @@ class SQLElementExtractor:
         질문에서 SQL 요소 추출
         
         Args:
-            question: 사용자 질문
+            question: 자연어 질문
             
         Returns:
             추출된 SQL 요소들
         """
-        question = question.strip()
-        logger.debug(f"SQL 요소 추출 시작: {question}")
+        question_lower = question.lower()
         
-        # 1. 쿼리 타입 결정
-        query_type = self._detect_query_type(question)
+        # 1. 테이블 선택
+        table_name = self._select_table(question_lower)
         
-        # 2. 테이블 식별
-        table_name = self._identify_table(question)
+        # 2. 쿼리 타입 결정
+        query_type = self._determine_query_type(question_lower)
         
         # 3. 컬럼 추출
-        columns = self._extract_columns(question, table_name)
+        columns = self._extract_columns(question_lower, table_name)
         
-        # 4. 조건절 추출
-        conditions = self._extract_conditions(question, table_name)
+        # 4. 조건 추출
+        conditions = self._extract_conditions(question_lower, table_name)
         
-        # 5. GROUP BY 추출
-        group_by = self._extract_group_by(question)
+        # 5. 정렬 조건 추출
+        order_by = self._extract_order_by(question_lower, table_name)
         
-        # 6. ORDER BY 추출
-        order_by = self._extract_order_by(question)
+        # 6. 그룹핑 조건 추출
+        group_by = self._extract_group_by(question_lower, table_name)
         
-        # 7. LIMIT 추출
-        limit = self._extract_limit(question)
+        # 7. 제한 조건 추출
+        limit = self._extract_limit(question_lower)
         
-        # 8. 슬롯 정보 생성
-        slots = self._create_slots(question, table_name, columns, conditions)
+        # 8. 신뢰도 계산
+        confidence = self._calculate_confidence(question_lower, table_name, columns, conditions)
         
-        # 9. 신뢰도 계산
-        confidence = self._calculate_confidence(question, query_type, table_name, columns)
-        
-        result = ExtractedSQLElements(
+        return ExtractedSQLElements(
             query_type=query_type,
             table_name=table_name,
             columns=columns,
             conditions=conditions,
-            group_by=group_by,
             order_by=order_by,
+            group_by=group_by,
             limit=limit,
-            slots=slots,
             confidence=confidence
         )
-        
-        logger.debug(f"SQL 요소 추출 완료: {result}")
-        return result
     
-    def _detect_query_type(self, question: str) -> QueryType:
-        """쿼리 타입 감지"""
-        question_lower = question.lower()
-        
-        # 패턴 매칭으로 쿼리 타입 결정
-        for query_type, patterns in self.query_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, question_lower):
-                    logger.debug(f"쿼리 타입 감지: {query_type}, 패턴: {pattern}")
-                    return query_type
-        
-        # 기본값은 SELECT
-        return QueryType.SELECT
+    def _select_table(self, question: str) -> str:
+        """질문에 적합한 테이블 선택"""
+        # 키워드 기반 테이블 선택
+        if any(keyword in question for keyword in ["교차로", "intersection", "위치", "좌표"]):
+            return "traffic_intersection"
+        elif any(keyword in question for keyword in ["교통량", "volume", "traffic", "시간", "방향"]):
+            return "traffic_trafficvolume"
+        elif any(keyword in question for keyword in ["사고", "incident", "사건", "고장", "정체"]):
+            return "traffic_incident"
+        else:
+            # 기본적으로 교통량 테이블 반환
+            return "traffic_trafficvolume"
     
-    def _identify_table(self, question: str) -> str:
-        """테이블 식별"""
-        question_lower = question.lower()
-        
-        # 각 테이블의 별칭을 확인
-        for table_name, schema_info in self.schema.items():
-            aliases = schema_info.get("aliases", [])
-            
-            # 테이블 별칭 매칭
-            for alias in aliases:
-                if alias in question_lower:
-                    logger.debug(f"테이블 식별: {table_name}, 별칭: {alias}")
-                    return table_name
-        
-        # 기본 테이블
-        return "traffic_intersection"
+    def _determine_query_type(self, question: str) -> QueryType:
+        """쿼리 타입 결정"""
+        if any(keyword in question for keyword in ["개수", "수", "건수", "몇개"]):
+            return QueryType.COUNT
+        elif any(keyword in question for keyword in ["총합", "합계", "총"]):
+            return QueryType.SUM
+        elif any(keyword in question for keyword in ["평균", "평균값"]):
+            return QueryType.AVG
+        elif any(keyword in question for keyword in ["최대", "최고", "가장많은"]):
+            return QueryType.MAX
+        elif any(keyword in question for keyword in ["최소", "최저", "가장적은"]):
+            return QueryType.MIN
+        else:
+            return QueryType.SELECT
     
     def _extract_columns(self, question: str, table_name: str) -> List[str]:
         """컬럼 추출"""
-        question_lower = question.lower()
         columns = []
+        table_schema = self.schema.get(table_name, {})
         
-        if table_name not in self.schema:
-            return ["*"]
+        # 기본 컬럼들
+        if table_name == "traffic_intersection":
+            columns = ["id", "name", "latitude", "longitude"]
+        elif table_name == "traffic_trafficvolume":
+            columns = ["intersection_id", "datetime", "direction", "volume"]
+        elif table_name == "traffic_incident":
+            columns = ["incident_id", "incident_type", "district", "intersection_name", "status"]
         
-        table_schema = self.schema[table_name]["columns"]
+        # 질문에서 특정 컬럼 요청 확인
+        for col_name, keywords in table_schema.get("columns", {}).items():
+            if any(keyword in question for keyword in keywords):
+                if col_name not in columns:
+                    columns.append(col_name)
         
-        # 각 컬럼의 별칭을 확인
-        for column_name, aliases in table_schema.items():
-            for alias in aliases:
-                if alias in question_lower:
-                    if column_name not in columns:
-                        columns.append(column_name)
-                        logger.debug(f"컬럼 추출: {column_name}, 별칭: {alias}")
-        
-        # 컬럼이 없으면 전체 선택
         return columns if columns else ["*"]
     
     def _extract_conditions(self, question: str, table_name: str) -> List[Dict[str, Any]]:
-        """조건절 추출"""
+        """조건 추출"""
         conditions = []
         
-        # 숫자 조건 추출
-        for operator, patterns in self.condition_patterns.items():
-            for pattern in patterns:
-                matches = re.finditer(pattern, question)
-                for match in matches:
-                    condition = {
-                        "column": self._map_to_column(match.group(1), table_name),
-                        "operator": operator.value,
-                        "value": match.group(2),
-                        "original_text": match.group(0)
-                    }
-                    conditions.append(condition)
-                    logger.debug(f"조건 추출: {condition}")
+        # 지역 조건
+        for region, keywords in self.region_keywords.items():
+            if any(keyword in question for keyword in keywords):
+                if table_name == "traffic_intersection":
+                    conditions.append({
+                        "column": "name",
+                        "operator": "LIKE",
+                        "value": f"%{region}%"
+                    })
+                elif table_name == "traffic_incident":
+                    conditions.append({
+                        "column": "district",
+                        "operator": "LIKE", 
+                        "value": f"%{region}%"
+                    })
+                break
         
-        # 시간 조건 추출
-        time_conditions = self._extract_time_conditions(question)
-        conditions.extend(time_conditions)
+        # 시간 조건
+        for time_keyword, sql_function in self.time_keywords.items():
+            if time_keyword in question:
+                if table_name == "traffic_trafficvolume":
+                    conditions.append({
+                        "column": "datetime",
+                        "operator": ">=",
+                        "value": sql_function
+                    })
+                elif table_name == "traffic_incident":
+                    conditions.append({
+                        "column": "registered_at",
+                        "operator": ">=",
+                        "value": sql_function
+                    })
+                break
         
-        # 장소 조건 추출
-        location_conditions = self._extract_location_conditions(question)
-        conditions.extend(location_conditions)
+        # 방향 조건
+        for direction_keyword, direction_code in self.direction_keywords.items():
+            if direction_keyword in question and table_name == "traffic_trafficvolume":
+                conditions.append({
+                    "column": "direction",
+                    "operator": "=",
+                    "value": f"'{direction_code}'"
+                })
+                break
         
         return conditions
     
-    def _extract_time_conditions(self, question: str) -> List[Dict[str, Any]]:
-        """시간 조건 추출"""
-        conditions = []
+    def _extract_order_by(self, question: str, table_name: str) -> List[str]:
+        """정렬 조건 추출"""
+        order_by = []
         
-        for pattern in self.time_patterns:
-            matches = re.finditer(pattern, question)
-            for match in matches:
-                condition = {
-                    "column": "timestamp",
-                    "operator": "LIKE",
-                    "value": f"%{match.group(1)}%",
-                    "original_text": match.group(0)
-                }
-                conditions.append(condition)
-                logger.debug(f"시간 조건 추출: {condition}")
+        if "최신" in question or "최근" in question:
+            if table_name == "traffic_trafficvolume":
+                order_by.append("datetime DESC")
+            elif table_name == "traffic_incident":
+                order_by.append("registered_at DESC")
+            elif table_name == "traffic_intersection":
+                order_by.append("created_at DESC")
         
-        return conditions
+        if "오래된" in question or "과거" in question:
+            if table_name == "traffic_trafficvolume":
+                order_by.append("datetime ASC")
+            elif table_name == "traffic_incident":
+                order_by.append("registered_at ASC")
+            elif table_name == "traffic_intersection":
+                order_by.append("created_at ASC")
+        
+        if "많은" in question or "높은" in question:
+            if table_name == "traffic_trafficvolume":
+                order_by.append("volume DESC")
+        
+        if "적은" in question or "낮은" in question:
+            if table_name == "traffic_trafficvolume":
+                order_by.append("volume ASC")
+        
+        return order_by
     
-    def _extract_location_conditions(self, question: str) -> List[Dict[str, Any]]:
-        """장소 조건 추출"""
-        conditions = []
+    def _extract_group_by(self, question: str, table_name: str) -> List[str]:
+        """그룹핑 조건 추출"""
+        group_by = []
         
-        for pattern in self.location_patterns:
-            matches = re.finditer(pattern, question)
-            for match in matches:
-                condition = {
-                    "column": "location",
-                    "operator": "LIKE",
-                    "value": f"%{match.group(1)}%",
-                    "original_text": match.group(0)
-                }
-                conditions.append(condition)
-                logger.debug(f"장소 조건 추출: {condition}")
+        if "별로" in question or "구분" in question:
+            if table_name == "traffic_trafficvolume":
+                group_by.append("intersection_id")
+            elif table_name == "traffic_incident":
+                group_by.append("incident_type")
         
-        return conditions
-    
-    def _extract_group_by(self, question: str) -> List[str]:
-        """GROUP BY 추출"""
-        group_patterns = [r'별로', r'각', r'구별', r'분류']
-        
-        for pattern in group_patterns:
-            if re.search(pattern, question):
-                # 간단한 그룹핑 로직
-                if "구별" in question or "지역별" in question:
-                    return ["district"]
-                elif "시간별" in question:
-                    return ["DATE(timestamp)"]
-        
-        return []
-    
-    def _extract_order_by(self, question: str) -> List[str]:
-        """ORDER BY 추출"""
-        if "많은순" in question or "높은순" in question:
-            return ["traffic_volume DESC"]
-        elif "적은순" in question or "낮은순" in question:
-            return ["traffic_volume ASC"]
-        
-        return []
+        return group_by
     
     def _extract_limit(self, question: str) -> Optional[int]:
-        """LIMIT 추출"""
+        """제한 조건 추출"""
         # 숫자 패턴 찾기
-        limit_patterns = [
-            r'상위\s*(\d+)', r'(\d+)개', r'(\d+)곳',
-            r'처음\s*(\d+)', r'첫\s*(\d+)'
-        ]
+        number_pattern = r'(\d+)개|(\d+)건|(\d+)개씩|(\d+)개만'
+        match = re.search(number_pattern, question)
+        if match:
+            for group in match.groups():
+                if group:
+                    return int(group)
         
-        for pattern in limit_patterns:
-            match = re.search(pattern, question)
-            if match:
-                return int(match.group(1))
+        # 상위/하위 키워드
+        if "상위" in question or "top" in question.lower():
+            return 10
+        elif "최근" in question or "최신" in question:
+            return 5
         
         return None
     
-    def _map_to_column(self, text: str, table_name: str) -> str:
-        """텍스트를 실제 컬럼명으로 매핑"""
-        if table_name not in self.schema:
-            return text
-        
-        table_schema = self.schema[table_name]["columns"]
-        
-        for column_name, aliases in table_schema.items():
-            if text in aliases:
-                return column_name
-        
-        return text
-    
-    def _create_slots(self, question: str, table_name: str, columns: List[str], conditions: List[Dict]) -> List[SQLSlot]:
-        """슬롯 정보 생성"""
-        slots = []
-        
-        # 테이블 슬롯
-        slots.append(SQLSlot(
-            slot_type="table",
-            value=table_name,
-            confidence=1.0,
-            original_text=question
-        ))
-        
-        # 컬럼 슬롯들
-        for column in columns:
-            slots.append(SQLSlot(
-                slot_type="column",
-                value=column,
-                confidence=0.9,
-                original_text=question
-            ))
-        
-        # 조건 슬롯들
-        for condition in conditions:
-            slots.append(SQLSlot(
-                slot_type="condition",
-                value=f"{condition['column']} {condition['operator']} {condition['value']}",
-                confidence=0.8,
-                original_text=condition.get('original_text', '')
-            ))
-        
-        return slots
-    
-    def _calculate_confidence(self, question: str, query_type: QueryType, 
-                            table_name: str, columns: List[str]) -> float:
+    def _calculate_confidence(self, question: str, table_name: str, columns: List[str], conditions: List[Dict]) -> float:
         """신뢰도 계산"""
-        confidence = 0.0
+        confidence = 0.5  # 기본 신뢰도
         
-        # 쿼리 타입 신뢰도 (30%)
-        if query_type != QueryType.SELECT:  # 특정 타입이 감지됨
-            confidence += 0.3
-        else:
+        # 테이블 매칭 점수
+        table_keywords = self.schema.get(table_name, {}).get("aliases", [])
+        if any(keyword in question for keyword in table_keywords):
+            confidence += 0.2
+        
+        # 컬럼 매칭 점수
+        if columns and columns != ["*"]:
             confidence += 0.1
         
-        # 테이블 신뢰도 (30%)
-        if table_name in self.schema:
-            confidence += 0.3
+        # 조건 매칭 점수
+        if conditions:
+            confidence += 0.1
         
-        # 컬럼 신뢰도 (40%)
-        if columns and columns != ["*"]:
-            confidence += 0.4
-        elif columns == ["*"]:
-            confidence += 0.2
+        # 지역 키워드 매칭
+        for region_keywords in self.region_keywords.values():
+            if any(keyword in question for keyword in region_keywords):
+                confidence += 0.1
+                break
         
         return min(confidence, 1.0)
     
     def generate_sql(self, elements: ExtractedSQLElements) -> str:
-        """추출된 요소들로부터 SQL 생성"""
+        """SQL 생성"""
+        sql_parts = []
         
         # SELECT 절
         if elements.query_type == QueryType.COUNT:
-            select_clause = "SELECT COUNT(*)"
+            sql_parts.append("SELECT COUNT(*)")
         elif elements.query_type == QueryType.SUM:
-            col = "traffic_volume" if "traffic_volume" in elements.columns else elements.columns[0]
-            select_clause = f"SELECT SUM({col})"
+            sql_parts.append(f"SELECT SUM({elements.columns[0] if elements.columns and elements.columns != ['*'] else 'volume'})")
         elif elements.query_type == QueryType.AVG:
-            col = "traffic_volume" if "traffic_volume" in elements.columns else elements.columns[0]
-            select_clause = f"SELECT AVG({col})"
+            sql_parts.append(f"SELECT AVG({elements.columns[0] if elements.columns and elements.columns != ['*'] else 'volume'})")
         elif elements.query_type == QueryType.MAX:
-            col = "traffic_volume" if "traffic_volume" in elements.columns else elements.columns[0]
-            select_clause = f"SELECT MAX({col})"
+            sql_parts.append(f"SELECT MAX({elements.columns[0] if elements.columns and elements.columns != ['*'] else 'volume'})")
         elif elements.query_type == QueryType.MIN:
-            col = "traffic_volume" if "traffic_volume" in elements.columns else elements.columns[0]
-            select_clause = f"SELECT MIN({col})"
+            sql_parts.append(f"SELECT MIN({elements.columns[0] if elements.columns and elements.columns != ['*'] else 'volume'})")
         else:
             columns_str = ", ".join(elements.columns) if elements.columns else "*"
-            select_clause = f"SELECT {columns_str}"
+            sql_parts.append(f"SELECT {columns_str}")
         
         # FROM 절
-        from_clause = f"FROM {elements.table_name}"
+        sql_parts.append(f"FROM {elements.table_name}")
         
         # WHERE 절
-        where_clause = ""
         if elements.conditions:
             where_conditions = []
             for condition in elements.conditions:
-                where_conditions.append(f"{condition['column']} {condition['operator']} '{condition['value']}'")
-            where_clause = f"WHERE {' AND '.join(where_conditions)}"
+                # 문자열 값에 따옴표 추가
+                value = condition['value']
+                if condition['operator'] == 'LIKE' and not value.startswith("'"):
+                    value = f"'{value}'"
+                elif condition['operator'] == '=' and not value.startswith("'"):
+                    value = f"'{value}'"
+                
+                where_conditions.append(f"{condition['column']} {condition['operator']} {value}")
+            sql_parts.append(f"WHERE {' AND '.join(where_conditions)}")
         
         # GROUP BY 절
-        group_by_clause = ""
         if elements.group_by:
-            group_by_clause = f"GROUP BY {', '.join(elements.group_by)}"
+            sql_parts.append(f"GROUP BY {', '.join(elements.group_by)}")
         
         # ORDER BY 절
-        order_by_clause = ""
         if elements.order_by:
-            order_by_clause = f"ORDER BY {', '.join(elements.order_by)}"
+            sql_parts.append(f"ORDER BY {', '.join(elements.order_by)}")
         
         # LIMIT 절
-        limit_clause = ""
         if elements.limit:
-            limit_clause = f"LIMIT {elements.limit}"
+            sql_parts.append(f"LIMIT {elements.limit}")
         
-        # SQL 조합
-        sql_parts = [select_clause, from_clause]
-        if where_clause:
-            sql_parts.append(where_clause)
-        if group_by_clause:
-            sql_parts.append(group_by_clause)
-        if order_by_clause:
-            sql_parts.append(order_by_clause)
-        if limit_clause:
-            sql_parts.append(limit_clause)
-        
-        sql = " ".join(sql_parts)
-        logger.info(f"생성된 SQL: {sql}")
-        return sql
-
-if __name__ == "__main__":
-    # 테스트 코드
-    extractor = SQLElementExtractor()
-    
-    test_questions = [
-        "강남구 교차로가 몇 개인가요?",
-        "교통량이 1000 이상인 교차로를 보여주세요",
-        "지난달 교통사고가 가장 많은 곳은?",
-        "평균 교통량이 높은 상위 5개 지역",
-        "서초구 신호등 개수"
-    ]
-    
-    for question in test_questions:
-        print(f"\n질문: {question}")
-        elements = extractor.extract_elements(question)
-        sql = extractor.generate_sql(elements)
-        print(f"생성된 SQL: {sql}")
-        print(f"신뢰도: {elements.confidence:.2f}")
+        return " ".join(sql_parts)

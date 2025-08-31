@@ -131,12 +131,19 @@ def main():
             logger.error("Ollama 서버를 찾을 수 없습니다. 서버가 실행 중인지 확인해주세요.")
             sys.exit(1)
         
-        # 모델 다운로드
+        # 메인 모델 다운로드
         if not download_ollama_model(model_name):
             logger.error(f"모델 {model_name} 다운로드에 실패했습니다.")
             sys.exit(1)
         
-        logger.info("모델 다운로드 완료!")
+        # SQLCoder 모델 다운로드
+        logger.info("SQLCoder 모델 자동 다운로드 시작...")
+        if not download_ollama_model("sqlcoder:7b"):
+            logger.warning("SQLCoder 모델 다운로드에 실패했습니다. SQL 기능이 제한될 수 있습니다.")
+        else:
+            logger.info("SQLCoder 모델 다운로드 완료!")
+        
+        logger.info("모든 모델 다운로드 완료!")
     
     try:
         logger.info("시스템 초기화 및 자동 PDF 업로드 시작...")

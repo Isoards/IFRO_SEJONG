@@ -34,11 +34,25 @@
 ## 🚀 빠른 시작
 
 ### 1. 환경 설정
+
+#### 환경 변수 설정
+```bash
+# 로컬 환경에서 실행할 경우
+export OLLAMA_HOST=http://localhost:11434
+
+# Docker 환경에서 실행할 경우
+export OLLAMA_HOST=http://ollama:11434
+
+# 또는 .env 파일 생성
+echo "OLLAMA_HOST=http://localhost:11434" > .env
+```
+
+#### 의존성 설치
 ```bash
 # 의존성 설치
 pip install -r requirements.txt
 
-# Ollama 모델 다운로드
+# Ollama 모델 다운로드 (자동으로 다운로드되지만 수동으로도 가능)
 ollama pull qwen2:1.5b
 ollama pull sqlcoder:7b
 ```
@@ -98,6 +112,12 @@ ollama-LLM-ChatBot/
 
 ### 4. Answer Generator (`answer_generator.py`)
 - **최적화된 LLM**: qwen2:1.5b 사용
+
+### 5. SQL Generator (`sql_generator.py`)
+- **SQLCoder 모델**: sqlcoder:7b 사용
+- **자동 다운로드**: 서버 시작 시 모델 자동 다운로드
+- **상대적 시간 처리**: "어제", "지난주" 등의 표현 자동 변환
+- **스키마 기반 SQL 생성**: 데이터베이스 구조 기반 정확한 SQL 생성
 - **빠른 생성**: 짧은 답변, 낮은 temperature
 - **멀티스레딩**: 4개 스레드, GPU 가속
 
