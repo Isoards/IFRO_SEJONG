@@ -23,13 +23,14 @@ class CacheItem:
 
 class FastCache:
     """
-    빠른 메모리 캐시
+    최적화된 빠른 메모리 캐시
     
     특징:
-    - 단순한 딕셔너리 기반 캐시
+    - 딕셔너리 기반 O(1) 접근
     - TTL(Time To Live) 지원
-    - LRU 기반 자동 정리
+    - LRU + 빈도 기반 자동 정리
     - 해시 기반 키 생성
+    - 백그라운드 정리 작업
     """
     
     def __init__(self, max_size: int = 1000, default_ttl: float = 3600):
@@ -45,6 +46,8 @@ class FastCache:
         self.cache: Dict[str, CacheItem] = {}
         self.hits = 0
         self.misses = 0
+        self.last_cleanup = time.time()
+        self.cleanup_interval = 300  # 5분마다 정리
         
         logger.info(f"FastCache 초기화: max_size={max_size}, ttl={default_ttl}초")
     
@@ -64,7 +67,7 @@ class FastCache:
     
     def get(self, query: str, context: str = "") -> Optional[Any]:
         """
-        캐시에서 데이터 조회
+        캐시에서 데이터 조회 (최적화된 버전)
         
         Args:
             query: 사용자 쿼리
@@ -73,6 +76,11 @@ class FastCache:
         Returns:
             캐시된 데이터 또는 None
         """
+        # 주기적 정리 실행
+        current_time = time.time()
+        if current_time - self.last_cleanup > self.cleanup_interval:
+            self._background_cleanup()
+        
         key = self._generate_key(query, context)
         
         if key not in self.cache:
@@ -80,20 +88,53 @@ class FastCache:
             return None
         
         item = self.cache[key]
-        current_time = time.time()
         
-        # TTL 확인
+        # TTL 확인 (인라인 최적화)
         if current_time - item.timestamp > item.ttl:
             del self.cache[key]
             self.misses += 1
             logger.debug(f"캐시 만료: {key[:8]}...")
             return None
         
-        # 히트 처리
+        # 히트 처리 (빈도 가중치 적용)
         item.access_count += 1
+        item.timestamp = current_time  # LRU를 위한 타임스탬프 업데이트
         self.hits += 1
         logger.debug(f"캐시 히트: {key[:8]}...")
         return item.data
+    
+    def _background_cleanup(self):
+        """백그라운드 캐시 정리 작업"""
+        try:
+            expired_count = self.cleanup_expired()
+            self.last_cleanup = time.time()
+            
+            # 캐시가 75% 이상 찬 경우 추가 정리
+            if len(self.cache) > self.max_size * 0.75:
+                self._evict_low_frequency()
+                
+            logger.debug(f"백그라운드 정리 완료: {expired_count}개 만료 항목 제거")
+        except Exception as e:
+            logger.warning(f"백그라운드 정리 중 오류: {e}")
+    
+    def _evict_low_frequency(self):
+        """낮은 빈도 항목들 제거"""
+        if len(self.cache) <= self.max_size * 0.5:
+            return
+            
+        # 접근 빈도가 낮은 항목들 정렬
+        items_by_frequency = sorted(
+            self.cache.items(),
+            key=lambda x: (x[1].access_count, x[1].timestamp)
+        )
+        
+        # 하위 25% 제거
+        remove_count = min(len(items_by_frequency) // 4, len(self.cache) - self.max_size // 2)
+        for i in range(remove_count):
+            key = items_by_frequency[i][0]
+            del self.cache[key]
+            
+        logger.debug(f"낮은 빈도 캐시 {remove_count}개 제거")
     
     def put(self, query: str, data: Any, context: str = "", ttl: Optional[float] = None) -> None:
         """
@@ -305,7 +346,7 @@ def initialize_instant_answers():
 
 def check_instant_answer(question: str) -> Optional[Dict[str, Any]]:
     """
-    즉시 답변 확인
+    즉시 답변 확인 (개선된 버전)
     
     Args:
         question: 사용자 질문
@@ -319,13 +360,13 @@ def check_instant_answer(question: str) -> Optional[Dict[str, Any]]:
         return exact_match
     
     # 유사한 질문 찾기 (키워드 기반)
-    question_lower = question.lower()
+    question_lower = question.lower().strip()
     
     # 교통량 관련 키워드 체크
     traffic_keywords = ["18시", "저녁 6시", "오후 6시", "통행량", "교통량", "가장 많은", "최대"]
-    if all(keyword in question_lower for keyword in ["18시", "통행량"]) or \
-       all(keyword in question_lower for keyword in ["저녁 6시", "교통량"]) or \
-       all(keyword in question_lower for keyword in ["오후 6시", "교통량"]):
+    if any(keyword in question_lower for keyword in ["18시", "통행량"]) or \
+       any(keyword in question_lower for keyword in ["저녁 6시", "교통량"]) or \
+       any(keyword in question_lower for keyword in ["오후 6시", "교통량"]):
         return {
             "answer": "파란달교차로, 세종교차로가 가장 많습니다.",
             "confidence": 0.90,
@@ -333,9 +374,21 @@ def check_instant_answer(question: str) -> Optional[Dict[str, Any]]:
             "category": "traffic_volume"
         }
     
-    # 인사말 체크
-    greeting_keywords = ["안녕", "하이", "반갑"]
-    if any(keyword in question_lower for keyword in greeting_keywords):
+    # 인사말 체크 (확장된 패턴)
+    greeting_patterns = [
+        "안녕", "하이", "반갑", "안녕하세요", "안녕하십니까", "안녕하시나요",
+        "안녕하시는지", "안녕하시는지요", "안녕하시는지요?", "안녕하세요?",
+        "하이하이", "반갑습니다", "반가워", "반가워요", "반갑습니다",
+        "좋은 하루", "좋은 하루 되세요", "좋은 하루 되세요!", "좋은 하루 되세요?",
+        "좋은 아침", "좋은 오후", "좋은 저녁", "좋은 밤", "좋은 밤 되세요",
+        "안녕히 계세요", "안녕히 가세요", "안녕히 주무세요", "안녕히 주무세요!",
+        "안녕히 주무세요?", "안녕히 주무세요~", "안녕히 주무세요^^",
+        "안녕하세요^^", "안녕하세요~", "안녕하세요!", "안녕하세요?",
+        "하이^^", "하이~", "하이!", "하이?", "반가워^^", "반가워~", "반가워!",
+        "반가워?", "반갑습니다^^", "반갑습니다~", "반갑습니다!", "반갑습니다?"
+    ]
+    
+    if any(pattern in question_lower for pattern in greeting_patterns):
         return {
             "answer": "안녕하세요! IFRO 교통 시스템에 대해 궁금한 것이 있으시면 언제든 물어보세요.",
             "confidence": 0.99,
@@ -344,7 +397,7 @@ def check_instant_answer(question: str) -> Optional[Dict[str, Any]]:
         }
     
     # IFRO 시스템 정보 체크
-    if "ifro" in question_lower or "시스템" in question_lower:
+    if "ifro" in question_lower or "시스템" in question_lower or "교통" in question_lower:
         return {
             "answer": "IFRO는 세종특별자치시의 지능형 교통관리 시스템입니다. 교통량 분석, 교통사고 통계, 교차로 정보 등을 제공합니다.",
             "confidence": 0.95,

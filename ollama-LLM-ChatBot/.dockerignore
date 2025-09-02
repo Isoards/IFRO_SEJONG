@@ -1,7 +1,6 @@
 # Git 관련
 .git
 .gitignore
-.gitattributes
 
 # Python 관련
 __pycache__
@@ -25,38 +24,12 @@ coverage.xml
 .pytest_cache
 .hypothesis
 
-# 개발 도구
+# IDE 관련
 .vscode
 .idea
 *.swp
 *.swo
 *~
-
-# 테스트 및 문서
-tests/
-test_*.py
-*_test.py
-*.md
-docs/
-README.md
-
-# 로그 및 임시 파일
-logs/
-*.log
-server.log
-temp/
-tmp/
-
-# 데이터 및 모델 (선택적)
-data/
-models/
-vector_store/
-chroma_db/
-
-# 환경 설정
-.env
-.env.local
-.env.*.local
 
 # OS 관련
 .DS_Store
@@ -67,12 +40,15 @@ chroma_db/
 ehthumbs.db
 Thumbs.db
 
-# Docker 관련
-Dockerfile*
-docker-compose*
-.dockerignore
+# 프로젝트 특정
+data/
+vector_store/
+logs/
+models/
+*.db
+*.sqlite3
 
-# 기타
-*.bak
-*.tmp
-*.temp
+# 환경 변수 (주석 처리 - 개발 환경에서 필요)
+.env
+.env.local
+.env.*.local

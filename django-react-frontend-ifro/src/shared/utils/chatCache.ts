@@ -22,10 +22,7 @@ export interface CachedResponse {
 export interface CacheStats {
   total_cached: number;
   cache_hits: number;
-  cache_misses: number;
   hit_rate: number;
-  oldest_entry: number;
-  newest_entry: number;
 }
 
 class ChatCache {
@@ -58,10 +55,10 @@ class ChatCache {
     const normalized1 = question1.toLowerCase().trim();
     const normalized2 = question2.toLowerCase().trim();
 
-    // 완전히 동일한 경우
+    // 정확히 일치하는 경우
     if (normalized1 === normalized2) return true;
 
-    // 키워드 기반 유사도 검사
+    // 단어 기반 유사도 계산
     const words1 = new Set(normalized1.split(/\s+/));
     const words2 = new Set(normalized2.split(/\s+/));
 
@@ -69,13 +66,11 @@ class ChatCache {
     const union = new Set([...words1, ...words2]);
 
     const similarity = intersection.size / union.size;
-
-    // 85% 이상 유사하면 같은 질문으로 간주
-    return similarity >= 0.85;
+    return similarity > 0.7; // 70% 이상 유사한 경우
   }
 
   /**
-   * 캐시에서 답변 찾기
+   * 캐시된 답변 찾기
    */
   findCachedAnswer(
     question: string,
@@ -85,26 +80,30 @@ class ChatCache {
       const cache = this.getCache();
       const questionHash = this.hashQuestion(question);
 
-      // 정확한 해시 매칭 시도
-      for (const entry of cache) {
-        if (entry.question_hash === questionHash && entry.pdf_id === pdfId) {
-          this.updateStats(true);
-          return entry;
-        }
+      // 정확한 해시 매칭 먼저 시도
+      const exactMatch = cache.find(
+        (entry) =>
+          entry.question_hash === questionHash && entry.pdf_id === pdfId
+      );
+
+      if (exactMatch) {
+        this.updateCacheStats(true);
+        return exactMatch;
       }
 
       // 유사한 질문 검색
-      for (const entry of cache) {
-        if (
-          entry.pdf_id === pdfId &&
-          this.isSimilarQuestion(question, entry.question)
-        ) {
-          this.updateStats(true);
-          return entry;
-        }
+      const similarMatch = cache.find(
+        (entry) =>
+          this.isSimilarQuestion(entry.question, question) &&
+          entry.pdf_id === pdfId
+      );
+
+      if (similarMatch) {
+        this.updateCacheStats(true);
+        return similarMatch;
       }
 
-      this.updateStats(false);
+      this.updateCacheStats(false);
       return null;
     } catch (error) {
       console.error("캐시 검색 오류:", error);
@@ -178,53 +177,33 @@ class ChatCache {
   private cleanExpiredEntries(cache: CachedResponse[]): void {
     const expiryTime =
       Date.now() - this.CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-    const originalLength = cache.length;
 
-    // 만료된 항목 필터링
     const validEntries = cache.filter((entry) => entry.timestamp > expiryTime);
 
-    if (validEntries.length < originalLength) {
-      debugLog(
-        `만료된 캐시 항목 ${originalLength - validEntries.length}개 제거됨`
-      );
-    }
-
-    // 원본 배열 업데이트
-    cache.length = 0;
-    cache.push(...validEntries);
-  }
-
-  /**
-   * 캐시에서 특정 PDF 관련 항목만 제거
-   */
-  clearPdfCache(pdfId: string): number {
-    try {
-      const cache = this.getCache();
-      const originalLength = cache.length;
-
-      const filteredCache = cache.filter((entry) => entry.pdf_id !== pdfId);
-      const removedCount = originalLength - filteredCache.length;
-
-      localStorage.setItem(this.CACHE_KEY, JSON.stringify(filteredCache));
-
-      debugLog(`PDF ${pdfId} 관련 캐시 ${removedCount}개 항목 제거됨`);
-      return removedCount;
-    } catch (error) {
-      console.error("PDF 캐시 제거 오류:", error);
-      return 0;
+    if (validEntries.length !== cache.length) {
+      const removedCount = cache.length - validEntries.length;
+      debugLog(`${removedCount}개의 만료된 캐시 항목이 제거되었습니다.`);
+      cache.splice(0, cache.length, ...validEntries);
     }
   }
 
   /**
-   * 전체 캐시 제거
+   * 캐시 통계 업데이트
    */
-  clearAllCache(): void {
+  private updateCacheStats(hit: boolean): void {
     try {
-      localStorage.removeItem(this.CACHE_KEY);
-      localStorage.removeItem(this.STATS_KEY);
-      debugLog("전체 캐시가 제거되었습니다.");
+      const stats = this.getCacheStats();
+      stats.total_cached += 1;
+
+      if (hit) {
+        stats.cache_hits += 1;
+      }
+
+      stats.hit_rate = stats.cache_hits / stats.total_cached;
+
+      localStorage.setItem(this.STATS_KEY, JSON.stringify(stats));
     } catch (error) {
-      console.error("캐시 제거 오류:", error);
+      console.error("캐시 통계 업데이트 오류:", error);
     }
   }
 
@@ -244,54 +223,18 @@ class ChatCache {
     return {
       total_cached: 0,
       cache_hits: 0,
-      cache_misses: 0,
       hit_rate: 0,
-      oldest_entry: 0,
-      newest_entry: 0,
     };
   }
 
   /**
-   * 캐시 통계 업데이트
-   */
-  private updateStats(isHit: boolean): void {
-    try {
-      const stats = this.getCacheStats();
-      const cache = this.getCache();
-
-      if (isHit) {
-        stats.cache_hits++;
-      } else {
-        stats.cache_misses++;
-      }
-
-      stats.total_cached = cache.length;
-      stats.hit_rate =
-        stats.cache_hits / (stats.cache_hits + stats.cache_misses);
-
-      if (cache.length > 0) {
-        const timestamps = cache.map((entry) => entry.timestamp);
-        stats.oldest_entry = Math.min(...timestamps);
-        stats.newest_entry = Math.max(...timestamps);
-      }
-
-      localStorage.setItem(this.STATS_KEY, JSON.stringify(stats));
-    } catch (error) {
-      console.error("캐시 통계 업데이트 오류:", error);
-    }
-  }
-
-  /**
-   * 캐시에서 모든 항목 가져오기
+   * 캐시 데이터 가져오기
    */
   private getCache(): CachedResponse[] {
     try {
       const cache = localStorage.getItem(this.CACHE_KEY);
       if (cache) {
-        const parsed = JSON.parse(cache);
-        // 만료된 항목 제거
-        this.cleanExpiredEntries(parsed);
-        return parsed;
+        return JSON.parse(cache);
       }
     } catch (error) {
       console.error("캐시 로드 오류:", error);
@@ -350,6 +293,59 @@ class ChatCache {
   }
 
   /**
+   * 모든 캐시 삭제
+   */
+  clearAllCache(): void {
+    try {
+      localStorage.removeItem(this.CACHE_KEY);
+      localStorage.removeItem(this.STATS_KEY);
+      debugLog("모든 캐시가 삭제되었습니다.");
+    } catch (error) {
+      console.error("캐시 삭제 오류:", error);
+    }
+  }
+
+  /**
+   * 특정 PDF의 캐시 삭제
+   */
+  clearPdfCache(pdfId: string): number {
+    try {
+      const cache = this.getCache();
+      const originalLength = cache.length;
+      
+      const filteredCache = cache.filter(entry => entry.pdf_id !== pdfId);
+      
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(filteredCache));
+      const removedCount = originalLength - filteredCache.length;
+      
+      debugLog(`PDF "${pdfId}"의 캐시가 삭제되었습니다. (${removedCount}개 항목 제거)`);
+      return removedCount;
+    } catch (error) {
+      console.error("PDF 캐시 삭제 오류:", error);
+      return 0;
+    }
+  }
+
+  /**
+   * 특정 질문의 캐시 삭제
+   */
+  clearQuestionCache(question: string, pdfId: string = "default_pdf"): void {
+    try {
+      const cache = this.getCache();
+      const questionHash = this.hashQuestion(question);
+      
+      const filteredCache = cache.filter(
+        (entry) => !(entry.question_hash === questionHash && entry.pdf_id === pdfId)
+      );
+      
+      localStorage.setItem(this.CACHE_KEY, JSON.stringify(filteredCache));
+      debugLog(`질문 "${question}"의 캐시가 삭제되었습니다.`);
+    } catch (error) {
+      console.error("특정 질문 캐시 삭제 오류:", error);
+    }
+  }
+
+  /**
    * 특정 질문과 유사한 캐시된 질문들 찾기
    */
   findSimilarQuestions(question: string, limit: number = 5): CachedResponse[] {
@@ -387,6 +383,26 @@ class ChatCache {
       console.error("유사 질문 검색 오류:", error);
       return [];
     }
+  }
+
+  /**
+   * 인사말인지 확인
+   */
+  isGreetingQuestion(question: string): boolean {
+    const greetingPatterns = [
+      '안녕', '반갑', '하이', 'hi', 'hello', '안녕하세요', '안녕하십니까',
+      '반갑습니다', '만나서 반가워', '만나서 반가워요', '반가워', '반가워요',
+      '좋은 아침', '좋은 오후', '좋은 저녁', '좋은 밤', '좋은 하루',
+      '환영', '환영합니다', '오신 것을 환영', '환영해요',
+      '뭐야', '뭔가', '뭔가요', '뭐예요', '무엇', '무엇을', '무엇인가', '무엇인가요',
+      '시스템', '시스템이', '시스템이에요', '시스템입니다', '시스템이 뭐야',
+      '기능', '기능이', '기능이에요', '기능입니다', '기능이 뭐야',
+      '할 수', '할 수 있어', '할 수 있어요', '할 수 있나', '할 수 있나요',
+      '궁금', '궁금해', '궁금해요', '궁금합니다', '궁금하네', '궁금하네요'
+    ];
+    
+    const questionLower = question.toLowerCase();
+    return greetingPatterns.some(pattern => questionLower.includes(pattern));
   }
 }
 

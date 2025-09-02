@@ -6,6 +6,7 @@ SQL 전용 모델을 사용한 스키마 기반 SQL 생성 모듈
 """
 
 import os
+import sys
 import json
 import sqlparse
 import time
@@ -29,21 +30,14 @@ except ImportError:
     logging.warning("Transformers 라이브러리를 찾을 수 없습니다.")
 
 try:
-    from llama_cpp import Llama
-    LLAMA_CPP_AVAILABLE = True
-except ImportError:
-    LLAMA_CPP_AVAILABLE = False
-    logging.warning("llama-cpp-python 라이브러리를 찾을 수 없습니다.")
-
-try:
-    from .fast_cache import get_sql_cache
+    from core.cache.fast_cache import get_sql_cache
     CACHE_AVAILABLE = True
 except ImportError:
     CACHE_AVAILABLE = False
     logging.warning("캐시 모듈을 찾을 수 없습니다.")
 
 try:
-    from .sql_element_extractor import SQLElementExtractor, ExtractedSQLElements
+    from core.database.sql_element_extractor import SQLElementExtractor, ExtractedSQLElements
     ELEMENT_EXTRACTOR_AVAILABLE = True
 except ImportError:
     ELEMENT_EXTRACTOR_AVAILABLE = False
@@ -323,26 +317,40 @@ class SQLGenerator:
         self.sql_tokenizer = None
         self.sql_pipeline = None
         
-        # 데이터베이스 연결 설정
+        # 데이터베이스 연결 풀 설정 (최적화)
         self.db_config = {
             'host': os.getenv('MYSQL_HOST', 'db'),
             'user': os.getenv('MYSQL_USER', 'root'),
             'password': os.getenv('MYSQL_PASSWORD', '1234'),
             'database': os.getenv('MYSQL_DATABASE', 'traffic'),
             'charset': 'utf8mb4',
-            'port': int(os.getenv('MYSQL_PORT', 3306))
+            'port': int(os.getenv('MYSQL_PORT', 3306)),
+            'autocommit': True,
+            'connect_timeout': 10,
+            'read_timeout': 30,
+            'write_timeout': 30,
+            'max_allowed_packet': 16*1024*1024
         }
+        
+        # 연결 풀 관리
+        self._connection_pool = []
+        self._pool_size = 5
+        self._connection_lock = asyncio.Lock() if 'asyncio' in sys.modules else None
         
         logger.info(f"SQL Generator 초기화: {model_name}")
         logger.info(f"데이터베이스 연결 설정: {self.db_config['host']}:{self.db_config['port']}/{self.db_config['database']}")
     
     def _load_sql_model(self):
-        """SQLCoder 양자화 모델 로드 (지연 로딩)"""
+        """SQLCoder 모델 로드 (지연 로딩) - GPU/CPU 지원"""
         try:
             if self.sql_model is not None:
                 return  # 이미 로드되어 있음
                 
-            logger.info(f"SQLCoder 양자화 모델 로딩 중: {self.model_name}")
+            logger.info(f"SQLCoder 모델 로딩 중: {self.model_name}")
+            
+            # CUDA 사용 가능 여부 확인
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            logger.info(f"[DEVICE] SQLCoder 모델 로딩 디바이스: {device}")
             
             # 토크나이저 로드
             self.sql_tokenizer = AutoTokenizer.from_pretrained(
@@ -351,37 +359,45 @@ class SQLGenerator:
                 cache_dir="./models"
             )
             
-            # SQLCoder 양자화 모델 로드 (4bit 양자화)
-            from transformers import BitsAndBytesConfig
+            # SQLCoder는 Llama 기반 모델이므로 AutoModelForCausalLM 사용 (GPU/CPU 지원)
+            if device.type == "cuda":
+                self.sql_model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True,
+                    cache_dir="./models",
+                    low_cpu_mem_usage=True,
+                    torch_dtype=torch.float16,  # GPU 메모리 절약
+                    device_map="auto"  # 자동 GPU 매핑
+                )
+            else:
+                self.sql_model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True,
+                    cache_dir="./models",
+                    low_cpu_mem_usage=True,
+                    torch_dtype=torch.float32  # CPU는 float32 사용
+                )
             
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-            )
+            # 파이프라인 생성 (GPU/CPU 지원)
+            if device.type == "cuda":
+                self.sql_pipeline = pipeline(
+                    "text-generation",
+                    model=self.sql_model,
+                    tokenizer=self.sql_tokenizer,
+                    device_map="auto"
+                )
+            else:
+                self.sql_pipeline = pipeline(
+                    "text-generation",
+                    model=self.sql_model,
+                    tokenizer=self.sql_tokenizer,
+                    device=0 if torch.cuda.is_available() else -1
+                )
             
-            self.sql_model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                quantization_config=quantization_config,
-                device_map="auto",
-                trust_remote_code=True,
-                cache_dir="./models",
-                low_cpu_mem_usage=True
-            )
-            
-            # 파이프라인 생성
-            self.sql_pipeline = pipeline(
-                "text-generation",
-                model=self.sql_model,
-                tokenizer=self.sql_tokenizer,
-                device_map="auto"
-            )
-            
-            logger.info(f"SQLCoder 양자화 모델 로딩 완료: {self.model_name}")
+            logger.info(f"SQLCoder 모델 로딩 완료: {self.model_name} (디바이스: {device})")
             
         except Exception as e:
-            logger.error(f"SQLCoder 양자화 모델 로딩 실패: {e}")
+            logger.error(f"SQLCoder 모델 로딩 실패: {e}")
             raise
     
     def generate_sql_parallel(self,

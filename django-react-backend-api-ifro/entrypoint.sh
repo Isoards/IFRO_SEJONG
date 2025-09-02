@@ -15,7 +15,7 @@ done
 
 echo "MySQL 준비 완료."
 
-echo "[ENCRYPT] 🔄 encrypt_transfer.py 시작됨..."
+echo "[ENCRYPT] encrypt_transfer.py 시작됨..."
 python ../encrypt_transfer.py &
 ENCRYPT_PID=$!
 
@@ -24,7 +24,7 @@ python manage.py runserver 0.0.0.0:8000 &
 
 # encrypt 완료까지 기다린 후 알림
 wait $ENCRYPT_PID
-echo "[ENCRYPT] ✅ encrypt_transfer.py 완료됨."
+echo "[ENCRYPT] encrypt_transfer.py 완료됨."
 
 # 서버가 포그라운드로 계속 유지되도록
 wait

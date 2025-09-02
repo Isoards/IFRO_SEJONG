@@ -61,13 +61,13 @@ class RealDatabaseExecutor:
     
     def execute_sql(self, sql_query: str) -> Dict[str, Any]:
         """
-        SQL 쿼리 실행
+        SQL 쿼리를 실제 데이터베이스에서 실행
         
         Args:
             sql_query: 실행할 SQL 쿼리
             
         Returns:
-            실행 결과
+            실행 결과 딕셔너리
         """
         if not self.connect():
             return {
