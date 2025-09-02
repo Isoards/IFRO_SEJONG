@@ -18,10 +18,13 @@ import chromadb
 from chromadb.config import Settings
 from sklearn.metrics.pairwise import cosine_similarity
 
-from .pdf_processor import TextChunk
+from core.document.pdf_processor import TextChunk
 
 import logging
 logger = logging.getLogger(__name__)
+
+# VectorStore 클래스 (HybridVectorStore의 별칭)
+VectorStore = None  # 나중에 정의
 
 class VectorStoreInterface(ABC):
     """벡터 저장소 인터페이스"""
@@ -342,21 +345,48 @@ class FAISSVectorStore(VectorStoreInterface):
         Args:
             path: 로드할 디렉토리 경로
         """
-        # 메타데이터 로드
-        with open(os.path.join(path, "metadata.json"), "r", encoding="utf-8") as f:
-            metadata = json.load(f)
-        
-        self.embedding_dimension = metadata["embedding_dimension"]
-        self.normalize_embeddings = metadata.get("normalize_embeddings", True)
-        
-        # FAISS 인덱스 로드
-        self.index = faiss.read_index(os.path.join(path, "faiss_index.bin"))
-        
-        # 청크 데이터 로드
-        with open(os.path.join(path, "chunks.pkl"), "rb") as f:
-            self.chunks = pickle.load(f)
-        
-        logger.info(f"FAISS 벡터 저장소를 {path}에서 로드 완료 ({len(self.chunks)}개 청크)")
+        try:
+            # 메타데이터 로드
+            with open(os.path.join(path, "metadata.json"), "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+            
+            self.embedding_dimension = metadata["embedding_dimension"]
+            self.normalize_embeddings = metadata.get("normalize_embeddings", True)
+            
+            # FAISS 인덱스 로드
+            self.index = faiss.read_index(os.path.join(path, "faiss_index.bin"))
+            
+            # 청크 데이터 로드 (import 경로 문제 해결)
+            import sys
+            from pathlib import Path
+            import pickle
+            
+            # 현재 디렉토리를 Python 경로에 추가
+            current_dir = Path(__file__).parent.parent.parent
+            if str(current_dir) not in sys.path:
+                sys.path.insert(0, str(current_dir))
+            
+            # pickle 로딩을 위한 커스텀 unpickler
+            class CustomUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    # 모듈 경로 수정
+                    if module == 'core.pdf_processor':
+                        module = 'core.document.pdf_processor'
+                    elif module == 'pdf_processor':
+                        module = 'core.document.pdf_processor'
+                    
+                    return super().find_class(module, name)
+            
+            with open(os.path.join(path, "chunks.pkl"), "rb") as f:
+                self.chunks = CustomUnpickler(f).load()
+            
+            logger.info(f"FAISS 벡터 저장소를 {path}에서 로드 완료 ({len(self.chunks)}개 청크)")
+            
+        except Exception as e:
+            logger.error(f"FAISS 벡터 저장소 로드 실패: {e}")
+            # 빈 상태로 초기화
+            self.chunks = []
+            self.index = faiss.IndexFlatIP(self.embedding_dimension)
 
 class ChromaDBVectorStore(VectorStoreInterface):
     """
@@ -554,6 +584,13 @@ class HybridVectorStore:
         self.expression_indices: Dict[str, Dict] = {}
         self.model_embeddings: Dict[str, Dict[str, np.ndarray]] = {}
         
+        # 기존 데이터 자동 로드
+        try:
+            self.load()
+            logger.info("기존 벡터 저장소 데이터 로드 완료")
+        except Exception as e:
+            logger.warning(f"기존 데이터 로드 실패 (새로 시작): {e}")
+        
         logger.info(f"Hybrid Vector Store 초기화 완료 (모델: {len(self.embedding_models)}개)")
     
     def add_chunks_with_expressions(self, chunks: List[TextChunk], 
@@ -711,10 +748,65 @@ class HybridVectorStore:
         
         return stats
     
+    def clear(self) -> None:
+        """저장소 초기화"""
+        try:
+            # FAISS 저장소 초기화
+            if hasattr(self.faiss_store, 'chunks'):
+                self.faiss_store.chunks.clear()
+            if hasattr(self.faiss_store, 'index'):
+                self.faiss_store.index = faiss.IndexFlatIP(self.faiss_store.embedding_dimension)
+            
+            # ChromaDB 저장소 초기화
+            if hasattr(self.chroma_store, 'collection'):
+                try:
+                    self.chroma_store.collection.delete(where={})
+                    logger.info("ChromaDB 컬렉션 초기화 완료")
+                except Exception as e:
+                    logger.warning(f"ChromaDB 초기화 실패: {e}")
+            
+            # 표현 인덱스 초기화
+            self.expression_indices.clear()
+            self.model_embeddings.clear()
+            
+            logger.info("벡터 저장소 완전 초기화 완료")
+            
+        except Exception as e:
+            logger.error(f"벡터 저장소 초기화 실패: {e}")
+    
     def add_chunks(self, chunks: List[TextChunk]) -> None:
-        """두 저장소에 모두 청크 추가"""
-        self.faiss_store.add_chunks(chunks)
-        self.chroma_store.add_chunks(chunks)
+        """두 저장소에 모두 청크 추가 (중복 체크 포함)"""
+        if not chunks:
+            return
+        
+        # 중복 체크
+        existing_chunk_ids = set()
+        try:
+            if hasattr(self.faiss_store, 'chunks'):
+                existing_chunk_ids = {chunk.chunk_id for chunk in self.faiss_store.chunks}
+        except Exception as e:
+            logger.warning(f"기존 청크 ID 확인 실패: {e}")
+        
+        # 중복되지 않은 청크만 필터링
+        new_chunks = []
+        duplicate_count = 0
+        
+        for chunk in chunks:
+            if chunk.chunk_id in existing_chunk_ids:
+                duplicate_count += 1
+                logger.debug(f"중복 청크 건너뛰기: {chunk.chunk_id}")
+            else:
+                new_chunks.append(chunk)
+        
+        if duplicate_count > 0:
+            logger.info(f"중복 청크 {duplicate_count}개 건너뛰기, 새 청크 {len(new_chunks)}개 추가")
+        
+        if new_chunks:
+            self.faiss_store.add_chunks(new_chunks)
+            self.chroma_store.add_chunks(new_chunks)
+            logger.info(f"✅ {len(new_chunks)}개 새 청크 추가 완료")
+        else:
+            logger.info("추가할 새 청크가 없습니다.")
     
     def search(self, query_embedding: np.ndarray, top_k: int = 5,
                use_metadata_filter: bool = False,
@@ -772,6 +864,34 @@ class HybridVectorStore:
         
         # ChromaDB는 자동 로드
         logger.info(f"하이브리드 벡터 저장소 로드 완료: {load_path}")
+    
+    def get_total_chunks(self) -> int:
+        """저장된 총 청크 수 반환"""
+        try:
+            return len(self.faiss_store.chunks) if hasattr(self.faiss_store, 'chunks') else 0
+        except:
+            return 0
+    
+    def get_all_pdfs(self) -> List[Dict]:
+        """모든 PDF 정보 반환"""
+        try:
+            # FAISS에서 PDF 정보 추출
+            pdf_info = {}
+            for chunk in self.faiss_store.chunks:
+                pdf_id = chunk.pdf_id or chunk.metadata.get("pdf_id") if chunk.metadata else "unknown"
+                if pdf_id not in pdf_info:
+                    pdf_info[pdf_id] = {
+                        'id': pdf_id,
+                        'filename': chunk.filename or chunk.metadata.get("filename", "unknown") if chunk.metadata else "unknown",
+                        'total_chunks': 0,
+                        'upload_time': chunk.upload_time or chunk.metadata.get("upload_time", "") if chunk.metadata else ""
+                    }
+                pdf_info[pdf_id]['total_chunks'] += 1
+            
+            return list(pdf_info.values())
+        except Exception as e:
+            logger.warning(f"PDF 정보 추출 실패: {e}")
+            return []
 
 # 유틸리티 함수들
 def calculate_retrieval_metrics(relevant_chunks: List[str], 
@@ -821,6 +941,47 @@ def calculate_retrieval_metrics(relevant_chunks: List[str],
         "f1": f1,
         "map": map_score
     }
+
+# VectorStore 클래스 정의 (HybridVectorStore의 별칭)
+class VectorStore:
+    """벡터 저장소 (HybridVectorStore의 별칭)"""
+    
+    def __init__(self, embedding_dimension: int = 768):
+        """
+        벡터 저장소 초기화
+        
+        Args:
+            embedding_dimension: 임베딩 벡터의 차원
+        """
+        self._store = HybridVectorStore(embedding_dimension)
+    
+    def add_chunks(self, chunks: List[TextChunk]) -> None:
+        """텍스트 청크들을 저장소에 추가"""
+        self._store.add_chunks(chunks)
+    
+    def search(self, query_embedding: np.ndarray, top_k: int = 5, 
+               similarity_threshold: float = 0.5, use_metadata_filter: bool = False,
+               filter_metadata: Optional[Dict] = None) -> List[Tuple[TextChunk, float]]:
+        """쿼리 임베딩과 유사한 청크들을 검색"""
+        return self._store.search(query_embedding, top_k, similarity_threshold, 
+                                use_metadata_filter, filter_metadata)
+    
+    def save(self, path: Optional[str] = None) -> None:
+        """저장소를 파일로 저장"""
+        self._store.save(path)
+    
+    def load(self, path: Optional[str] = None) -> None:
+        """파일에서 저장소 로드"""
+        self._store.load(path)
+    
+    def clear(self) -> None:
+        """저장소 초기화"""
+        self._store.clear()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """저장소 통계 정보 반환"""
+        return self._store.get_stats()
+
 
 if __name__ == "__main__":
     # 테스트 코드

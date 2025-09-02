@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 # 상대 경로 import 수정
-from ..database.sql_slot_extractor import SQLSlotExtractor, SlotExtractionResult
+from core.database.sql_slot_extractor import SQLSlotExtractor, SlotExtractionResult
 
 logger = logging.getLogger(__name__)
 

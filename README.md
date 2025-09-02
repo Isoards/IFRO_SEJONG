@@ -54,9 +54,9 @@ docker-compose ps
 - **기술스택**: Django 4, Django REST Framework, MySQL
 - **주요기능**: 교통 데이터 API, 사용자 인증, 데이터 처리
 
-### 🤖 AI 챗봇 (Ollama + LangChain)
+### 🤖 AI 챗봇 (로컬 LLM + LangChain)
 - **위치**: `ollama-LLM-ChatBot/`
-- **기술스택**: Python, Ollama, ChromaDB, Sentence Transformers
+- **기술스택**: Python, Transformers, ChromaDB, Sentence Transformers
 - **주요기능**: 자연어 처리, 교통 데이터 질의응답, 대화형 인터페이스
 
 ## 🗄️ 데이터베이스

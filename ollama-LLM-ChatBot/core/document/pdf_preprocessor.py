@@ -15,7 +15,7 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import logging
 
-from core.pdf_processor import PDFProcessor, TextChunk
+from core.document.pdf_processor import PDFProcessor, TextChunk
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,31 @@ class PDFDatabase:
             conn.commit()
         
         logger.info("데이터베이스 초기화 완료")
+
+class PDFPreprocessor:
+    """PDF 전처리 시스템 (FastPDFPreprocessor의 별칭)"""
+    
+    def __init__(self, embedding_model: str = "jhgan/ko-sroberta-multitask"):
+        """
+        전처리기 초기화
+        
+        Args:
+            embedding_model: 임베딩 모델명
+        """
+        self._processor = FastPDFPreprocessor(embedding_model)
+    
+    def preprocess_pdf(self, pdf_path: str, force_reprocess: bool = False) -> bool:
+        """PDF 파일 전처리"""
+        return self._processor.preprocess_pdf(pdf_path, force_reprocess)
+    
+    def preprocess_directory(self, directory_path: str, force_reprocess: bool = False) -> Dict[str, int]:
+        """디렉토리 내 모든 PDF 파일 전처리"""
+        return self._processor.preprocess_directory(directory_path, force_reprocess)
+    
+    def load_preprocessed_data(self) -> List[TextChunk]:
+        """전처리된 데이터 로드"""
+        return self._processor.load_preprocessed_data()
+
 
 class FastPDFPreprocessor:
     """고속 PDF 전처리 시스템"""

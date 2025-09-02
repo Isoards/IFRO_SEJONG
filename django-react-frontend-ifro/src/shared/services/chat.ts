@@ -64,8 +64,14 @@ export const sendAIChatMessage = async (
 }> => {
   const targetPdfId = pdfId || "default_pdf";
 
+  // 인사말인지 확인
+  const isGreeting = chatCache.isGreetingQuestion(message);
+  
+  // 인사말이거나 캐시 사용이 비활성화된 경우 캐시를 사용하지 않음
+  const shouldUseCache = useCache && !isGreeting;
+
   // 캐시 사용이 활성화된 경우 캐시에서 먼저 검색
-  if (useCache) {
+  if (shouldUseCache) {
     const cachedResponse = chatCache.findCachedAnswer(message, targetPdfId);
     if (cachedResponse) {
       debugLog(`캐시에서 답변 찾음: "${message}"`);
@@ -100,8 +106,8 @@ export const sendAIChatMessage = async (
         from_cache: false,
       };
 
-      // 성공적인 응답을 캐시에 저장
-      if (useCache) {
+      // 성공적인 응답을 캐시에 저장 (인사말은 제외)
+      if (shouldUseCache) {
         chatCache.cacheAnswer(
           message,
           result.answer,
@@ -269,22 +275,14 @@ export const getAvailablePDFs = async (): Promise<
   }
 };
 
-// 간단한 테스트 함수 (백엔드 프록시를 통해)
+// 간단한 테스트 함수 (최적화된 버전)
 export const testChatConnection = async (): Promise<void> => {
   try {
     debugLog("Testing chat connection through backend proxy...");
-    debugLog("Base URL:", chatApi.defaults.baseURL);
-
+    
+    // 기본 헬스 체크만 수행 (불필요한 상태 확인 제거)
     const response = await chatApi.get("/health");
     debugLog("Health check response:", response.data);
-
-    // AI 서비스 상태도 확인
-    const aiStatus = await checkAIServiceStatus();
-    debugLog("AI Service status:", aiStatus);
-
-    // 캐시 상태도 확인
-    const cacheInfo = getChatCacheInfo();
-    debugLog("Cache info:", cacheInfo);
   } catch (error) {
     console.error("Connection test failed:", error);
   }
