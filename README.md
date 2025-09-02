@@ -1,531 +1,183 @@
-# IFRO (Intelligent Traffic Flow and Road Operations)
-산학연계 뉴노멀 프로젝트 - 지능형 교통 흐름 및 도로 운영 시스템
+# 🚦 IFRO_SEJONG - 교통 데이터 분석 및 챗봇 시스템
 
-## 🚀 프로젝트 개요
-IFRO는 Django 백엔드와 React 프론트엔드로 구성된 지능형 교통 분석 및 관리 시스템입니다. 실시간 교통 데이터 분석, 교통사고 관리, 교차로 간 통행량 분석 등의 기능을 제공합니다. 또한 Ollama 기반 PDF QA 챗봇 시스템을 통합하여 문서 기반 질의응답 기능도 제공합니다.
+## 📋 프로젝트 개요
 
-### 🤖 AI 챗봇 시스템
-- **Ollama 기반**: 로컬에서 실행되는 빠르고 안전한 AI 모델
-- **자동 모델 다운로드**: Docker Compose 실행 시 필요한 모델 자동 설치
-- **최적화된 성능**: 빠른 응답을 위한 모델 설정 최적화
-- **PDF 문서 분석**: 업로드된 PDF 문서에 대한 질의응답
-- **SQL 데이터베이스 질의**: 교통 데이터에 대한 자연어 질의
+IFRO_SEJONG은 교통 데이터를 분석하고 AI 챗봇을 통해 사용자와 상호작용하는 종합적인 교통 관리 시스템입니다.
 
-## 📁 프로젝트 구조
+## 🏗️ 시스템 아키텍처
+
 ```
-IFRO/
-├── django-react-backend-api-ifro/    # Django 백엔드 API
-│   ├── src/
-│   │   ├── dashboard/                # Django 프로젝트 설정
-│   │   ├── traffic/                  # 교통 데이터 모델 및 API
-│   │   ├── user_auth/                # 사용자 인증 및 관리
-│   │   └── manage.py
-│   ├── requirements.txt
-│   └── sqldata-backup/               # 데이터베이스 백업
-├── django-react-frontend-ifro/       # React 프론트엔드
-│   ├── src/
-│   │   ├── components/               # React 컴포넌트
-│   │   │   ├── Auth/                 # 인증 관련 컴포넌트
-│   │   │   ├── Dashboard/            # 대시보드 메인
-│   │   │   ├── Map/                  # 지도 관련 컴포넌트
-│   │   │   ├── Navigation/           # 네비게이션 컴포넌트
-│   │   │   └── TrafficAnalysis/      # 교통 분석 컴포넌트
-│   │   ├── api/                      # API 통신 모듈
-│   │   ├── types/                    # TypeScript 타입 정의
-│   │   └── utils/                    # 유틸리티 함수
-│   └── package.json
-├── ollama-LLM-ChatBot/               # Ollama 기반 PDF QA 챗봇 시스템
-│   ├── api/                          # FastAPI 엔드포인트
-│   ├── core/                         # 핵심 처리 모듈 (답변 생성, 질문 분석 등)
-│   ├── data/                         # PDF 데이터 및 벡터 저장소
-│   ├── utils/                        # 유틸리티 함수
-│   ├── main.py                       # 메인 실행 파일
-│   ├── requirements.txt              # Python 의존성
-│   └── Dockerfile                    # 챗봇 컨테이너 설정
-├── docker-compose.yml                # 전체 서비스 오케스트레이션
-├── ollama-entrypoint.sh              # Ollama 서비스 초기화 스크립트
-├── ollama-healthcheck.sh             # Ollama 서비스 상태 확인 스크립트
-├── test-docker-setup.sh              # Docker 설정 테스트 스크립트
-└── README.md
+IFRO_SEJONG/
+├── 🐳 docker-compose.yml          # 전체 시스템 오케스트레이션
+├── 📚 README.md                   # 프로젝트 문서
+├── 🔧 .gitignore                  # Git 무시 파일 설정
+├── 🎨 .gitattributes             # Git 속성 설정
+├── 🎯 django-react-frontend-ifro/ # React 프론트엔드
+├── 🔌 django-react-backend-api-ifro/ # Django 백엔드 API
+└── 🤖 ollama-LLM-ChatBot/        # AI 챗봇 서비스
 ```
 
-## 🤖 Ollama AI 챗봇 시스템
+## 🚀 빠른 시작
 
-### 개요
-IFRO 시스템은 **Ollama**를 기반으로 한 로컬 AI 챗봇 시스템을 제공합니다. 이는 빠르고 안전하며, 인터넷 연결 없이도 작동하는 AI 모델입니다.
+### 1. 시스템 요구사항
+- Docker & Docker Compose
+- 최소 8GB RAM
+- 20GB 이상의 디스크 공간
 
-### 주요 특징
-- ✅ **로컬 실행**: 모든 AI 처리가 로컬에서 실행되어 데이터 보안 보장
-- ✅ **자동 모델 설치**: Docker Compose 실행 시 필요한 모델 자동 다운로드
-- ✅ **최적화된 성능**: 빠른 응답을 위한 모델 설정 최적화
-- ✅ **PDF 문서 분석**: 업로드된 PDF 문서에 대한 질의응답
-- ✅ **SQL 데이터베이스 질의**: 교통 데이터에 대한 자연어 질의
-
-### 사용되는 AI 모델
-- **qwen2:1.5b**: 일반적인 질의응답 및 PDF 문서 분석
-- **sqlcoder:7b**: SQL 데이터베이스 질의 생성
-
-### Docker Compose 실행
-
-#### 1. 전체 시스템 시작
+### 2. 시스템 시작
 ```bash
-# 모든 서비스 시작 (모델 자동 다운로드 포함)
+# 전체 시스템 시작
 docker-compose up -d
 
-# 실시간 로그 확인 (권장)
-docker-compose logs -f ollama
-docker-compose logs -f chatbot
+# 로그 확인
+docker-compose logs -f
 
-# 서비스 상태 확인
+# 시스템 상태 확인
 docker-compose ps
 ```
 
-#### 2. 단계별 시작 (권장)
+### 3. 서비스 접속
+- **프론트엔드**: http://localhost:3000
+- **백엔드 API**: http://localhost:8000
+- **챗봇**: http://localhost:8008
+- **데이터베이스**: localhost:3307
+
+## 🏛️ 서비스 구성
+
+### 🎯 프론트엔드 (React + TypeScript)
+- **위치**: `django-react-frontend-ifro/`
+- **기술스택**: React 18, TypeScript, Tailwind CSS
+- **주요기능**: 교통 데이터 시각화, 대시보드, 사용자 인터페이스
+
+### 🔌 백엔드 API (Django)
+- **위치**: `django-react-backend-api-ifro/`
+- **기술스택**: Django 4, Django REST Framework, MySQL
+- **주요기능**: 교통 데이터 API, 사용자 인증, 데이터 처리
+
+### 🤖 AI 챗봇 (로컬 LLM + LangChain)
+- **위치**: `ollama-LLM-ChatBot/`
+- **기술스택**: Python, Transformers, ChromaDB, Sentence Transformers
+- **주요기능**: 자연어 처리, 교통 데이터 질의응답, 대화형 인터페이스
+
+## 🗄️ 데이터베이스
+
+### MySQL 설정
+- **포트**: 3307
+- **데이터베이스**: traffic
+- **문자셋**: UTF-8 (한글 지원)
+- **자동 백업**: Docker 볼륨으로 데이터 영속성 보장
+
+## 🔧 개발 환경
+
+### 로컬 개발
 ```bash
-# 1단계: 데이터베이스와 백엔드만 시작
-docker-compose up -d db backend
+# 백엔드 개발
+cd django-react-backend-api-ifro/src
+python manage.py runserver
 
-# 2단계: Ollama 서비스 시작 (모델 다운로드)
-docker-compose up -d ollama
+# 프론트엔드 개발
+cd django-react-frontend-ifro
+npm start
 
-# 3단계: 모델 다운로드 완료 확인 후 챗봇 시작
-docker-compose up -d chatbot
+# 챗봇 개발
+cd ollama-LLM-ChatBot
+python run_server.py
 ```
 
-#### 2. 모델 설치 상태 확인
+### 환경 변수
+주요 환경 변수는 `docker-compose.yml`에 정의되어 있습니다:
+- `DJANGO_SECRET_KEY`: Django 보안 키
+- `JWT_SECRET_KEY`: JWT 토큰 보안 키
+- `GEMINI_API_KEY`: Google Gemini API 키
+- `MYSQL_*`: 데이터베이스 연결 정보
+
+## 📊 모니터링 및 로그
+
+### 로그 확인
 ```bash
-# Ollama 컨테이너에 접속하여 모델 확인
-docker exec -it ollama ollama list
+# 전체 로그
+docker-compose logs
 
-# 예상 출력:
-# NAME              ID              SIZE      MODIFIED   
-# qwen2:1.5b        xxxxxxxxxxxx    1.5 GB    x days ago    
-# sqlcoder:7b       xxxxxxxxxxxx    4.0 GB    x days ago
-```
+# 특정 서비스 로그
+docker-compose logs backend
+docker-compose logs frontend
+docker-compose logs chatbot
 
-#### 3. 챗봇 테스트
-```bash
-# 챗봇 API 테스트
-curl -X POST http://localhost:8008/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "안녕하세요"}'
-```
-
-### 성능 최적화
-- **응답 시간**: 일반적으로 1-3초 내 응답
-- **모델 로딩**: 첫 실행 시 10-15초, 이후 0.5-1초
-- **메모리 사용**: qwen2:1.5b 모델 약 2GB RAM 사용
-- **모델 다운로드**: qwen2:1.5b 약 1.5GB, sqlcoder:7b 약 4GB
-- **시작 시간**: 전체 시스템 시작 시 약 15-20분 (모델 다운로드 포함)
-
-### 문제 해결
-
-#### 모델 다운로드 실패
-```bash
-# 수동으로 모델 다운로드
-docker exec -it ollama ollama pull qwen2:1.5b
-docker exec -it ollama ollama pull sqlcoder:7b
-
-# 다운로드 진행률 확인
-docker exec -it ollama ollama list
-```
-
-#### 서비스 시작 순서 문제
-```bash
-# 1. 모든 서비스 중지
-docker-compose down
-
-# 2. 데이터베이스와 백엔드만 시작
-docker-compose up -d db backend
-
-# 3. Ollama 서비스 시작 및 모델 다운로드 대기
-docker-compose up -d ollama
-docker-compose logs -f ollama
-
-# 4. 모델 다운로드 완료 후 챗봇 시작
-docker-compose up -d chatbot
-```
-
-#### 서비스 재시작
-```bash
-# 특정 서비스만 재시작
-docker-compose restart ollama
-docker-compose restart chatbot
-```
-
-#### 로그 확인
-```bash
-# 실시간 로그 확인
-docker-compose logs -f ollama
+# 실시간 로그
 docker-compose logs -f chatbot
 ```
 
-## 🔐 관리자 코드 시스템
-
-### 개요
-IFRO 시스템은 **자동 생성 관리자 코드**를 통해 보안을 강화하고 있습니다.
-
-### 주요 기능
-- ✅ **자동 코드 생성**: 설정된 시간마다 자동으로 새로운 코드 생성
-- ✅ **사용 즉시 갱신**: 코드 사용 시 즉시 새 코드로 변경
-- ✅ **미사용 시 시간 기반 갱신**: 미사용 시 설정된 시간마다 갱신
-- ✅ **1회 사용 제한**: 각 코드는 최대 1회만 사용 가능
-- ✅ **Django Admin 관리**: 웹 인터페이스에서 편리한 관리
-
-### 관리자 코드 확인 방법
-
-#### 1. Django Admin 페이지 (권장)
+### 헬스체크
 ```bash
-# Django 서버 실행
-python manage.py runserver
+# 서비스 상태 확인
+docker-compose ps
 
-# 브라우저에서 접속
-http://localhost:8000/admin
-
-# user_auth > Admin codes에서 확인
+# 챗봇 헬스체크
+curl http://localhost:8008/health
 ```
 
-#### 2. 명령어로 확인
+## 🛠️ 유지보수
+
+### 데이터베이스 백업
 ```bash
-# 현재 관리자 코드 목록 확인
-python manage.py shell -c "from user_auth.models import AdminCode; codes = AdminCode.objects.all(); [print(f'코드: {code.code} | 설명: {code.description} | 활성: {code.is_active} | 자동생성: {code.auto_generate} | 사용횟수: {code.current_uses}/{code.max_uses}') for code in codes]"
+# MySQL 데이터 백업
+docker exec mysql mysqldump -u root -p1234 traffic > backup.sql
+
+# 볼륨 백업
+docker run --rm -v ifro_sejong_mysql_data:/data -v $(pwd):/backup alpine tar czf /backup/mysql_backup.tar.gz -C /data .
 ```
 
-### 관리자 코드 생성
-
-#### 1. 자동 생성 코드 생성
+### 시스템 업데이트
 ```bash
-# 12시간마다 갱신되는 자동 생성 코드
-python manage.py create_admin_code --auto-generate --interval-hours 12
+# 이미지 재빌드
+docker-compose build --no-cache
 
-# 24시간마다 갱신되는 자동 생성 코드
-python manage.py create_admin_code --auto-generate --interval-hours 24
+# 서비스 재시작
+docker-compose up -d --force-recreate
 ```
 
-#### 2. 일반 관리자 코드 생성
-```bash
-# 수동으로 코드 생성 (5회 사용 가능)
-python manage.py create_admin_code --code "MANUAL_CODE" --max-uses 5
+## 🐛 문제 해결
 
-# 테스트용 코드 생성
-python manage.py create_admin_code --code "TEST123" --description "테스트용 관리자 코드" --max-uses 10
-```
+### 일반적인 문제들
 
-### 관리자 코드 삭제
+1. **포트 충돌**
+   ```bash
+   # 사용 중인 포트 확인
+   netstat -tulpn | grep :3000
+   netstat -tulpn | grep :8000
+   netstat -tulpn | grep :8008
+   ```
 
-#### 1. Django Admin에서 삭제
-- **일반 관리자 코드**: 삭제 가능
-- **자동 생성 코드**: 슈퍼유저만 삭제 가능
+2. **메모리 부족**
+   ```bash
+   # Docker 리소스 제한 확인
+   docker stats
+   ```
 
-#### 2. 명령어로 삭제
-```bash
-# 특정 코드 삭제
-python manage.py delete_admin_code --code "CODE_TO_DELETE"
+3. **데이터베이스 연결 실패**
+   ```bash
+   # MySQL 컨테이너 상태 확인
+   docker-compose logs db
+   ```
 
-# 자동 생성 코드만 삭제
-python manage.py delete_admin_code --auto-generate
+## 📝 라이선스
 
-# 모든 코드 삭제
-python manage.py delete_admin_code --all
+이 프로젝트는 교육 및 연구 목적으로 개발되었습니다.
 
-# 확인 없이 강제 삭제
-python manage.py delete_admin_code --auto-generate --force
-```
+## 🤝 기여하기
 
-### 사용자 관리
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-#### 1. Django Admin에서 관리
-- **슈퍼유저만** 사용자 삭제 가능
-- **슈퍼유저는 자신을 삭제할 수 없음**
+## 📞 지원
 
-#### 2. 명령어로 사용자 관리
-```bash
-# 특정 사용자 삭제
-python manage.py delete_user --username "username"
+프로젝트 관련 문의사항이나 버그 리포트는 GitHub Issues를 통해 제출해 주세요.
 
-# 특정 역할 사용자들 삭제
-python manage.py delete_user --role "operator"
+---
 
-# 모든 일반 사용자 삭제 (슈퍼유저 제외)
-python manage.py delete_user --all
-```
-
-### 프로덕션 환경 설정
-
-#### 1. 슈퍼유저 생성
-```bash
-# 대화형 슈퍼유저 생성
-python manage.py createsuperuser
-
-# 자동 슈퍼유저 생성
-DJANGO_SUPERUSER_USERNAME=admin \
-DJANGO_SUPERUSER_EMAIL=admin@yourdomain.com \
-DJANGO_SUPERUSER_PASSWORD=secure_password123 \
-python manage.py createsuperuser --noinput
-```
-
-#### 2. 프로덕션 환경 자동 설정
-```bash
-# 슈퍼유저 + 자동 생성 관리자 코드 생성
-python manage.py setup_production \
-    --superuser-email admin@yourdomain.com \
-    --superuser-password secure_password123 \
-    --create-auto-admin-code
-```
-
-### 보안 특징
-- 🔒 **자동 갱신**: 설정된 시간마다 자동으로 새 코드 생성
-- 🔒 **Admin 전용**: Django Admin에서만 코드 확인 가능
-- 🔒 **수정 방지**: 자동 생성 코드는 수정/삭제 제한
-- 🔒 **사용 추적**: 사용 횟수 및 만료일 관리
-- 🔒 **안전한 생성**: `secrets` 모듈로 암호학적으로 안전한 코드 생성
-
-### 동작 예시
-
-#### 시나리오 1: 사용 즉시 자동 변경
-```
-12:00 - 코드: "ABC12345"
-12:30 - 사용자가 "ABC12345"로 가입 → 성공
-12:30 - 즉시 코드 변경: "ABC12345" → "XYZ78901"
-13:00 - 다른 사용자가 "ABC12345"로 가입 시도 → 실패 (코드가 이미 변경됨)
-```
-
-#### 시나리오 2: 미사용 시 시간 기반 변경
-```
-12:00 - 코드: "ABC12345"
-18:00 - 아직 사용되지 않음
-24:00 - 12시간 경과, 코드 변경: "ABC12345" → "DEF45678"
-```
-
-## 🗄️ 데이터베이스 모델
-
-### 교통 데이터 모델
-- **Intersection**: 교차로 정보 (이름, 위도, 경도)
-- **TrafficVolume**: 교차로별 통행량 데이터 (방향별, 시간별)
-- **TotalTrafficVolume**: 교차로별 총 통행량 및 평균 속도
-- **Incident**: 교통사고 및 사건 정보
-
-### 사용자 관리 모델
-- **User**: 사용자 정보 (역할: operator/admin)
-- **AdminCode**: 관리자 코드 시스템
-
-## 🎯 주요 기능
-
-### 프론트엔드 기능
-- 🗺️ **Google Maps 통합**: 실시간 지도 표시 및 교차로 마커
-- 📊 **교통 분석 대시보드**: 
-  - 단순 교차로 뷰
-  - 교차로 간 통행량 분석 뷰
-  - 교통사고 관리 뷰
-- 📈 **실시간 차트**: Recharts를 활용한 교통 데이터 시각화
-- 🔍 **검색 및 필터링**: 교차로 및 사고 데이터 검색
-- ⭐ **즐겨찾기 기능**: 자주 사용하는 교차로 저장
-- 📅 **날짜/시간 선택**: 특정 시점의 교통 데이터 조회
-- 🔐 **JWT 인증**: 안전한 사용자 인증 시스템
-
-### 백엔드 기능
-- 🔌 **RESTful API**: Django Ninja 기반 고성능 API
-- 🔐 **JWT 인증**: 안전한 토큰 기반 인증
-- 📊 **데이터 분석**: 교차로 간 통행량 분석
-- 🗄️ **데이터베이스 관리**: SQLite (개발) / MySQL (프로덕션)
-- 🔄 **자동 코드 관리**: 관리자 코드 자동 생성 및 갱신
-
-## 🛠️ 개발 환경 설정
-
-### 백엔드 (Django)
-```bash
-cd django-react-backend-api-ifro/src
-
-# 가상환경 생성 (권장)
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 의존성 설치
-pip install -r ../requirements.txt
-
-# 데이터베이스 마이그레이션
-python manage.py makemigrations
-python manage.py migrate
-
-# 개발 서버 실행
-python manage.py runserver
-```
-
-### 프론트엔드 (React)
-```bash
-cd django-react-frontend-ifro
-
-# 의존성 설치
-npm install
-
-# 개발 서버 실행
-npm start
-```
-
-## 📝 API 엔드포인트
-
-### 인증 관련
-- `POST /api/user_auth/register` - 회원가입 (관리자 코드 필요)
-- `POST /api/user_auth/login` - 로그인
-- `POST /api/user_auth/refresh` - 토큰 갱신
-
-### 교통 데이터
-- `GET /api/traffic/intersections` - 교차로 목록
-- `GET /api/traffic/intersections/{id}/traffic-stat` - 교차로별 교통 통계
-- `GET /api/traffic/incidents` - 교통사고 목록
-- `GET /api/traffic/incidents/{id}` - 교통사고 상세 정보
-
-## 🔧 기술 스택
-
-### Backend
-- **Framework**: Django 4.x
-- **API**: Django Ninja (FastAPI 스타일)
-- **Authentication**: Django Ninja JWT
-- **Database**: SQLite (개발), MySQL (프로덕션)
-- **Data Processing**: NumPy, Pandas
-- **CORS**: django-cors-headers
-
-### Frontend
-- **Framework**: React 19.x
-- **Language**: TypeScript 4.x
-- **Styling**: Tailwind CSS 3.x
-- **UI Components**: Radix UI, shadcn/ui
-- **Maps**: Google Maps API, Leaflet
-- **Charts**: Recharts
-- **HTTP Client**: Axios
-- **State Management**: React Query (TanStack Query)
-- **Routing**: React Router DOM 7.x
-
-### Development Tools
-- **Package Manager**: npm
-- **Build Tool**: Create React App
-- **Code Quality**: ESLint, TypeScript
-- **Version Control**: Git
-
-## 🚀 배포
-
-### 환경 변수 설정
-```bash
-# Backend (.env)
-DEBUG=False
-SECRET_KEY=your-secret-key
-DATABASE_URL=mysql://user:password@localhost/ifro_db
-ALLOWED_HOSTS=your-domain.com
-
-# Frontend (.env)
-REACT_APP_API_URL=http://localhost:8000/api
-REACT_APP_GOOGLE_MAPS_API_KEY=your-google-maps-api-key
-```
-
-### 프로덕션 빌드
-```bash
-# Frontend 빌드
-cd django-react-frontend-ifro
-npm run build
-
-# Backend 설정
-cd django-react-backend-api-ifro/src
-python manage.py collectstatic
-python manage.py migrate
-```
-
-## 📊 데이터 시각화
-
-### 지원하는 차트 타입
-- 📈 **라인 차트**: 시간별 교통량 변화
-- 📊 **바 차트**: 교차로별 통행량 비교
-- 🥧 **파이 차트**: 방향별 교통량 분포
-- 📉 **지역 차트**: 교차로 간 통행량 흐름
-
-### 지도 기능
-- 🗺️ **Google Maps**: 고성능 지도 렌더링
-- 📍 **교차로 마커**: 클릭 가능한 교차로 표시
-- 🚨 **사고 마커**: 교통사고 위치 표시
-- 🔗 **연결선**: 교차로 간 통행량 흐름 시각화
-
-## 🤖 PDF QA 챗봇 시스템
-
-### 개요
-PDF QA 챗봇 시스템은 문서 기반 질의응답을 제공하는 AI 시스템입니다. Dual Pipeline 아키텍처를 사용하여 문서 검색과 SQL 질의를 통합한 하이브리드 답변을 생성합니다.
-
-### 주요 기능
-- 📄 **PDF 문서 처리**: 다양한 PDF 형식 지원
-- 🔍 **벡터 검색**: 의미 기반 문서 검색
-- 💬 **대화 컨텍스트**: 이전 대화 기반 연속성 유지
-- 🗄️ **SQL 생성**: 데이터베이스 스키마 기반 SQL 쿼리 생성
-- 🔄 **Dual Pipeline**: 문서 검색 + SQL 질의 통합
-- 📊 **평가 시스템**: 답변 품질 자동 평가
-
-### 챗봇 서비스 실행
-
-#### 1. Docker Compose로 전체 서비스 실행
-```bash
-# 모든 서비스 실행 (백엔드, 프론트엔드, 챗봇)
-docker-compose up --build
-
-# 챗봇 서비스만 실행
-docker-compose up --build chatbot
-```
-
-#### 2. 스크립트로 챗봇 서비스만 실행
-```bash
-# Linux/Mac
-./start_chatbot.sh
-
-# Windows PowerShell
-.\start_chatbot.ps1
-```
-
-#### 3. 수동으로 챗봇 서비스 실행
-```bash
-cd chatBot_mk.1
-docker build -t chatbot .
-docker run -p 8008:8008 chatbot
-```
-
-### 챗봇 API 엔드포인트
-
-#### 기본 엔드포인트
-- `GET /` - 서버 상태 확인
-- `GET /docs` - API 문서 (Swagger UI)
-- `GET /health` - 헬스 체크
-
-#### PDF 관련
-- `POST /upload-pdf` - PDF 파일 업로드
-- `GET /pdfs` - 등록된 PDF 목록
-- `DELETE /pdfs/{pdf_id}` - PDF 삭제
-
-#### 질의응답
-- `POST /ask` - 질문하기
-- `POST /ask-with-context` - 대화 컨텍스트와 함께 질문
-- `GET /conversation-history` - 대화 기록 조회
-
-#### 시스템 관리
-- `GET /system-status` - 시스템 상태 확인
-- `POST /update-model-config` - 모델 설정 변경
-- `POST /evaluate-answers` - 답변 품질 평가
-
-### 접속 정보
-- **서버 주소**: http://localhost:8008
-- **API 문서**: http://localhost:8008/docs
-- **헬스 체크**: http://localhost:8008/health
-
-### 환경 변수 설정
-```bash
-# 챗봇 서비스 환경 변수
-MODEL_TYPE=ollama                    # 모델 타입 (ollama/huggingface/llama_cpp)
-MODEL_NAME=mistral:latest           # 모델 이름
-EMBEDDING_MODEL=jhgan/ko-sroberta-multitask  # 임베딩 모델
-```
-
-## 🔒 보안 고려사항
-
-### 인증 및 권한
-- JWT 토큰 기반 인증
-- 역할 기반 접근 제어 (Operator/Admin)
-- 관리자 코드 시스템으로 가입 제한
-
-### 데이터 보안
-- HTTPS 통신 강제
-- CORS 설정으로 허용된 도메인만 접근
-- 민감한 데이터 암호화 저장
+**개발팀**: IFRO_SEJONG Team  
+**최종 업데이트**: 2024년 12월  
+**버전**: 2.0.0

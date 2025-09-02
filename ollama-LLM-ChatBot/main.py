@@ -1,829 +1,556 @@
 #!/usr/bin/env python3
 """
-PDF QA 시스템 메인 실행 파일
+로컬 테스트용 챗봇 메인 스크립트
 
-이 파일은 PDF QA 시스템의 전체 파이프라인을 실행하고 관리하는
-메인 엔트리포인트입니다.
+사용자가 질문을 입력하면 답변과 로그가 출력되는 방식으로 구현
 """
 
-import argparse
-import sys
 import os
-import logging
+import sys
 import time
+import logging
+import warnings
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
+import subprocess
+import requests
 
 # 프로젝트 루트 디렉토리를 Python 경로에 추가
-sys.path.append(str(Path(__file__).parent))
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
 
-# 핵심 모듈들 임포트
-from core.pdf_processor import PDFProcessor
-from core.vector_store import HybridVectorStore
-from core.question_analyzer import QuestionAnalyzer
-from core.answer_generator import AnswerGenerator, ModelType, GenerationConfig
-from core.sql_generator import SQLGenerator, DatabaseSchema
-from core.query_router import QueryRouter
-from core.sql_element_extractor import SQLElementExtractor
-from core.time_based_query_handler import TimeBasedQueryHandler
-from core.data_analysis_generator import DataAnalysisGenerator
-from core.real_database_executor import RealDatabaseExecutor
-from api.endpoints import app
-import uvicorn
-from utils.file_manager import PDFFileManager, setup_pdf_storage
-from utils.chatbot_logger import chatbot_logger, QuestionType
-from core.fast_cache import initialize_instant_answers
-
-# 로깅 설정
+# 로깅 설정 - 가독성 개선
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
     handlers=[
-        logging.FileHandler('pdf_qa_system.log'),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(current_dir / "logs" / "local_test.log", encoding='utf-8')
     ]
 )
 
+# 불필요한 경고/로그 레벨 조정
+warnings.filterwarnings("ignore", message="Failed to load image Python extension")
+warnings.filterwarnings("ignore", category=UserWarning, module=r"torchvision\\.io\\.image")
+logging.getLogger('faiss.loader').setLevel(logging.WARNING)
+logging.getLogger('torchvision').setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
+logging.getLogger('matplotlib').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('requests').setLevel(logging.WARNING)
+logging.getLogger('chromadb').setLevel(logging.WARNING)
+logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
-class PDFQASystem:
-    """
-    PDF QA 시스템 메인 클래스
-    
-    전체 시스템의 초기화, 설정, 실행을 담당합니다.
-    """
-    
-    def __init__(self, 
-                 model_type: str = "ollama",
-                 model_name: str = "qwen2:1.5b",
-                 embedding_model: str = "jhgan/ko-sroberta-multitask"):
-        """
-        시스템 초기화
-        
-        Args:
-            model_type: 사용할 LLM 타입 (ollama/huggingface/llama_cpp)
-            model_name: 모델 이름
-            embedding_model: 임베딩 모델 이름
-        """
-        self.model_type = ModelType(model_type)
-        self.model_name = model_name
-        self.embedding_model = embedding_model
-        
-        # 컴포넌트들
-        self.pdf_processor: Optional[PDFProcessor] = None
-        self.vector_store: Optional[HybridVectorStore] = None
-        self.question_analyzer: Optional[QuestionAnalyzer] = None
-        self.answer_generator: Optional[AnswerGenerator] = None
-        self.sql_generator: Optional[SQLGenerator] = None
-        self.query_router: Optional[QueryRouter] = None
-        self.sql_element_extractor: Optional[SQLElementExtractor] = None
-        self.file_manager: Optional[PDFFileManager] = None
-        
-        logger.info(f"PDF QA 시스템 초기화: {model_type}/{model_name}")
-        logger.info("챗봇 로깅 시스템이 활성화되었습니다.")
-    
-    def initialize_components(self) -> bool:
-        """
-        시스템 컴포넌트들 초기화 (최적화 버전)
-        
-        Returns:
-            초기화 성공 여부
-        """
-        try:
-            logger.info("컴포넌트 초기화 시작...")
-            
-            # 1. PDF 프로세서 초기화
-            self.pdf_processor = PDFProcessor(
-                embedding_model=self.embedding_model
-            )
-            logger.info("✓ PDF 프로세서 초기화 완료")
-            
-            # 2. 벡터 저장소 초기화
-            self.vector_store = HybridVectorStore()
-            
-            # 기존 벡터 데이터 로드 시도
-            vector_store_path = "./vector_store"
-            if os.path.exists(vector_store_path):
-                try:
-                    self.vector_store.load(vector_store_path)
-                    logger.info("✓ 기존 벡터 저장소 데이터 로드 완료")
-                except Exception as e:
-                    logger.warning(f"벡터 저장소 로드 실패 (새 저장소 생성): {e}")
-            
-            logger.info("✓ 벡터 저장소 초기화 완료")
-            
-            # 3. 질문 분석기 초기화
-            logger.info("질문 분석기 초기화 중...")
-            self.question_analyzer = QuestionAnalyzer(
-                embedding_model=self.embedding_model
-            )
-            logger.info("✓ 질문 분석기 초기화 완료")
-            
-            # 4. 답변 생성기 초기화
-            config = GenerationConfig(
-                max_length=512,
-                temperature=0.7,
-                top_p=0.9
-            )
-            
-            self.answer_generator = AnswerGenerator(
-                model_name=self.model_name
-            )
-            
-            # 모델 로드
-            if not self.answer_generator.load_model():
-                logger.warning("답변 생성 모델 로드 실패 - PDF 처리만 진행합니다")
-                # 모델 로드 실패해도 PDF 처리는 계속 진행
-            
-            logger.info("✓ 답변 생성기 초기화 완료")
-            
-            # 5. 평가기 초기화 (임시 비활성화)
-            # self.evaluator = PDFQAEvaluator(
-            #     embedding_model=self.embedding_model
-            # )
-            # logger.info("✓ 평가기 초기화 완료")
-            
-            # 6. SQL 생성기 초기화 (SQLCoder 모델 자동 다운로드 포함)
-            logger.info("SQL 생성기 초기화 중... (SQLCoder 모델 자동 다운로드)")
-            self.sql_generator = SQLGenerator()
-            logger.info("✓ SQL 생성기 초기화 완료 (SQLCoder 모델 준비됨)")
-            
-            # 7. Dual Pipeline 처리기 초기화 (임시 비활성화)
-            # 샘플 데이터베이스 스키마 설정
-            # sample_schema = DatabaseSchema(
-            #     table_name="users",
-            #     columns=[
-            #         {"name": "id", "type": "INTEGER", "description": "사용자 ID"},
-            #         {"name": "name", "type": "TEXT", "description": "사용자 이름"},
-            #         {"name": "email", "type": "TEXT", "description": "이메일"},
-            #         {"name": "created_at", "type": "DATETIME", "description": "가입일"},
-            #         {"name": "status", "type": "TEXT", "description": "상태"}
-            #     ],
-            #     primary_key="id",
-            #     sample_data=[
-            #         {"id": 1, "name": "김철수", "email": "kim@example.com", "created_at": "2023-01-01", "status": "active"},
-            #         {"id": 2, "name": "이영희", "email": "lee@example.com", "created_at": "2023-02-15", "status": "active"}
-            #     ]
-            # )
-            
-            # self.dual_pipeline_processor = DualPipelineProcessor(
-            #     question_analyzer=self.question_analyzer,
-            #     answer_generator=self.answer_generator,
-            #     sql_generator=self.sql_generator,
-            #     vector_store=self.vector_store,
-            #     database_schema=sample_schema
-            # )
-            # logger.info("✓ Dual Pipeline 처리기 초기화 완료")
-            
-            # 8. 파일 매니저 초기화
-            self.file_manager = setup_pdf_storage()
-            logger.info("✓ 파일 매니저 초기화 완료")
+# 로그 디렉토리 생성
+log_dir = current_dir / "logs"
+log_dir.mkdir(exist_ok=True)
 
-            # 11. 키워드 향상기 초기화 (임시 비활성화)
-            # self.keyword_enhancer = KeywordEnhancer(domain="traffic")
-            # logger.info("✓ 키워드 향상기 초기화 완료 (다중 표현 지원)")
-            
-            # 10. data 폴더의 PDF 파일들 자동 처리
-            logger.info("=" * 60)
-            logger.info("data 폴더의 PDF 파일들을 벡터 저장소에 업로드합니다...")
-            logger.info("=" * 60)
-            self.process_data_folder_pdfs()
-            logger.info("=" * 60)
-            logger.info("PDF 업로드 완료!")
-            logger.info("=" * 60)
-            
-            # 11. 다중 표현 인덱싱 통합 (임시 비활성화)
-            # self._integrate_multi_expression_indexing()
-            
-            logger.info("모든 컴포넌트 초기화 완료!")
+def ensure_qwen_ollama_model() -> bool:
+    """Ollama에서 Qwen 모델 사용 가능 여부 확인"""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    model_name = os.getenv("MODEL_NAME", "qwen2:1.5b-instruct-q4_K_M")
+    try:
+        # Ollama 서버 헬스 체크
+        r = requests.get(f"{base_url}/api/tags", timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        tags = [t.get("name") for t in data.get("models", []) if t.get("name")]
+        if model_name in tags:
+            logger.info(f"Qwen(Ollama) 모델 확인 성공: {model_name}")
             return True
-            
-        except Exception as e:
-            logger.error(f"컴포넌트 초기화 실패: {e}")
-            return False
+        logger.warning(f"Qwen 모델이 아직 없습니다: {model_name}. ollama pull 필요")
+        return False
+    except Exception as e:
+        logger.error(f"Ollama 연결 실패: {e}")
+        return False
+
+# 핵심 모듈들 임포트
+try:
+    from core.document.pdf_processor import PDFProcessor, TextChunk
+    from core.document.vector_store import HybridVectorStore, VectorStoreInterface
+    from core.query.question_analyzer import QuestionAnalyzer, AnalyzedQuestion
+    from core.llm.answer_generator import AnswerGenerator, Answer
+    from core.database.sql_generator import SQLGenerator, DatabaseSchema, SQLQuery
+    from core.query.query_router import QueryRouter, QueryRoute
+    from core.query.llm_greeting_handler import GreetingHandler
+    from utils.chatbot_logger import chatbot_logger, QuestionType, ProcessingStep
     
-    def _integrate_multi_expression_indexing(self):
-        """다중 표현 인덱싱 통합"""
+    logger.info("[SUCCESS] 모든 핵심 모듈 import 성공")
+    
+except ImportError as e:
+    logger.error(f"[ERROR] 모듈 import 실패: {e}")
+    sys.exit(1)
+
+class LocalChatbot:
+    """로컬 테스트용 챗봇 클래스"""
+    
+    def __init__(self):
+        """초기화"""
+        logger.info("로컬 챗봇 초기화 시작...")
+        
         try:
-            # Dual Pipeline 프로세서에 표현 향상기 연결
-            if hasattr(self.dual_pipeline_processor, 'expression_enhancer'):
-                self.dual_pipeline_processor.expression_enhancer = self.keyword_enhancer
+            # 컴포넌트들 초기화
+            self.pdf_processor = PDFProcessor()
+            self.vector_store = HybridVectorStore()
+            self.question_analyzer = QuestionAnalyzer()
+            # Ollama(Qwen)만 사용할 경우 프리로드 불필요
+            self.answer_generator = AnswerGenerator(preload_models=False)
+            self.sql_generator = SQLGenerator()
+            self.query_router = QueryRouter()
+            self.llm_greeting_handler = GreetingHandler(self.answer_generator)
             
-            # 벡터 저장소에 표현 향상기 연결
-            if hasattr(self.vector_store, 'expression_enhancer'):
-                self.vector_store.expression_enhancer = self.keyword_enhancer
+            logger.info("모든 컴포넌트 초기화 완료")
             
-            logger.info("✓ 다중 표현 인덱싱 통합 완료")
-            
-        except Exception as e:
-            logger.warning(f"다중 표현 인덱싱 통합 실패 (무시됨): {e}")
-    
-    def process_data_folder_pdfs(self):
-        """data 폴더의 모든 PDF 파일들을 자동으로 처리"""
-        # data 폴더와 data/pdfs 폴더 모두 확인
-        data_folders = ["./data", "./data/pdfs"]
-        pdf_files = []
-        
-        for data_folder in data_folders:
-            if not os.path.exists(data_folder):
-                logger.warning(f"{data_folder} 폴더가 존재하지 않습니다.")
-                continue
-            
-            # 재귀적으로 PDF 파일 찾기
-            for root, dirs, files in os.walk(data_folder):
-                for file in files:
-                    if file.lower().endswith('.pdf'):
-                        pdf_path = os.path.join(root, file)
-                        pdf_files.append(pdf_path)
-        
-        if not pdf_files:
-            logger.info("data 폴더에서 PDF 파일을 찾을 수 없습니다.")
-            return
-        
-        logger.info(f"data 폴더에서 {len(pdf_files)}개의 PDF 파일을 발견했습니다.")
-        
-        processed_count = 0
-        skipped_count = 0
-        error_count = 0
-        
-        for pdf_path in pdf_files:
+            # 기존 PDF 문서 로드
             try:
-                # 이미 처리된 PDF인지 확인
-                pdf_id = os.path.basename(pdf_path)
-                if self.is_pdf_already_processed(pdf_id):
-                    logger.info(f"이미 처리된 PDF 건너뛰기: {pdf_id}")
-                    skipped_count += 1
-                    continue
+                existing_pdfs = self.vector_store.get_all_pdfs()
+                total_chunks = self.vector_store.get_total_chunks()
                 
-                logger.info(f"PDF 처리 중: {pdf_id}")
-                result = self.process_pdf(pdf_path)
-                logger.info(f"✓ PDF 처리 완료: {result['filename']} ({result['total_chunks']}개 청크)")
-                processed_count += 1
+                logger.info(f"기존 PDF 문서 {len(existing_pdfs)}개 로드됨 (총 청크 수: {total_chunks})")
                 
+                if existing_pdfs:
+                    for pdf_info in existing_pdfs:
+                        logger.info(f"  - {pdf_info['filename']} ({pdf_info['total_chunks']}개 청크)")
+                else:
+                    logger.info("  기존 PDF 문서가 없습니다.")
+                    
             except Exception as e:
-                logger.error(f"PDF 처리 실패 {pdf_path}: {e}")
-                error_count += 1
-        
-        logger.info(f"PDF 처리 완료: {processed_count}개 처리됨, {skipped_count}개 건너뜀, {error_count}개 오류")
-    
-    def is_pdf_already_processed(self, pdf_id: str) -> bool:
-        """PDF가 이미 처리되었는지 확인"""
-        try:
-            if not self.vector_store:
-                return False
-            
-            # 벡터 저장소에서 해당 PDF의 청크들이 있는지 확인
-            # 메타데이터에서 파일명으로 검색
-            if hasattr(self.vector_store, 'search_by_metadata'):
-                results = self.vector_store.search_by_metadata(
-                    {"filename": pdf_id}, 
-                    limit=1
-                )
-                return len(results) > 0
-            
-            # 기본 검색으로 확인
-            if hasattr(self.vector_store, 'search'):
-                # PDF ID로 직접 확인하는 방법 사용
-                try:
-                    # 벡터 저장소에 청크가 있는지 확인
-                    all_chunks = self.vector_store.get_all_chunks()
-                    for chunks in all_chunks:
-                        for chunk in chunks:
-                            if chunk.pdf_id == pdf_id:
-                                return True
-                    return False
-                except Exception:
-                    return False
-            
-            return False
-        except Exception as e:
-            logger.warning(f"PDF 처리 상태 확인 실패 ({pdf_id}): {e}")
-            return False
-    
-    def process_pdf(self, pdf_path: str) -> Dict:
-        """
-        PDF 파일 처리
-        
-        Args:
-            pdf_path: PDF 파일 경로
-            
-        Returns:
-            처리 결과
-        """
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {pdf_path}")
-        
-        logger.info(f"PDF 처리 시작: {pdf_path}")
-        start_time = time.time()
-        
-        try:
-            # 1. PDF 텍스트 추출 및 임베딩 생성
-            chunks, metadata = self.pdf_processor.process_pdf(pdf_path)
-            
-            # 2. 벡터 저장소에 추가
-            self.vector_store.add_chunks(chunks)
-            
-            # 3. 저장소 저장
-            self.vector_store.save()
-            
-            processing_time = time.time() - start_time
-            
-            result = {
-                "pdf_id": metadata["pdf_id"],
-                "filename": os.path.basename(pdf_path),
-                "total_chunks": len(chunks),
-                "total_pages": metadata.get("pages", 0),
-                "processing_time": processing_time,
-                "extraction_methods": metadata.get("extraction_method", [])
-            }
-            
-            logger.info(f"PDF 처리 완료: {len(chunks)}개 청크, {processing_time:.2f}초")
-            return result
+                logger.warning(f"기존 PDF 로드 실패: {e}")
             
         except Exception as e:
-            logger.error(f"PDF 처리 실패: {e}")
+            logger.error(f"챗봇 초기화 실패: {e}")
             raise
     
-    def ask_question(self, 
-                    question: str, 
-                    use_context: bool = True,
-                    max_chunks: int = 5) -> Dict:
+    def reset_and_regenerate_chunks(self):
+        """청크 초기화 및 재생성"""
+        try:
+            print("1단계: 기존 청크 초기화...")
+            
+            # 기존 청크 수 확인
+            total_chunks = self.vector_store.get_total_chunks()
+            print(f"   기존 청크 수: {total_chunks}")
+            
+            # 벡터 저장소 초기화
+            self.vector_store.clear()
+            print("   벡터 저장소 초기화 완료")
+            
+            # 기존 PDF 파일들 찾기
+            print("\n2단계: PDF 파일 스캔...")
+            pdf_files = self._find_pdf_files()
+            print(f"   발견된 PDF 파일: {len(pdf_files)}개")
+            
+            if not pdf_files:
+                print("   PDF 파일이 없습니다. data/pdfs 폴더에 PDF 파일을 추가해주세요.")
+                return
+            
+            # PDF 파일별로 청크 재생성
+            print("\n3단계: 청크 재생성...")
+            total_new_chunks = 0
+            
+            for pdf_file in pdf_files:
+                try:
+                    print(f"   처리 중: {pdf_file}")
+                    
+                    # PDF 처리
+                    chunks = self.pdf_processor.process_pdf(pdf_file)
+                    
+                    if chunks:
+                        # 벡터 저장소에 추가
+                        self.vector_store.add_chunks(chunks)
+                        total_new_chunks += len(chunks)
+                        print(f"     → {len(chunks)}개 청크 생성 완료")
+                    else:
+                        print(f"     → 청크 생성 실패")
+                        
+                except Exception as e:
+                    print(f"     → 오류: {e}")
+                    continue
+            
+            print(f"\n청크 재생성 완료!")
+            print(f"   총 생성된 청크: {total_new_chunks}개")
+            print(f"   현재 총 청크: {self.vector_store.get_total_chunks()}개")
+            
+        except Exception as e:
+            print(f"청크 초기화 및 재생성 실패: {e}")
+            raise
+    
+    def _find_pdf_files(self) -> List[str]:
+        """PDF 파일들 찾기"""
+        pdf_files = []
+        
+        # data/pdfs 폴더 확인
+        pdf_dir = Path(__file__).parent / "data" / "pdfs"
+        if pdf_dir.exists():
+            pdf_files.extend([str(f) for f in pdf_dir.glob("*.pdf")])
+        
+        # data 폴더 직접 확인
+        data_dir = Path(__file__).parent / "data"
+        if data_dir.exists():
+            pdf_files.extend([str(f) for f in data_dir.glob("*.pdf")])
+        
+        return pdf_files
+    def process_question(self, question: str) -> dict:
         """
-        질문에 대한 답변 생성
+        질문 처리
         
         Args:
             question: 사용자 질문
-            use_context: 이전 대화 컨텍스트 사용 여부
-            max_chunks: 검색할 최대 청크 수
             
         Returns:
-            답변 결과
+            처리 결과 딕셔너리
         """
-        logger.info(f"질문 처리: {question}")
-        total_start_time = time.time()
+        start_time = time.time()
+        session_id = None
         
         try:
-            # 1. 질문 분석
-            analysis_start = time.time()
-            analyzed_question = self.question_analyzer.analyze_question(
-                question, use_conversation_context=use_context
-            )
-            analysis_time = time.time() - analysis_start
-            print(f"⏱️  질문 분석: {analysis_time:.2f}초")
+            logger.info(f"질문 처리 시작: {question}")
             
-            # 2. 관련 문서 검색
-            search_start = time.time()
+            # 단계별 로그 시작
+            if chatbot_logger:
+                session_id = chatbot_logger._generate_session_id()
+                chatbot_logger.log_step(session_id, ProcessingStep.START, 0.0, f"질문: {question[:50]}...")
+            
+            # 1. SBERT 기반 쿼리 라우팅
+            routing_start = time.time()
+            route_result = self.query_router.route_query(question)
+            routing_time = time.time() - routing_start
+            
+            logger.info(f"라우팅 결과: {route_result.route.value} (신뢰도: {route_result.confidence:.3f})")
+            
+            if chatbot_logger and session_id:
+                chatbot_logger.log_step(
+                    session_id, 
+                    ProcessingStep.SBERT_ROUTING, 
+                    routing_time, 
+                    f"라우팅결과: {route_result.route.value} (신뢰도: {route_result.confidence:.3f})"
+                )
+            
+            # 2. 인사말 처리
+            if route_result.route == QueryRoute.GREETING:
+                logger.info("인사말 처리 시작")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.GREETING_PIPELINE, 0.0, "인사말 처리 시작")
+                
+                greeting_response = self.llm_greeting_handler.get_greeting_response(question)
+                
+                logger.info(f"인사말 응답: {greeting_response['answer']}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.COMPLETION, greeting_response["generation_time"], "인사말 처리 완료")
+                
+                return {
+                    'success': True,
+                    'answer': greeting_response['answer'],
+                    'confidence_score': greeting_response['confidence_score'],
+                    'question_type': 'greeting',
+                    'processing_time': greeting_response['generation_time'],
+                    'route': route_result.route.value,
+                    'sql_query': None,
+                    'used_chunks': []
+                }
+            
+            # 3. SQL 쿼리 처리
+            if route_result.route == QueryRoute.SQL_QUERY:
+                logger.info("SQL 쿼리 처리 시작")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.SQL_PIPELINE, 0.0, "SQL 파이프라인 시작")
+                
+                # 기본 스키마 정의
+                schema = DatabaseSchema(
+                    table_name="traffic_intersection",
+                    columns=[
+                        {"name": "id", "type": "INT", "description": "고유 식별자"},
+                        {"name": "name", "type": "VARCHAR(255)", "description": "교차로 이름"},
+                        {"name": "location", "type": "VARCHAR(255)", "description": "위치"},
+                        {"name": "latitude", "type": "DECIMAL(10,8)", "description": "위도"},
+                        {"name": "longitude", "type": "DECIMAL(11,8)", "description": "경도"}
+                    ]
+                )
+                
+                # SQL 생성
+                sql_start = time.time()
+                sql_query = self.sql_generator.generate_sql(question, schema)
+                sql_time = time.time() - sql_start
+                
+                logger.info(f"생성된 SQL: {sql_query.query}")
+                logger.info(f"SQL 신뢰도: {sql_query.confidence_score}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.SQL_GENERATION, sql_time, f"SQL생성: {sql_query.query}")
+                
+                # SQL 실행 (로그로만 출력)
+                db_start = time.time()
+                db_result = self.sql_generator.execute_sql(sql_query)
+                db_time = time.time() - db_start
+                
+                logger.info(f"데이터베이스 실행 결과: {db_result}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.DATABASE_EXECUTION, db_time, f"DB실행: {len(db_result.get('data', []))}개 행")
+                
+                # LLM 답변 생성
+                answer_start = time.time()
+                answer = self.answer_generator.generate_direct_answer(question)
+                answer_time = time.time() - answer_start
+                
+                logger.info(f"생성된 답변: {answer.content}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.ANSWER_GENERATION, answer_time, "답변생성 완료")
+                
+                total_time = time.time() - start_time
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.COMPLETION, total_time, "SQL 파이프라인 완료")
+                
+                return {
+                    'success': True,
+                    'answer': answer.content,
+                    'confidence_score': answer.confidence,
+                    'question_type': 'sql',
+                    'processing_time': total_time,
+                    'route': route_result.route.value,
+                    'sql_query': sql_query.query,
+                    'sql_confidence': sql_query.confidence_score,
+                    'db_result': db_result,
+                    'used_chunks': []
+                }
+            
+            # 4. PDF 검색 처리
+            if route_result.route == QueryRoute.PDF_SEARCH:
+                logger.info("PDF 검색 처리 시작")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.PDF_PIPELINE, 0.0, "PDF 파이프라인 시작")
+                
+                # 질문 분석
+                analysis_start = time.time()
+                analyzed_question = self.question_analyzer.analyze_question(question)
+                analysis_time = time.time() - analysis_start
+                
+                logger.info(f"질문 분석 완료: {analyzed_question.question_type.value}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.QUESTION_ANALYSIS, analysis_time, f"질문분석: {analyzed_question.question_type.value}")
+                
+                # 벡터 검색
+                search_start = time.time()
+                total_chunks = self.vector_store.get_total_chunks()
+                logger.info(f"벡터 스토어 상태 - 총 청크 수: {total_chunks}")
+                
+                if total_chunks == 0:
+                    logger.warning("벡터 스토어에 청크가 없습니다!")
+                    return {
+                        'success': False,
+                        'answer': "죄송합니다. 현재 문서 데이터베이스가 비어있습니다. PDF 문서를 먼저 업로드해주세요.",
+                        'confidence_score': 0.0,
+                        'question_type': 'error',
+                        'processing_time': time.time() - start_time,
+                        'route': route_result.route.value,
+                        'sql_query': None,
+                        'used_chunks': []
+                    }
+                
+                relevant_chunks = self.vector_store.search(
+                    analyzed_question.embedding,
+                    top_k=10,
+                    similarity_threshold=0.05
+                )
+                search_time = time.time() - search_start
+                
+                logger.info(f"검색된 청크 수: {len(relevant_chunks)}")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.VECTOR_SEARCH, search_time, f"벡터검색: {len(relevant_chunks)}개 청크 발견")
+                
+                # 답변 생성
+                answer_start = time.time()
+                if relevant_chunks:
+                    chunks = [chunk for chunk, score in relevant_chunks]
+                    logger.info(f"🔍 컨텍스트 기반 답변 생성 시작 ({len(chunks)}개 청크 사용)")
+                    answer = self.answer_generator.generate_context_answer(question, chunks)
+                else:
+                    logger.info("🔍 직접 답변 생성 시작 (컨텍스트 없음)")
+                    answer = self.answer_generator.generate_direct_answer(question)
+                
+                answer_time = time.time() - answer_start
+                
+                logger.info(f"✅ 답변 생성 완료 (소요시간: {answer_time:.2f}초)")
+                logger.info(f"📝 생성된 답변: {answer.content[:100]}...")
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.ANSWER_GENERATION, answer_time, "답변생성 완료")
+                
+                total_time = time.time() - start_time
+                
+                if chatbot_logger and session_id:
+                    chatbot_logger.log_step(session_id, ProcessingStep.COMPLETION, total_time, "PDF 파이프라인 완료")
+                
+                return {
+                    'success': True,
+                    'answer': answer.content,
+                    'confidence_score': answer.confidence,
+                    'question_type': 'pdf',
+                    'processing_time': total_time,
+                    'route': route_result.route.value,
+                    'sql_query': None,
+                    'used_chunks': [chunk.chunk_id for chunk in answer.sources] if answer.sources else []
+                }
+            
+            # 5. 기본 처리 (PDF 검색으로 폴백)
+            logger.info("기본 처리 (PDF 검색으로 폴백)")
+            
+            # 질문 분석
+            analyzed_question = self.question_analyzer.analyze_question(question)
+            
+            # 벡터 검색
             relevant_chunks = self.vector_store.search(
                 analyzed_question.embedding,
-                top_k=max_chunks
+                top_k=10,
+                similarity_threshold=0.05
             )
-            search_time = time.time() - search_start
-            print(f"⏱️  문서 검색: {search_time:.2f}초 (찾은 청크: {len(relevant_chunks)}개)")
             
-            if not relevant_chunks:
-                total_time = time.time() - total_start_time
-                print(f"⏱️  총 처리 시간: {total_time:.2f}초")
-                return {
-                    "answer": "관련된 정보를 찾을 수 없습니다. 다른 질문을 시도해보세요.",
-                    "confidence_score": 0.0,
-                    "question_type": analyzed_question.question_type.value,
-                    "used_chunks": [],
-                    "processing_time": total_time
-                }
+            # 답변 생성
+            if relevant_chunks:
+                chunks = [chunk for chunk, score in relevant_chunks]
+                answer = self.answer_generator.generate_context_answer(question, chunks)
+            else:
+                answer = self.answer_generator.generate_direct_answer(question)
             
-            # 3. 대화 기록 가져오기
-            context_start = time.time()
-            conversation_history = None
-            if use_context:
-                conversation_history = self.question_analyzer.get_conversation_context(3)
-            context_time = time.time() - context_start
-            print(f"⏱️  대화 컨텍스트: {context_time:.2f}초")
-            
-            # 4. 답변 생성 (가장 오래 걸리는 부분)
-            generation_start = time.time()
-            answer = self.answer_generator.generate_answer(
-                analyzed_question,
-                relevant_chunks,
-                conversation_history
-            )
-            generation_time = time.time() - generation_start
-            print(f"⏱️  답변 생성: {generation_time:.2f}초 (LLM 추론)")
-            
-            # 5. 대화 기록에 추가
-            history_start = time.time()
-            self.question_analyzer.add_conversation_item(
-                question,
-                answer.content,
-                answer.used_chunks,
-                answer.confidence_score
-            )
-            history_time = time.time() - history_start
-            print(f"⏱️  대화 기록 저장: {history_time:.2f}초")
-            
-            # 6. 로깅
-            logging_start = time.time()
-            try:
-                question_type = QuestionType.PDF if analyzed_question.question_type.value == "pdf" else QuestionType.SQL
-                chatbot_logger.log_question(
-                    user_question=question,
-                    question_type=question_type,
-                    intent=analyzed_question.intent,
-                    keywords=analyzed_question.keywords,
-                    processing_time=generation_time,
-                    confidence_score=answer.confidence_score,
-                    generated_answer=answer.content,
-                    used_chunks=answer.used_chunks,
-                    llm_model_name=answer.model_name
-                )
-            except Exception as log_error:
-                logger.warning(f"로깅 중 오류 발생: {log_error}")
-            logging_time = time.time() - logging_start
-            print(f"⏱️  로깅: {logging_time:.2f}초")
-            
-            total_time = time.time() - total_start_time
-            
-            result = {
-                "answer": answer.content,
-                "confidence_score": answer.confidence_score,
-                "question_type": analyzed_question.question_type.value,
-                "intent": analyzed_question.intent,
-                "keywords": analyzed_question.keywords,
-                "used_chunks": answer.used_chunks,
-                "processing_time": total_time,
-                "llm_model_name": answer.model_name,
-                "timing_breakdown": {
-                    "analysis": analysis_time,
-                    "search": search_time,
-                    "context": context_time,
-                    "generation": generation_time,
-                    "history": history_time,
-                    "logging": logging_time
-                }
-            }
-            
-            print(f"⏱️  총 처리 시간: {total_time:.2f}초")
-            print(f"📊 시간 분포: 분석({analysis_time/total_time*100:.1f}%) | 검색({search_time/total_time*100:.1f}%) | 생성({generation_time/total_time*100:.1f}%) | 기타({(context_time+history_time+logging_time)/total_time*100:.1f}%)")
-            
-            logger.info(f"답변 생성 완료: {total_time:.2f}초, 신뢰도: {answer.confidence_score:.2f}")
-            
-            return result
-            
-        except Exception as e:
-            total_time = time.time() - total_start_time
-            logger.error(f"질문 처리 실패: {e}")
-            print(f"❌ 오류 발생: {total_time:.2f}초 후 실패")
-            
-            # 오류 로깅
-            try:
-                chatbot_logger.log_error(
-                    user_question=question,
-                    error_message=str(e)
-                )
-            except Exception as log_error:
-                logger.warning(f"오류 로깅 중 문제 발생: {log_error}")
-            
-            raise
-    
-    def interactive_mode(self):
-        """대화형 모드 실행"""
-        print("\n" + "="*60)
-        print("PDF QA 시스템 - 대화형 모드")
-        print("="*60)
-        print("명령어:")
-        print("  - 질문 입력: 자유롭게 질문하세요")
-        print("  - '/clear': 대화 기록 초기화")
-        print("  - '/status': 시스템 상태 조회")
-        print("  - '/pdfs': 저장된 PDF 목록 조회")
-        print("  - '/add <파일경로>': PDF 파일 추가")
-        print("  - '/categories': 사용 가능한 카테고리 조회")
-        print("  - '/performance': 성능 요약 출력")
-        print("  - '/export': 성능 메트릭 내보내기")
-        print("  - '/exit': 프로그램 종료")
-        print("="*60)
-        
-        while True:
-            try:
-                user_input = input("\n질문: ").strip()
-                
-                if not user_input:
-                    continue
-                
-                if user_input == '/exit':
-                    print("프로그램을 종료합니다.")
-                    break
-                elif user_input == '/clear':
-                    self.question_analyzer.clear_conversation_history()
-                    print("대화 기록이 초기화되었습니다.")
-                    continue
-                elif user_input == '/status':
-                    self.show_system_status()
-                    continue
-                elif user_input == '/pdfs':
-                    self.show_pdf_list()
-                    continue
-                elif user_input == '/categories':
-                    self.show_categories()
-                    continue
-                elif user_input == '/performance':
-                    print("성능 모니터링 기능이 비활성화되었습니다.")
-                    continue
-                elif user_input == '/export':
-                    print("성능 메트릭 내보내기 기능이 비활성화되었습니다.")
-                    continue
-                elif user_input.startswith('/add '):
-                    pdf_path = user_input[5:].strip()
-                    self.add_pdf_interactive(pdf_path)
-                    continue
-                
-                # 질문 처리
-                result = self.ask_question(user_input)
-                
-                print(f"\n답변: {result['answer']}")
-                print(f"신뢰도: {result['confidence_score']:.2f}")
-                print(f"질문 유형: {result['question_type']}")
-                print(f"처리 시간: {result['processing_time']:.2f}초")
-                
-                # 분류 결과 출력 (새로운 기능)
-                if 'classification' in result:
-                    classification = result['classification']
-                    print(f"분류 결과: {classification['classification']} (신뢰도: {classification['confidence']:.2f})")
-                    print(f"파이프라인 타입: {result.get('pipeline_type', 'N/A')}")
-                
-            except KeyboardInterrupt:
-                print("\n프로그램을 종료합니다.")
-                break
-            except Exception as e:
-                print(f"\n오류 발생: {e}")
-                logger.error(f"대화형 모드 오류: {e}")
-                continue
-    
-    def show_system_status(self):
-        """시스템 상태 표시"""
-        print("\n시스템 상태:")
-        print(f"- 답변 생성 모델: {self.answer_generator.llm.model_name}")
-        print(f"- 모델 로드 상태: 정상")
-        summary = self.question_analyzer.get_conversation_summary()
-        print(f"- 대화 기록: {summary['total_conversations']}개")
-        
-        # 메모리 사용량
-        try:
-            import psutil
-            process = psutil.Process()
-            memory_mb = process.memory_info().rss / 1024 / 1024
-            print(f"- 메모리 사용량: {memory_mb:.1f}MB")
-        except:
-            pass
-    
-    def show_pdf_list(self):
-        """저장된 PDF 목록 표시"""
-        pdfs = self.file_manager.list_pdfs()
-        
-        if not pdfs:
-            print("\n저장된 PDF 파일이 없습니다.")
-            print("PDF 파일을 추가하려면 '/add <파일경로>' 명령어를 사용하세요.")
-            return
-        
-        print(f"\n저장된 PDF 파일 ({len(pdfs)}개):")
-        print("-" * 60)
-        
-        for i, pdf in enumerate(pdfs, 1):
-            print(f"{i:2d}. {pdf['filename']}")
-            print(f"    카테고리: {pdf['category']}")
-            print(f"    크기: {pdf['size_mb']}MB")
-            print(f"    수정일: {pdf['modified_at'][:19].replace('T', ' ')}")
-            print()
-    
-    def show_categories(self):
-        """사용 가능한 카테고리 표시"""
-        categories = self.file_manager.get_categories()
-        storage_info = self.file_manager.get_storage_info()
-        
-        print(f"\n사용 가능한 카테고리:")
-        for category in categories:
-            category_pdfs = self.file_manager.list_pdfs(category)
-            print(f"  - {category}: {len(category_pdfs)}개 파일")
-        
-        print(f"\n저장소 정보:")
-        print(f"  - 전체 파일 수: {storage_info['total_files']}개")
-        print(f"  - 전체 크기: {storage_info['total_size_mb']}MB")
-        print(f"  - 저장 위치: {storage_info['pdf_directory']}")
-    
-    def add_pdf_interactive(self, pdf_path: str):
-        """대화형 PDF 추가"""
-        try:
-            if not os.path.exists(pdf_path):
-                print(f"파일을 찾을 수 없습니다: {pdf_path}")
-                return
-            
-            # 카테고리 선택
-            categories = self.file_manager.get_categories()
-            print("\n사용 가능한 카테고리:")
-            for i, category in enumerate(categories, 1):
-                print(f"  {i}. {category}")
-            print(f"  {len(categories) + 1}. 새 카테고리 생성")
-            
-            try:
-                choice = input("카테고리를 선택하세요 (번호 입력, 엔터=misc): ").strip()
-                
-                if not choice:
-                    category = "misc"
-                elif choice.isdigit():
-                    choice_num = int(choice)
-                    if 1 <= choice_num <= len(categories):
-                        category = categories[choice_num - 1]
-                    elif choice_num == len(categories) + 1:
-                        category = input("새 카테고리 이름: ").strip() or "misc"
-                        self.file_manager.create_category(category)
-                    else:
-                        category = "misc"
-                else:
-                    category = choice
-                
-            except:
-                category = "misc"
-            
-            # PDF 저장
-            result = self.file_manager.save_pdf(pdf_path, category)
-            print(f"\n✓ PDF 파일이 저장되었습니다:")
-            print(f"  파일명: {result['filename']}")
-            print(f"  카테고리: {result['category']}")
-            print(f"  저장 경로: {result['saved_path']}")
-            
-            # PDF 처리 여부 선택
-            process_choice = input("\n이 PDF를 지금 처리하시겠습니까? (y/N): ").strip().lower()
-            if process_choice == 'y':
-                print("PDF 처리 중...")
-                process_result = self.process_pdf(result['saved_path'])
-                print(f"✓ PDF 처리 완료: {process_result['total_chunks']}개 청크 생성")
-            
-        except Exception as e:
-            print(f"PDF 추가 중 오류 발생: {e}")
-    
-    def load_all_pdfs_from_data_folder(self) -> Dict[str, Any]:
-        """data/pdfs 폴더의 모든 PDF를 자동으로 로드"""
-        try:
-            from pathlib import Path
-            import glob
-            
-            pdf_dir = Path("data/pdfs")
-            if not pdf_dir.exists():
-                logger.warning("data/pdfs 폴더를 찾을 수 없습니다.")
-                return {"success": False, "error": "data/pdfs 폴더가 존재하지 않습니다."}
-            
-            # 모든 PDF 파일 찾기
-            pdf_files = []
-            for pattern in ["*.pdf", "*/*.pdf", "*/*/*.pdf"]:
-                pdf_files.extend(pdf_dir.glob(pattern))
-            
-            if not pdf_files:
-                logger.info("로드할 PDF 파일이 없습니다.")
-                return {"success": True, "loaded_count": 0}
-            
-            logger.info(f"{len(pdf_files)}개의 PDF 파일을 자동으로 로드합니다...")
-            
-            loaded_count = 0
-            failed_count = 0
-            
-            for pdf_path in pdf_files:
-                try:
-                    # 이미 처리된 PDF인지 확인
-                    existing_pdfs = self.file_manager.list_pdfs()
-                    if any(pdf_path.name in pdf["filename"] for pdf in existing_pdfs):
-                        logger.info(f"이미 로드된 PDF 건너뛰기: {pdf_path.name}")
-                        continue
-                    
-                    # PDF 처리
-                    pdf_result = self.process_pdf(str(pdf_path))
-                    loaded_count += 1
-                    logger.info(f"PDF 자동 로드 완료: {pdf_path.name} ({pdf_result['total_chunks']}개 청크)")
-                    
-                except Exception as e:
-                    logger.error(f"PDF 자동 로드 실패 {pdf_path}: {e}")
-                    failed_count += 1
-                    continue
-            
-            # 벡터 저장소 저장
-            if self.vector_store:
-                self.vector_store.save()
-            
-            logger.info(f"PDF 자동 로드 완료: {loaded_count}개 성공, {failed_count}개 실패")
+            total_time = time.time() - start_time
             
             return {
-                "success": True,
-                "loaded_count": loaded_count,
-                "failed_count": failed_count,
-                "total_files": len(pdf_files)
+                'success': True,
+                'answer': answer.content,
+                'confidence_score': answer.confidence,
+                'question_type': 'fallback',
+                'processing_time': total_time,
+                'route': 'fallback',
+                'sql_query': None,
+                'used_chunks': [chunk.chunk_id for chunk in answer.sources] if answer.sources else []
             }
             
         except Exception as e:
-            logger.error(f"PDF 자동 로드 중 오류 발생: {e}")
-            return {"success": False, "error": str(e)}
-    
-    def cleanup(self):
-        """시스템 정리"""
-        logger.info("시스템 정리 중...")
-        
-        if self.answer_generator:
-            self.answer_generator.unload_model()
-        
-        if self.vector_store:
-            self.vector_store.save()
-        
-        logger.info("시스템 정리 완료")
+            logger.error(f"질문 처리 실패: {e}")
+            import traceback
+            logger.error(f"상세 오류: {traceback.format_exc()}")
+            
+            # 에러 로깅
+            try:
+                if chatbot_logger:
+                    if session_id:
+                        chatbot_logger.log_step(session_id, ProcessingStep.ERROR, 0.0, f"전체처리오류: {str(e)}")
+                    
+                    chatbot_logger.log_error(
+                        user_question=question,
+                        error_message=str(e),
+                        question_type=QuestionType.UNKNOWN
+                    )
+            except Exception as log_error:
+                logger.warning(f"에러 로깅 실패: {log_error}")
+            
+            return {
+                'success': False,
+                'answer': f"죄송합니다. 질문 처리 중 오류가 발생했습니다: {str(e)}",
+                'confidence_score': 0.0,
+                'question_type': 'error',
+                'processing_time': time.time() - start_time,
+                'route': 'error',
+                'sql_query': None,
+                'used_chunks': []
+            }
 
 def main():
     """메인 함수"""
-    parser = argparse.ArgumentParser(description="PDF QA 시스템")
-    parser.add_argument("--mode", choices=["interactive", "server", "process"], 
-                       default="interactive", help="실행 모드")
-    parser.add_argument("--pdf", type=str, help="처리할 PDF 파일 경로")
-    parser.add_argument("--question", type=str, help="질문 (process 모드)")
-    parser.add_argument("--model-type", choices=["ollama", "huggingface", "llama_cpp"],
-                       default="ollama", help="사용할 모델 타입")
-    parser.add_argument("--model-name", type=str, default="qwen2:1.5b", 
-                       help="모델 이름")
-    parser.add_argument("--embedding-model", type=str, 
-                       default="jhgan/ko-sroberta-multitask",
-                       help="임베딩 모델")
-    parser.add_argument("--port", type=int, default=8000, help="서버 포트")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="서버 호스트")
+    print("로컬 챗봇 테스트 시작")
+    print("=" * 50)
+    # Qwen(Ollama) 모델 확인
+    print("Qwen(Ollama) 모델 확인 중...")
+    if not ensure_qwen_ollama_model():
+        print("Qwen 모델이 준비되지 않았습니다. 먼저 다음을 실행하세요:")
+        print("  1) Ollama 실행 (포트 11434)\n  2) ollama pull qwen2:1.5b-instruct-q4_K_M")
+        return 1
+    print("=" * 50)
     
-    args = parser.parse_args()
-    
-    # 시스템 초기화
-    system = PDFQASystem(
-        model_type=args.model_type,
-        model_name=args.model_name,
-        embedding_model=args.embedding_model
-    )
+    # 청크 초기화 옵션 확인
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--reset-chunks":
+        print("청크 초기화 모드로 시작합니다...")
+        reset_chunks = True
+    else:
+        reset_chunks = False
     
     try:
-        # 컴포넌트 초기화
-        if not system.initialize_components():
-            logger.error("시스템 초기화 실패")
-            sys.exit(1)
+        # 챗봇 초기화
+        chatbot = LocalChatbot()
+        print("챗봇 초기화 완료")
         
-        # 모드별 실행
-        if args.mode == "server":
-            logger.info("모든 PDF 파일이 벡터 저장소에 업로드되었습니다.")
-            logger.info(f"API 서버 시작: http://{args.host}:{args.port}")
-            logger.info("Dual Pipeline 기능이 활성화되었습니다.")
-            logger.info("- 문서 검색 파이프라인: PDF 내용 기반 질문 답변")
-            logger.info("- SQL 질의 파이프라인: 데이터베이스 스키마 기반 SQL 생성")
-            logger.info("- 하이브리드 파이프라인: 두 파이프라인 결과 통합")
-            uvicorn.run(app, host=args.host, port=args.port)
-            
-        elif args.mode == "process":
-            if not args.pdf or not args.question:
-                logger.error("process 모드에서는 --pdf와 --question이 필요합니다.")
-                sys.exit(1)
-            
-            # PDF를 관리 폴더로 복사
-            save_result = system.file_manager.save_pdf(args.pdf, "misc")
-            print(f"PDF 저장 완료: {save_result['saved_path']}")
-            
-            # PDF 처리
-            pdf_result = system.process_pdf(save_result['saved_path'])
-            print(f"PDF 처리 완료: {pdf_result}")
-            
-            # 질문 처리
-            qa_result = system.ask_question(args.question)
-            print(f"답변: {qa_result['answer']}")
-            
-        else:  # interactive 모드
-            if args.pdf:
-                # PDF를 관리 폴더로 복사 후 처리
-                print(f"PDF 파일을 관리 폴더로 복사 중: {args.pdf}")
-                save_result = system.file_manager.save_pdf(args.pdf, "misc")
-                print(f"저장 완료: {save_result['saved_path']}")
+        # 청크 초기화가 요청된 경우
+        if reset_chunks:
+            print("\n청크 초기화를 시작합니다...")
+            chatbot.reset_and_regenerate_chunks()
+            print("청크 초기화 및 재생성 완료!")
+            return 0
+        
+        print()
+        
+        # 대화 루프
+        while True:
+            try:
+                # 사용자 입력
+                question = input("질문을 입력하세요 (종료하려면 'quit' 또는 'exit' 입력): ").strip()
                 
-                # PDF 처리
-                pdf_result = system.process_pdf(save_result['saved_path'])
-                print(f"PDF 처리 완료: {pdf_result['filename']} ({pdf_result['total_chunks']}개 청크)")
-            
-            # 대화형 모드 시작
-            system.interactive_mode()
+                if question.lower() in ['quit', 'exit', '종료']:
+                    print("챗봇을 종료합니다.")
+                    break
+                
+                if not question:
+                    print("질문을 입력해주세요.")
+                    continue
+                
+                print()
+                print("처리 중...")
+                print("-" * 30)
+                
+                # 질문 처리
+                result = chatbot.process_question(question)
+                
+                print()
+                print("처리 결과:")
+                print(f"  성공: {result['success']}")
+                print(f"  질문 유형: {result['question_type']}")
+                print(f"  라우팅: {result['route']}")
+                print(f"  처리 시간: {result['processing_time']:.3f}초")
+                print(f"  신뢰도: {result['confidence_score']:.3f}")
+                
+                if result.get('sql_query'):
+                    print(f"  생성된 SQL: {result['sql_query']}")
+                
+                if result.get('used_chunks'):
+                    print(f"  사용된 청크: {len(result['used_chunks'])}개")
+                
+                print()
+                print("답변:")
+                print(result['answer'])
+                print()
+                print("=" * 50)
+                
+            except KeyboardInterrupt:
+                print("\nCtrl+C로 종료합니다.")
+                break
+            except Exception as e:
+                print(f"오류 발생: {e}")
+                print()
     
-    except KeyboardInterrupt:
-        logger.info("사용자에 의해 중단됨")
     except Exception as e:
-        logger.error(f"시스템 실행 중 오류: {e}")
-        sys.exit(1)
-    finally:
-        system.cleanup()
+        print(f"챗봇 초기화 실패: {e}")
+        return 1
+    
+    return 0
 
 if __name__ == "__main__":
-    # 즉시 답변 초기화
-    logger.info("🚀 즉시 답변 캐시 초기화 중...")
-    initialize_instant_answers()
-    logger.info("✅ 즉시 답변 캐시 초기화 완료")
-    
-    # 서버 시작
-    logger.info("🚀 IFRO 챗봇 서버 시작 중...")
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    exit(main())

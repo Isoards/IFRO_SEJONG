@@ -1,3 +1,6 @@
+# 메모리 최적화를 위한 docker-compose 설정
+version: '3.8'
+
 services:
   db:
     image: mysql:8.0
@@ -99,66 +102,95 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
+    restart: unless-stopped
     ports:
       - "11434:11434"
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
     volumes:
       - ollama_data:/root/.ollama
-      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
-      - ./ollama-healthcheck.sh:/ollama-healthcheck.sh
-    restart: unless-stopped
-    environment:
-      # 한글 지원 설정
-      - LANG=ko_KR.UTF-8
-      - LC_ALL=ko_KR.UTF-8
-      - LC_CTYPE=ko_KR.UTF-8
-    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
     healthcheck:
-      test: ["CMD", "/bin/bash", "/ollama-healthcheck.sh"]
-      interval: 60s
-      timeout: 60s
-      retries: 30
-      start_period: 1200s
+      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
-
-  chatbot:
-    build:
-      context: ./ollama-LLM-ChatBot
-    container_name: chatbot
-    ports:
-      - "8008:8008"
-    volumes:
-      - ./ollama-LLM-ChatBot:/app
-      - chatbot_vector_store:/app/vector_store
-      - chatbot_logs:/app/logs
-      - chatbot_models:/app/models
-      - sbert_cache:/root/.cache/torch/sentence_transformers
-    environment:
-      - PYTHONPATH=/app
-      - MODEL_TYPE=ollama
-      - MODEL_NAME=qwen2:1.5b
-      - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
-      - OLLAMA_HOST=http://ollama:11434
-      - MYSQL_DATABASE=traffic
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=1234
-      - MYSQL_HOST=db
-      - MYSQL_PORT=3306
-      # 한글 지원 설정
-      - LANG=ko_KR.UTF-8
-      - LC_ALL=ko_KR.UTF-8
-      - LC_CTYPE=ko_KR.UTF-8
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: ollama-pull-qwen
+    restart: "no"
     depends_on:
       ollama:
         condition: service_healthy
-      db:
-        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    entrypoint: ["sh", "-lc", "echo 'Waiting for Ollama...' && until curl -fsS http://ollama:11434/api/tags >/dev/null; do sleep 1; done && echo 'Pulling model: qwen2:1.5b-instruct-q4_K_M' && ollama pull qwen2:1.5b-instruct-q4_K_M"]
+
+  chatbot:
+    build: ./ollama-LLM-ChatBot
+    container_name: ifro-chatbot
+    ports:
+      - "8008:8000"
+    # CPU 사용 (GPU 미사용). GPU 사용 시 runtime/env 추가
+    environment:
+      # 메모리 최적화 환경 변수
+      - MAX_MODEL_MEMORY_GB=8.0
+      - MEMORY_WARNING_THRESHOLD=75.0
+      - MEMORY_CRITICAL_THRESHOLD=85.0
+      - PDF_MAX_MEMORY_GB=2.0
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      
+      # 모델 설정 (Ollama + Qwen 1.5B, q4_K_M)
+      - MODEL_TYPE=ollama
+      - MODEL_NAME=qwen2:1.5b-instruct-q4_K_M
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+      # 청크 초기화 설정
+      - RESET_CHUNKS_ON_START=false
+      - AUTO_UPLOAD_PDFS=true
+      
+      # 세종대학교 교통정보 시스템 설정
+      - COMPANY_NAME=세종대학교 교통정보 시스템
+      - COMPANY_DESCRIPTION=세종대학교 교통정보 분석 및 관리 시스템
+      - COMPANY_TAGLINE=지능형 교통정보 분석 및 예측 시스템
+      - COMPANY_ROLE=교통정보 분석, 교통량 예측, 교통사고 분석, AI 답변 생성
+      - SYSTEM_TYPE=세종대학교 교통정보 시스템
+      - COMPANY_LOCATION=서울특별시 광진구 능동로 209
+      - COMPANY_WEBSITE=https://www.sejong.ac.kr
+      - COMPANY_EMAIL=traffic@sejong.ac.kr
+      - API_TITLE=세종대학교 교통정보 시스템 API
+      - API_DESCRIPTION=세종대학교 교통정보 분석 및 관리 시스템 API
+      - COMPANY_GREETING=안녕하세요! 세종대학교 교통정보 시스템에 오신 것을 환영합니다! 🚗
+      - DEFAULT_GREETING=안녕하세요! 세종대학교 교통정보 시스템입니다. 교통정보에 대해 무엇이든 물어보세요! 🚦
+      
+      # Hugging Face 캐시 설정
+      - HF_HOME=/app/models
+      - TORCH_HOME=/app/models
+    volumes:
+      - ./ollama-LLM-ChatBot/data:/app/data
+      - ./ollama-LLM-ChatBot/models:/app/models
+      - ./ollama-LLM-ChatBot/logs:/app/logs
+      - ./ollama-LLM-ChatBot/vector_store:/app/vector_store
+    depends_on:
+      ollama-pull:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 16G  # GPU 사용 시 메모리 증가
+          cpus: '6.0'  # CPU 제한 설정
+        reservations:
+          memory: 12G   # 최소 메모리 보장
+          cpus: '3.0'  # 최소 CPU 보장
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 30s
-      retries: 15
-      start_period: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   mysql_data:

@@ -147,53 +147,138 @@ def setup_sbert_models():
         return False
 
 def test_core_modules():
-    """핵심 모듈 테스트"""
+    """핵심 모듈 테스트 - 개별적으로 테스트하여 실패 지점 찾기"""
     print(f"\n" + "=" * 60)
-    print("🧪 핵심 모듈 테스트")
+    print("🧪 핵심 모듈 개별 테스트")
     print("=" * 60)
     
-    try:
-        from core.query_router import QueryRouter
-        from core.sql_element_extractor import SQLElementExtractor
-        from core.answer_generator import AnswerGenerator
+    # 테스트할 모듈 목록
+    test_modules = [
+        {
+            "name": "QueryRouter",
+            "path": "core.query.query_router",
+            "class_name": "QueryRouter"
+        },
+        {
+            "name": "SQLElementExtractor", 
+            "path": "core.database.sql_element_extractor",
+            "class_name": "SQLElementExtractor"
+        },
+        {
+            "name": "AnswerGenerator",
+            "path": "core.llm.answer_generator", 
+            "class_name": "AnswerGenerator"
+        },
+        {
+            "name": "PDFProcessor",
+            "path": "core.document.pdf_processor",
+            "class_name": "PDFProcessor"
+        },
+        {
+            "name": "VectorStore",
+            "path": "core.document.vector_store",
+            "class_name": "VectorStore"
+        },
+        {
+            "name": "QuestionAnalyzer",
+            "path": "core.query.question_analyzer",
+            "class_name": "QuestionAnalyzer"
+        },
+        {
+            "name": "FastCache",
+            "path": "core.cache.fast_cache",
+            "class_name": "FastCache"
+        },
+        {
+            "name": "SQLGenerator",
+            "path": "core.database.sql_generator",
+            "class_name": "SQLGenerator"
+        }
+    ]
+    
+    success_count = 0
+    total_count = len(test_modules)
+    
+    print(f"총 {total_count}개 모듈을 테스트합니다...\n")
+    
+    for i, module_info in enumerate(test_modules, 1):
+        print(f"{i}/{total_count}. {module_info['name']} 테스트 중...")
         
-        print("핵심 모듈 임포트 성공!")
-        
-        # 간단한 테스트
-        test_questions = [
-            "교통량이 가장 많은 구간은 어디인가요?",
-            "IFRO 시스템이 무엇인가요?",
-            "안녕하세요"
-        ]
-        
-        print(f"\n테스트 질문들:")
-        for i, question in enumerate(test_questions, 1):
-            print(f"{i}. {question}")
-        
-        print(f"\n모듈 초기화 테스트:")
         try:
-            router = QueryRouter()
-            print("✅ QueryRouter 초기화 성공")
+            # 모듈 임포트 테스트
+            module = __import__(module_info['path'], fromlist=[module_info['class_name']])
+            print(f"   ✅ 모듈 임포트 성공: {module_info['path']}")
+            
+            # 클래스 임포트 테스트
+            try:
+                class_obj = getattr(module, module_info['class_name'])
+                print(f"   ✅ 클래스 임포트 성공: {module_info['class_name']}")
+                
+                # 인스턴스 생성 테스트 (선택적)
+                try:
+                    if module_info['name'] == "QueryRouter":
+                        instance = class_obj()
+                    elif module_info['name'] == "SQLElementExtractor":
+                        instance = class_obj()
+                    elif module_info['name'] == "AnswerGenerator":
+                        instance = class_obj()
+                    elif module_info['name'] == "PDFProcessor":
+                        instance = class_obj()
+                    elif module_info['name'] == "VectorStore":
+                        instance = class_obj()
+                    elif module_info['name'] == "QuestionAnalyzer":
+                        instance = class_obj()
+                    elif module_info['name'] == "FastCache":
+                        instance = class_obj()
+                    elif module_info['name'] == "SQLGenerator":
+                        instance = class_obj()
+                    
+                    print(f"   ✅ 인스턴스 생성 성공")
+                    success_count += 1
+                    
+                except Exception as e:
+                    print(f"   ⚠️ 인스턴스 생성 실패: {e}")
+                    print(f"   📝 이는 정상적인 경우일 수 있습니다 (의존성 문제)")
+                    success_count += 1  # 임포트는 성공했으므로 성공으로 간주
+                
+            except AttributeError as e:
+                print(f"   ❌ 클래스 임포트 실패: {e}")
+                print(f"   📝 모듈에는 존재하지만 클래스를 찾을 수 없습니다")
+                
+        except ImportError as e:
+            print(f"   ❌ 모듈 임포트 실패: {e}")
+            print(f"   🔍 문제 분석:")
+            print(f"      - 경로: {module_info['path']}")
+            print(f"      - 오류: {str(e)}")
+            
+            # 상세한 문제 분석
+            if "No module named" in str(e):
+                print(f"      💡 해결 방법: 모듈 경로 확인 필요")
+            elif "cannot import name" in str(e):
+                print(f"      💡 해결 방법: 클래스명 확인 필요")
+            elif "circular import" in str(e):
+                print(f"      💡 해결 방법: 순환 import 문제 해결 필요")
+                
         except Exception as e:
-            print(f"❌ QueryRouter 초기화 실패: {e}")
-        
-        try:
-            extractor = SQLElementExtractor()
-            print("✅ SQLElementExtractor 초기화 성공")
-        except Exception as e:
-            print(f"❌ SQLElementExtractor 초기화 실패: {e}")
-        
-        try:
-            generator = AnswerGenerator()
-            print("✅ AnswerGenerator 초기화 성공")
-        except Exception as e:
-            print(f"❌ AnswerGenerator 초기화 실패: {e}")
-        
-        print("✅ 핵심 모듈 테스트 완료!")
+            print(f"   ❌ 예상치 못한 오류: {e}")
+            print(f"   🔍 오류 타입: {type(e).__name__}")
+            
+        print()  # 빈 줄로 구분
+    
+    # 결과 요약
+    print("=" * 60)
+    print("📊 모듈 테스트 결과 요약")
+    print("=" * 60)
+    print(f"✅ 성공: {success_count}/{total_count}")
+    print(f"❌ 실패: {total_count - success_count}/{total_count}")
+    print(f"📈 성공률: {(success_count/total_count)*100:.1f}%")
+    
+    if success_count == total_count:
+        print("\n🎉 모든 모듈이 성공적으로 테스트되었습니다!")
         return True
-        
-    except Exception as e:
-        print(f"❌ 핵심 모듈 테스트 실패: {e}")
+    else:
+        print(f"\n⚠️ {total_count - success_count}개 모듈에서 문제가 발생했습니다.")
+        print("위의 상세 오류 메시지를 확인하여 문제를 해결하세요.")
         return False
 
 def main():

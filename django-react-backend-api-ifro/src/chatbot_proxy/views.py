@@ -64,7 +64,7 @@ class PDFInfo(Schema):
 class PDFListResponse(Schema):
     pdfs: List[PDFInfo]
 
-# 비동기 HTTP 클라이언트 헬퍼 함수
+# 비동기 HTTP 클라이언트 헬퍼 함수 (최적화된 버전)
 async def make_chatbot_request(method: str, endpoint: str, data: Dict[str, Any] = None, timeout: int = 60) -> Dict[str, Any]:
     """챗봇 서버에 HTTP 요청을 보내는 헬퍼 함수"""
     url = f"{CHATBOT_BASE_URL}{endpoint}"
@@ -82,12 +82,15 @@ async def make_chatbot_request(method: str, endpoint: str, data: Dict[str, Any] 
             return response.json()
             
     except httpx.TimeoutException:
+        # 타임아웃은 중요한 오류이므로 로깅 유지
         logger.error(f"챗봇 서버 요청 타임아웃: {url}")
         raise HttpError(504, "챗봇 서버 응답 시간이 초과되었습니다.")
     except httpx.ConnectError:
+        # 연결 오류는 중요한 오류이므로 로깅 유지
         logger.error(f"챗봇 서버 연결 실패: {url}")
         raise HttpError(503, "챗봇 서버에 연결할 수 없습니다.")
     except httpx.HTTPStatusError as e:
+        # HTTP 오류는 중요한 오류이므로 로깅 유지
         logger.error(f"챗봇 서버 HTTP 오류: {e.response.status_code} - {e.response.text}")
         if e.response.status_code == 404:
             raise HttpError(404, "요청한 리소스를 찾을 수 없습니다.")
@@ -96,7 +99,8 @@ async def make_chatbot_request(method: str, endpoint: str, data: Dict[str, Any] 
         else:
             raise HttpError(502, f"챗봇 서버 오류: {e.response.status_code}")
     except Exception as e:
-        logger.error(f"챗봇 서버 요청 중 예외 발생: {str(e)}")
+        # 일반적인 예외는 디버그 레벨로 로깅
+        logger.debug(f"챗봇 서버 요청 중 예외 발생: {str(e)}")
         raise HttpError(500, "챗봇 서버 요청 처리 중 오류가 발생했습니다.")
 
 # 동기 래퍼 함수
@@ -192,7 +196,8 @@ def proxy_chatbot_status(request):
     except HttpError:
         raise
     except Exception as e:
-        logger.error(f"챗봇 상태 프록시 오류: {str(e)}")
+        # 상태 조회 실패는 디버그 레벨로 로깅
+        logger.debug(f"챗봇 상태 프록시 오류: {str(e)}")
         raise HttpError(500, "챗봇 상태 조회 중 오류가 발생했습니다.")
 
 @router.get("/health")
@@ -210,7 +215,8 @@ def proxy_health_check(request):
     except HttpError:
         raise
     except Exception as e:
-        logger.error(f"헬스 체크 프록시 오류: {str(e)}")
+        # 헬스 체크 실패는 디버그 레벨로 로깅
+        logger.debug(f"헬스 체크 프록시 오류: {str(e)}")
         raise HttpError(500, "헬스 체크 중 오류가 발생했습니다.")
 
 @router.get("/pdfs", response=PDFListResponse)
@@ -238,7 +244,8 @@ def proxy_pdf_list(request):
     except HttpError:
         raise
     except Exception as e:
-        logger.error(f"PDF 목록 프록시 오류: {str(e)}")
+        # PDF 목록 조회 실패는 디버그 레벨로 로깅
+        logger.debug(f"PDF 목록 프록시 오류: {str(e)}")
         raise HttpError(500, "PDF 목록 조회 중 오류가 발생했습니다.")
 
 # 대화 기록 관련 프록시 엔드포인트들

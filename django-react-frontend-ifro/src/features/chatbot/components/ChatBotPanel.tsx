@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
   sendAIChatMessage,
-  testChatConnection,
   checkAIServiceStatus,
   getAvailablePDFs,
   getChatCacheInfo,
@@ -93,42 +92,244 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // 패널이 열릴 때 초기화
+  // 패널이 열릴 때 초기화 (최적화된 버전)
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && messages.length === 0) {
+      // 입력 필드 포커스
       if (inputRef.current) {
         setTimeout(() => {
           inputRef.current?.focus();
         }, 100);
       }
 
-      // AI 서비스 상태 확인
-      checkAIServiceStatus().then(setAiStatus);
+      // 한 번만 상태 확인 (불필요한 반복 제거)
+      const initializeChatbot = async () => {
+        try {
+          // AI 서비스 상태 확인 (한 번만)
+          const status = await checkAIServiceStatus();
+          setAiStatus(status);
 
-      // 사용 가능한 PDF 목록 조회
-      getAvailablePDFs().then(setAvailablePdfs);
+          // PDF 목록 조회 (한 번만)
+          const pdfs = await getAvailablePDFs();
+          setAvailablePdfs(pdfs);
 
-      // 캐시 정보 업데이트
-      setCacheInfo(getChatCacheInfo());
+          // 캐시 정보 업데이트
+          setCacheInfo(getChatCacheInfo());
 
-      // 챗봇 연결 테스트
-      testChatConnection();
+          // 환영 메시지 설정
+          const currentHour = new Date().getHours();
+          let timeGreeting = "안녕하세요!";
+          
+          if (currentHour >= 5 && currentHour < 12) {
+            timeGreeting = "좋은 아침입니다! 🌅";
+          } else if (currentHour >= 12 && currentHour < 18) {
+            timeGreeting = "안녕하세요! 😊";
+          } else if (currentHour >= 18 && currentHour < 22) {
+            timeGreeting = "좋은 저녁입니다! 🌆";
+          } else {
+            timeGreeting = "좋은 밤 되세요! 🌙";
+          }
+          
+          const welcomeMessage: Message = {
+            id: "1",
+            content:
+              status.ai_available && status.model_loaded
+                ? `${timeGreeting} IFRO 교통 분석 AI 어시스턴트입니다! 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n🚗 교통량 분석, 📊 통계 조회, 📈 트렌드 분석 등 무엇이든 물어보세요!`
+                : `${timeGreeting} IFRO 교통 분석 어시스턴트입니다! 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.\n\n잠시 후 다시 시도해보시면 더 정확한 답변을 받으실 수 있습니다.`,
+            sender: "bot",
+            timestamp: new Date(),
+          };
+          setMessages([welcomeMessage]);
+        } catch (error) {
+          console.error("챗봇 초기화 중 오류:", error);
+          // 오류 시에도 기본 환영 메시지 표시
+          const fallbackMessage: Message = {
+            id: "1",
+            content: "안녕하세요! IFRO 교통 분석 어시스턴트입니다! 🚗\n\n서비스에 연결 중입니다. 잠시만 기다려주세요.",
+            sender: "bot",
+            timestamp: new Date(),
+          };
+          setMessages([fallbackMessage]);
+        }
+      };
 
-      // AI 상태에 따른 환영 메시지 설정
-      if (messages.length === 0) {
-        const welcomeMessage: Message = {
-          id: "1",
-          content:
-            aiStatus.ai_available && aiStatus.model_loaded
-              ? "안녕하세요! IFRO 교통 분석 AI 어시스턴트입니다. 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n어떤 것이든 물어보세요!"
-              : "안녕하세요! IFRO 교통 분석 어시스턴트입니다. 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.",
-          sender: "bot",
-          timestamp: new Date(),
-        };
-        setMessages([welcomeMessage]);
-      }
+      initializeChatbot();
     }
-  }, [isOpen, aiStatus.ai_available, aiStatus.model_loaded, messages.length]);
+  }, [isOpen]); // messages.length 의존성 제거services:
+  db:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: traffic
+      # 한글 지원 설정
+      LANG: ko_KR.UTF-8
+      LC_ALL: ko_KR.UTF-8
+      LC_CTYPE: ko_KR.UTF-8
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./django-react-backend-api-ifro/sqldata-backup/20250727:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password --skip-ssl
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./django-react-backend-api-ifro
+    container_name: backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_DATABASE=traffic
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=1234
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      - DJANGO_SECRET_KEY=unsafe-dev-secret-key-for-local-development
+      - JWT_SECRET_KEY=a-different-unsafe-secret-key-for-jwt
+      - DJANGO_ENCRYPTION_PASSWORD=forBus_password
+      - DJANGO_DEBUG=True
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+      - GEMINI_API_KEY=AIzaSyAwA17afiK3RW95Z9hBcWpDOOVU_PELtfw
+      - CHATBOT_URL=http://chatbot:8008
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./django-react-backend-api-ifro:/app
+    command: >
+      sh -c "cd /app/src &&
+             echo 'Waiting for MySQL to be ready...' &&
+             until mysql -h db -u root -p$$MYSQL_PASSWORD --skip-ssl -e 'SELECT 1;' > /dev/null 2>&1; do
+               sleep 1;
+             done &&
+             echo 'MySQL is ready.' &&
+             echo 'Running migrations...' &&
+             echo 'Checking Django system tables...' &&
+             python manage.py migrate --run-syncdb --verbosity=0 || echo 'Initial migration attempt completed' &&
+             python manage.py migrate traffic --verbosity=0 || echo 'Traffic migration attempt completed' &&
+             echo 'All migrations completed. Starting services...' &&
+             echo '[ENCRYPT] 🔄 encrypt_transfer.py 시작됨...' &&
+             python ../encrypt_transfer.py &
+             ENCRYPT_PID=$$! &&
+             echo 'Starting Django server...' &&
+             python manage.py runserver 0.0.0.0:8000 &
+             wait $$ENCRYPT_PID &&
+             echo '[ENCRYPT] ✅ encrypt_transfer.py 완료됨.' &&
+             wait"
+
+  frontend:
+    build:
+      context: ./django-react-frontend-ifro
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./django-react-frontend-ifro:/app
+      - /app/node_modules
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - REACT_APP_API_URL=http://localhost:8000
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 4096M
+    stdin_open: true
+    tty: true
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./ollama-entrypoint.sh:/ollama-entrypoint.sh
+      - ./ollama-healthcheck.sh:/ollama-healthcheck.sh
+    restart: unless-stopped
+    environment:
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
+    entrypoint: ["/bin/bash", "/ollama-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "/bin/bash", "/ollama-healthcheck.sh"]
+      interval: 60s
+      timeout: 60s
+      retries: 30
+      start_period: 1200s
+
+
+  chatbot:
+    build:
+      context: ./ollama-LLM-ChatBot
+    container_name: chatbot
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./ollama-LLM-ChatBot:/app
+      - chatbot_vector_store:/app/vector_store
+      - chatbot_logs:/app/logs
+      - chatbot_models:/app/models
+      - sbert_cache:/root/.cache/torch/sentence_transformers
+    environment:
+      - PYTHONPATH=/app
+      - MODEL_TYPE=ollama
+      - MODEL_NAME=qwen2:1.5b
+      - EMBEDDING_MODEL=jhgan/ko-sroberta-multitask
+      - OLLAMA_HOST=http://ollama:11434
+      - MYSQL_DATABASE=traffic
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=1234
+      - MYSQL_HOST=db
+      - MYSQL_PORT=3306
+      # 한글 지원 설정
+      - LANG=ko_KR.UTF-8
+      - LC_ALL=ko_KR.UTF-8
+      - LC_CTYPE=ko_KR.UTF-8
+    depends_on:
+      ollama:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8008/health"]
+      interval: 30s
+      timeout: 30s
+      retries: 15
+      start_period: 300s
+
+volumes:
+  mysql_data:
+  chatbot_data:
+  chatbot_vector_store:
+  chatbot_logs:
+  chatbot_models:
+  sbert_cache:
+  ollama_data:
+
+networks:
+  default:
+    driver: bridge
+
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
