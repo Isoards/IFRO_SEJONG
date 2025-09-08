@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM --platform=linux/amd64 python:3.10-slim
 
 # 한글 지원을 위한 로케일 설정
 ENV LANG=ko_KR.UTF-8
@@ -26,27 +26,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# entrypoint.sh 대신 직접 실행하는 스크립트 생성
-RUN echo '#!/bin/sh\n\
-set -e\n\
-cd /app/src\n\
-echo "Waiting for MySQL to be ready..."\n\
-until mysql -h db -u root -p"$MYSQL_PASSWORD" --skip-ssl -e "SELECT 1;" > /dev/null 2>&1; do\n\
-    sleep 1\n\
-done\n\
-echo "MySQL is ready."\n\
-echo "Running migrations..."\n\
-python manage.py migrate --run-syncdb --verbosity=0 || echo "Initial migration attempt completed"\n\
-python manage.py migrate traffic --verbosity=0 || echo "Traffic migration attempt completed"\n\
-echo "Starting services..."\n\
-echo "[ENCRYPT] 🔄 encrypt_transfer.py 시작됨..."\n\
-python ../encrypt_transfer.py &\n\
-ENCRYPT_PID=$!\n\
-echo "Starting Django server..."\n\
-python manage.py runserver 0.0.0.0:8000 &\n\
-wait $ENCRYPT_PID\n\
-echo "[ENCRYPT] ✅ encrypt_transfer.py 완료됨."\n\
-wait' > /usr/local/bin/docker-entrypoint.sh \
-  && chmod +x /usr/local/bin/docker-entrypoint.sh
+# 프로덕션용 WSGI 서버 설치
+RUN pip install gunicorn
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# 환경 변수 설정
+ENV DJANGO_SETTINGS_MODULE=dashboard.settings
+ENV PYTHONPATH=/app/src
+
+# 포트 노출
+EXPOSE 8000
+
+# 헬스체크 추가
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health/ || exit 1
+
+# 프로덕션 실행 명령
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "dashboard.wsgi:application"]

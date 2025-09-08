@@ -11,7 +11,7 @@ services:
       LC_ALL: ko_KR.UTF-8
       LC_CTYPE: ko_KR.UTF-8
     ports:
-      - "3307:3306"
+      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./django-react-backend-api-ifro/sqldata-backup/20250727:/docker-entrypoint-initdb.d
@@ -118,7 +118,6 @@ services:
       timeout: 60s
       retries: 30
       start_period: 1200s
-
 
   chatbot:
     build:

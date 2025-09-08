@@ -2,7 +2,9 @@ import axios from "axios";
 import { debugLog } from "../shared/utils/debugUtils";
 
 // 환경변수에서 백엔드 API URL 가져오기 (기본값: localhost:8000)
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL ||
+  "https://ifro-backend-820915047296.asia-northeast3.run.app";
 
 // 챗봇 API는 이제 백엔드를 통해 프록시됨
 const CHATBOT_PROXY_URL = `${API_BASE_URL}/api/chatbot`;

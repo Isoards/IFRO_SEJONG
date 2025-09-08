@@ -6,7 +6,7 @@ import axios, {
 import { debugLog } from "../shared/utils/debugUtils";
 
 const api = axios.create({
-  baseURL: "http://localhost:8000/api/", // Django backend URL (api 루트로 변경)
+  baseURL: "https://ifro-backend-820915047296.asia-northeast3.run.app/api/", // Django backend URL (api 루트로 변경)
   timeout: 60000, // 60초로 증가
 
   headers: {

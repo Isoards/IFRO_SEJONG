@@ -1,0 +1,54 @@
+steps:
+  # 백엔드 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '--no-cache', '-t', 'gcr.io/$PROJECT_ID/ifro-backend', './django-react-backend-api-ifro']
+    timeout: '1200s'
+    
+  # 프론트엔드 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '--no-cache', '-t', 'gcr.io/$PROJECT_ID/ifro-frontend', './django-react-frontend-ifro']
+    timeout: '1800s'
+    
+  # 이미지 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ifro-backend']
+    
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/ifro-frontend']
+    
+  # Cloud Run 배포
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ifro-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ifro-backend'
+      - '--region'
+      - 'asia-northeast3'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '8000'
+      
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ifro-frontend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/ifro-frontend'
+      - '--region'
+      - 'asia-northeast3'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--port'
+      - '80'
+
+images:
+  - 'gcr.io/$PROJECT_ID/ifro-backend'
+  - 'gcr.io/$PROJECT_ID/ifro-frontend' 

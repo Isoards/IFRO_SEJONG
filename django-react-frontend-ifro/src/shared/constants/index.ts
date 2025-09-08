@@ -5,7 +5,8 @@ export const DEFAULT_ZOOM = 12;
 
 // API endpoints
 export const API_BASE_URL =
-  process.env.REACT_APP_API_BASE_URL || "http://localhost:8000";
+  process.env.REACT_APP_API_BASE_URL ||
+  "https://ifro-backend-820915047296.asia-northeast3.run.app";
 
 // App routes
 export const ROUTES = {
