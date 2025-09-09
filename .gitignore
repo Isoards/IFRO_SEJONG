@@ -11,6 +11,9 @@ __pycache__/
 venv/
 env/
 
+
+django-react-backendend-ifro/.env*
+
 django-react-frontend-ifro/node_modules/
 django-react-frontend-ifro/build/
 django-react-frontend-ifro/.env*
