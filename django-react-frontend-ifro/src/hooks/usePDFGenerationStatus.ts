@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ReportData } from '../types/global.types';
-import { usePDFGeneration } from '../utils/usePDFGeneration';
+import { usePDFGeneration } from '../shared/utils/usePDFGeneration';
 import { useTranslation } from 'react-i18next';
 
 interface PDFStatusOptions {

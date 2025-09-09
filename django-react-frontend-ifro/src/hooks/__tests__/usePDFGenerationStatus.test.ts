@@ -1,10 +1,10 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { usePDFGenerationStatus } from '../usePDFGenerationStatus';
-import { usePDFGeneration } from '../../utils/usePDFGeneration';
+import { usePDFGeneration } from '../../shared/utils/usePDFGeneration';
 import { useTranslation } from 'react-i18next';
 
 // Mock dependencies
-jest.mock('../../utils/usePDFGeneration');
+jest.mock('../../shared/utils/usePDFGeneration');
 jest.mock('react-i18next');
 
 const mockUsePDFGeneration = usePDFGeneration as jest.MockedFunction<typeof usePDFGeneration>;

@@ -1,22 +1,63 @@
+# IDE and Editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# System files
 .DS_Store
 .kiro/
+Thumbs.db
 
+# Python
 __pycache__/
 *.pyc
-*.log
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .venv/
 venv/
 env/
 
+# Logs
+*.log
+logs/
 
-django-react-backendend-ifro/.env*
+# Backend specific
+django-react-backend-api-ifro/.env*
+django-react-backend-api-ifro/venv/
+django-react-backend-api-ifro/media/
+django-react-backend-api-ifro/staticfiles/
 
+# Frontend specific
 django-react-frontend-ifro/node_modules/
 django-react-frontend-ifro/build/
 django-react-frontend-ifro/.env*
 !django-react-frontend-ifro/.env.example
-npm-debug.log
-yarn-error.log
+django-react-frontend-ifro/npm-debug.log*
+django-react-frontend-ifro/yarn-debug.log*
+django-react-frontend-ifro/yarn-error.log*
+
+# Database
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
