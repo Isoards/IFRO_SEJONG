@@ -1,0 +1,182 @@
+[
+  {
+    "번호": 1,
+    "질문": "고산 정수장 시스템 사용자 설명서의 발주기관과 사업명은 무엇인가요?",
+    "정답": "고산 정수장 시스템 사용자 설명서의 발주기관은 한국수자원공사이며, 사업명은 금강 유역 남부 스마트 정수장 확대 구축 용역입니다.",
+    "답변": "제문에서 찾을 수 있습니다. 발주기관은 \"한국수자원공사\"이고, 사업명은 \"금강 유역(남부) 스마트 정수장 확대 구축 용역\"입니다."
+  },
+  {
+    "번호": 2,
+    "질문": "이 시스템 사용자 설명서의 발행일은 언제이며, 어떤 컨소시엄에서 작성했나요?",
+    "정답": "이 시스템 사용자 설명서는 2025년 2월 17일에 발행되었고, (주)에셈블 컨소시엄에서 작성했습니다.",
+    "답변": "문서에서 해당 정보를 확인할 수 없습니다."
+  },
+  {
+    "번호": 3,
+    "질문": "이 시스템 사용자 설명서의 주요 목적은 무엇인가요?",
+    "정답": "고산 정수장에 대한 단계별 시운전 및 성능 검증 시험 운전 완료에 따라 지사 중심의 AI 자율 운영과 전 공정 선택적 자율 운영 등 시스템의 활용성 강화 및 안정적인 운영을 위한 전반적인 정보를 제공하는 것입니다.",
+    "답변": "이 시스템 사용자 설명서의 주요 목적은 금강유역(남부) 스마트 정수장 확대 구축 용역 시스템을 사용하는 사용자가 시스템을正确하게 사용하고, 효율적으로 운영할 수 있도록 하는 것입니다. 이 문서에서는 시스템의 구성, 기능, 사용법 등을 설명하여 사용자들이 쉽게 이해하고 사용할 수 있도록 하였다."
+  },
+  {
+    "번호": 4,
+    "질문": "AI 플랫폼 대시보드에 접속하기 위한 주소(URL)는 무엇인가요?",
+    "정답": "AI 플랫폼 대시보드 주소는 http://waio-portal-vip:10011 또는 http://10.103.11.112:10011 입니다.",
+    "답변": "[답변]\nAI 플랫폼 대시보드에 접속하기 위한 주소(URL)은 다음과 같습니다.\nhttp://waio-portal-vip:10011\n또는 WEB VIP로 설정된 IP 주소를 사용할 수도 있습니다.\n(http://10.103.11.112:10011, http://10.103.11.113:10011, http://10.103.11.114:10011)"
+  },
+  {
+    "번호": 5,
+    "질문": "AI 플랫폼에 로그인할 때 사용할 수 있는 기본 관리자 계정의 아이디와 비밀번호는 무엇인가요?",
+    "정답": "기본 관리자 계정의 아이디와 비밀번호는 모두 KWATER입니다.",
+    "답변": "The basic administrator account for the AI platform is:\n\n* ID: `admin`\n* Password: `password` (note that this password may need to be changed after the first login)\n\nPlease note that these credentials are subject to change, and you should check with your organization's IT department or system administrator if you have any questions about the actual login credentials."
+  },
+  {
+    "번호": 6,
+    "질문": "AI 플랫폼의 자율 운영 대시보드는 크게 몇 가지 영역으로 나누어지나요?",
+    "정답": "자율 운영 대시보드는 상단 영역, 좌측 사이드바 영역, 중앙 콘텐츠 영역, 우측 메뉴 영역의 4가지 영역으로 구성됩니다.",
+    "답변": "According to the provided documentation, the AI platform's autonomous operation dashboard is divided into the following five areas:\n\n1. 상단 영역 (Top area): This includes the login information and other system settings.\n2. 중앙 콘텐츠 영역 (Central content area): This is where the actual operational data is displayed, including real-time data from the SCADA system and AI algorithm results.\n\nPlease let me know if you have any further questions or if there's anything else I can help you with! 😊"
+  },
+  {
+    "번호": 7,
+    "질문": "착수 공정에서 AI 모델은 어떤 목표 수위를 결정하고 원수 유입 밸브 개도율을 예측하기 위해 활용되나요?",
+    "정답": "정수 수요량과 정수지 수위를 참고하여 목표 수위를 결정하고, 원수 유입 밸브 개도율을 예측하는 데 활용됩니다.",
+    "답변": "According to the user manual, in the \"착수\" (start-up) process of the smart water treatment system, AI models are used to predict the optimal flow rate and operating conditions for each process step.\n\nThe AI model determines the optimal operating setpoints based on various factors such as water quality parameters (pH, alkalinity, temperature, etc.), flow rates, and other relevant data. The model is trained using historical data and real-time sensor readings to optimize the operation of the treatment plant.\n\nIn particular, the AI model predicts:\n\n1. Optimal flow rate: The AI model predicts the optimal flow rate for each process step based on water quality parameters and operating conditions.\n2. Operating setpoints: The AI model determines the optimal operating setpoints (e.g., pH, alkalinity, temperature) for each process step to ensure efficient treatment of wastewater.\n3. Valve opening/closing: The AI model predicts when to open or close valves in each process step to optimize flow rates and treatment efficiency.\n\nBy using AI models, the smart water treatment system can automate many processes and improve the overall efficiency and effectiveness of wastewater treatment."
+  },
+  {
+    "번호": 8,
+    "질문": "착수 공정의 유입 밸브 개도 예측 알고리즘 선정 시 고려 사항은 무엇인가요?",
+    "정답": "제어 임계치 설정, 채터링 방지 설정, 제어 스텝 설정, 1지 2지 군집 유량 분배 등을 고려합니다.",
+    "답변": "According to the provided QA documentation, when selecting a prediction algorithm for the intake valve opening of the primary treatment process (착수 공정), the following factors should be considered:\n\n1. **Model performance**: The algorithm should have a high accuracy and precision in predicting the intake valve opening based on historical data.\n2. **Complexity**: The algorithm should be able to handle complex relationships between variables, such as nonlinear correlations and interactions.\n3. **Interpretability**: The algorithm should provide insights into the factors that affect the intake valve opening, allowing for informed decision-making.\n4. **Scalability**: The algorithm should be able to handle large datasets and adapt to changing conditions in real-time.\n5. **Robustness**: The algorithm should be robust against outliers and noise in the data.\n\nBased on these considerations, the XGB (Extreme Gradient Boosting) model was selected as the best-performing algorithm for predicting intake valve opening."
+  },
+  {
+    "번호": 9,
+    "질문": "착수 공정의 AI 운영 모드 중 '분석' 모드의 특징은 무엇인가요?",
+    "정답": "‘분석’ 모드에서는 예측값이 실제 SCADA에 적용되지 않습니다.",
+    "답변": "The \"Analysis\" mode in the AI operating mode of the Settlement Process (착수 공정) is a feature that allows the AI to analyze and predict the behavior of the settlement process, but it does not apply the predicted values to control the process. Instead, it provides a recommendation for the user to decide whether to accept or reject the predicted values.\n\nIn other words, in \"Analysis\" mode, the AI analyzes the data and makes predictions about what should happen next, but it does not automatically take action based on those predictions. The user still has to review the recommendations made by the AI and make a decision on whether to accept or reject them.\n\nThis is different from the \"Control\" mode, where the AI applies its predicted values directly to control the process without human intervention."
+  },
+  {
+    "번호": 10,
+    "질문": "약품 공정 AI 모델의 입력변수로 사용되는 원수 수질 인자들은 무엇인가요?",
+    "정답": "원수 알칼리도, pH, 온도, 전기전도도, 탁도 등이 입력변수로 사용됩니다.",
+    "답변": "According to the documentation, the input variables for the coagulant injection rate prediction model in the water treatment process are:\n\n* Water temperature\n* pH level\n* TDS (Total Dissolved Solids) level\n* Coagulant current injection rate\n* Target residual chlorine\n* Current residual chlorine\n\nThese input variables are used to predict the optimal coagulant injection rate for effective water treatment."
+  },
+  {
+    "번호": 11,
+    "질문": "약품 공정에서 응집제 주입률 예측 모델로 최종 선정된 모델과 그 선정 사유는 무엇인가요?",
+    "정답": "최종 선정된 모델은 N-beats이며, LSTM, GRU, GBR 모델들과 비교했을 때 R² Score가 더 높았기 때문입니다.",
+    "답변": "Based on the provided text, the final selected model for predicting the coagulant injection rate in the water treatment process is the XGBoost model. The selection of this model was based on its high performance metrics, such as MAE (Mean Absolute Error), MSE (Mean Squared Error), and R² (Coefficient of Determination).\n\nHere are the specific details:\n\n* MAE: 0.0215\n* MSE: 0.0016\n* R²: 0.95\n\nThese results indicate that the XGBoost model has a high degree of accuracy in predicting the coagulant injection rate, and its performance is significantly better than other models considered.\n\nThe selection of the XGBoost model was likely due to its ability to handle complex data relationships and non-linear interactions between variables, which are common characteristics of water treatment processes. Additionally, XGBoost is a popular and widely-used machine learning algorithm that has been shown to perform well in various applications, including predicting continuous values such as coagulant injection rates."
+  },
+  {
+    "번호": 12,
+    "질문": "혼화응집 공정 AI의 목표는 무엇이며, 어떤 값을 산출하는 것인가요?",
+    "정답": "응집지별 각 교반기의 회전속도 설정값(RPM)을 산출하고 적용하는 것이 목표입니다.",
+    "답변": "혼화 응집 공정 AI의 목표는 응집지 별 각 교반기의 회전속도(RPM) 설정값을 산출하고 적용하는 것입니다.\n\nAI 모델은 주요 TAG 데이터 및 설비 기본 자료를 활용하여 교반 강도(최적 G 값)를 계산하고, 응집지 분당 회전수를 계산합니다. 또한, 수온, 교반 강도(G) 등 변수에 따른 응집지 최적 분당 회전수(RPM) 계산을 핵심 내용으로 합니다."
+  },
+  {
+    "번호": 13,
+    "질문": "침전 공정 AI 모델의 초기 입력변수는 무엇인가요?",
+    "정답": "원수 탁도, 유입 총 유량, 응집제 주입률, NaOH 주입률, 활성탄 투입률이 초기 입력변수로 사용됩니다.",
+    "답변": "문서에서 해당 정보를 확인할 수 없습니다. 따라서, 침전 공정 AI 모델의 초기 입력변수를 답변하여 드리겠습니다.\n\n하지만, 문서에 있는 정보를 기반으로 추측해 보겠습니다.\n\n침전 공정 AI 모델의 초기 입력변수는 다음과 같습니다.\n\n* 원수 유입 유량\n* 여과지 운영 지수\n* 여과지별 수위\n* 여과 지속 시간\n* 여과 속도\n\n이러한 입력변수를 활용하여 슬러지 발생량 예측을 수행하고, 슬러지 수집기 대차 운전 스케줄 결정을 목표로 합니다."
+  },
+  {
+    "번호": 14,
+    "질문": "슬러지 발생량과 가장 높은 양의 상관관계를 보이는 변수는 무엇이며, 그 상관계수는 얼마인가요?",
+    "정답": "슬러지 발생량은 원수 탁도(0.72)와 응집제 주입률(0.7)과 가장 높은 양의 상관관계를 보입니다.",
+    "답변": "According to the user manual, the variable that shows the highest correlation with sludge generation is the \"원수 탁도\" (water turbidity), and its correlation coefficient is 0.972951.\n\nIn other words, a strong positive correlation exists between water turbidity and sludge generation, indicating that as water turbidity increases, sludge generation also tends to increase.\n\nThis finding suggests that monitoring water turbidity can be an important factor in predicting and controlling sludge generation in the treatment process."
+  },
+  {
+    "번호": 15,
+    "질문": "여과 공정 AI 모델의 목표는 무엇인가요?",
+    "정답": "여과 공정 운영 지수 예측, 여과지별 수위 예측, 역세척 스케줄 결정을 목표로 합니다.",
+    "답변": "문서에서 여과 공정 AI 모델의 목표는 다음과 같습니다.\n\n* 운영 지수 예측 : 여과지 상태에 따라 운영 지수를 계산하여 예측합니다.\n* 여과지별 수위 예측 : 여과지 상태를 기반으로 여과지의 수위를 예측합니다.\n* 역세척 스케줄 결정을 도출 : 24시간 여과지 운영 스케줄을 결정하고, 역세척 시점을 도출합니다.\n\n이러한 목표를 달성하기 위해 AI 모델은 다음과 같은 단계를 거칩니다.\n\n1. 운영 지수 계산\n2. 여과지 상태 확인\n3. 수위 예측\n4. 역세척 스케줄 결정을 도출\n\n따라서, 여과 공정 AI 모델의 목표는 여과 공정의 자율 운영을 지원하여 정수장의 수질을 제어하고 유지하는 것입니다."
+  },
+  {
+    "번호": 16,
+    "질문": "여과 공정의 운영 지수 및 여과지 수위 예측 모델로 선정된 모델과 선정 사유는 무엇인가요?",
+    "정답": "LSTM(Long Short-Term Memory Network)이 선정되었으며, R² 성능이 가장 높고 시계열 데이터 모델링에 적합하기 때문입니다.",
+    "답변": "According to the user manual, the selected model for predicting the operating index and filter bed level of the filtration process is a machine learning-based model.\n\nThe reasoning behind this selection is as follows:\n\n* The selected model is able to accurately predict the operating index and filter bed level based on historical data and real-time data from the water treatment plant.\n* The model has been trained using a large dataset of over 2.6 million rows, which provides a high degree of accuracy in its predictions.\n* The model has been validated through various statistical tests, such as cross-validation and mean absolute error (MAE), to ensure that it is reliable and accurate.\n* The selected model is able to adapt to changes in the water treatment process and adjust its predictions accordingly.\n\nThe specific machine learning algorithm used in this model is a neural network-based algorithm, which has been shown to be effective in predicting complex systems such as water treatment plants."
+  },
+  {
+    "번호": 17,
+    "질문": "소독 공정 AI 모델의 목표는 무엇인가요?",
+    "정답": "체류시간 내 잔류염소 예측, 잔류염소 농도 유지를 위한 투입량 예측, 전차염 주입량 결정을 목표로 합니다.",
+    "답변": "문서에서 해당 정보를 확인할 수 있습니다. \n\n소독 공정 AI 모델의 목표는 \"체류시간 내 잔류염소 예측, 잔류염소 농도 유지를 위한 투입량 예측, 전차염 주입량 결정\"입니다."
+  },
+  {
+    "번호": 18,
+    "질문": "소독 공정 전차염 주입률 예측 모델의 성능평가 결과, R² 값은 얼마인가요?",
+    "정답": "소독 공정 전차염 주입률 예측 모델(LSTM)의 R² 값은 0.95입니다.",
+    "답변": "Based on the text, the performance evaluation result of the disinfection process (전차염) injection rate prediction model is as follows:\n\n* R² value: 0.972\n* MAE (Mean Absolute Error): 0.406\n* MSE (Mean Squared Error): 0.854\n\nThese values indicate that the model has a high accuracy and robustness in predicting the disinfection process (전차염) injection rate.\n\nNote that these values are based on the comparison with other models, such as LSTM-GRU, and XGB (Extreme Gradient Boosting). The model with the highest R² value is considered to be the best performer."
+  },
+  {
+    "번호": 19,
+    "질문": "착수 공정에서 AI 제어 알람 발생 시 비상시에 운영 모드를 어떻게 변경할 수 있나요?",
+    "정답": "비상시에는 AI 추천 모드 등으로 운영 모드를 변경할 수 있습니다.",
+    "답변": "According to the user manual, when an alarm occurs in the initial sedimentation (착수) process and is caused by AI control, you can change the operation mode in emergency situations as follows:\n\n1. Identify the cause of the alarm: Check the alarm message and determine the cause of the issue.\n2. Change the operation mode: Select the \"AI 운영 모드 변경\" menu and choose the individual or overall operation mode change option.\n3. Confirm the change: Confirm the changed operation mode to ensure that it is set correctly.\n\nNote: The specific steps may vary depending on the exact situation and the user's role (운용자 or 관리자). It is recommended to refer to the user manual for detailed instructions."
+  },
+  {
+    "번호": 20,
+    "질문": "EMS 대시보드에서 전력 소비현황과 탄소 절감 현황은 어떤 단위로 표시되나요?",
+    "정답": "전력 소비현황은 kWh, 탄소 절감 현황은 kg 단위로 표시됩니다.",
+    "답변": "According to the manual, in the EMS dashboard, the power consumption and carbon emission reduction are displayed in the following units:\n\n* Power consumption: kWh (kilowatt-hours)\n* Carbon emission reduction: kgCO2 (kilograms of CO2)\n\nPlease note that these units may vary depending on the specific configuration of your system. If you have any further questions or concerns, please feel free to ask! 😊"
+  },
+  {
+    "번호": 21,
+    "질문": "EMS의 송수 펌프 세부 현황에서 '자동 모드'와 '부분 모드'의 차이점은 무엇인가요?",
+    "정답": "자동 모드는 AI 알고리즘이 분석한 최적 펌프제어 운전으로 가동하며, 부분 모드는 AI 최적 운영 결과 변경 시 사용자 확인 후 계속 가동할지를 묻고 동작합니다.",
+    "답변": "The difference between \"自動 모드\" (Auto Mode) and \"부분 모드\" (Partial Mode) in the EMS's song-su pump detailed status is as follows:\n\n**自動 モード (Auto Mode)**: In this mode, the AI system makes decisions to control the pumps based on real-time data from sensors. The system continuously monitors the water flow rate, pressure, and other parameters, and adjusts the pump operation accordingly.\n\n* Advantages:\n\t+ Optimizes pump performance for maximum efficiency\n\t+ Reduces energy consumption\n\t+ Improves water quality by maintaining optimal pressure and flow rates\n\n**부분 モード (Partial Mode)**: In this mode, the AI system provides recommendations to the operator based on real-time data from sensors. The operator can then manually adjust the pump operation according to their expertise.\n\n* Advantages:\n\t+ Allows operators to exercise control over the pumps\n\t+ Provides insights and suggestions for optimal pump performance\n\t+ Can be used when Auto Mode is not feasible or preferred\n\nIn summary, Auto Mode is an autonomous mode where the AI system controls the pumps based on real-time data, while Partial Mode provides recommendations to the operator who can then adjust the pump operation manually."
+  },
+  {
+    "번호": 22,
+    "질문": "PMS 대시보드에서 펌프 모터의 자율 진단 기능은 어떤 정보를 표시하나요?",
+    "정답": "펌프의 세부 진동 값과 온도를 표시합니다.",
+    "답변": "According to the user manual, in the PMS dashboard, the autonomous diagnosis function for pumps and motors displays the following information:\n\n1. Pump motor operating status (정상 / 비정상)\n2. Vibration data (총 진동량, 베어링 결함, 임펠러 결함, 캐비테이션 발생)\n3. Motor bearing temperature (베어링 온도)"
+  },
+  {
+    "번호": 23,
+    "질문": "PMS 송수 펌프 모터 상세 정보 화면에서 선택한 펌프별로 확인할 수 있는 펌프 및 모터의 결함 정보는 무엇인가요?",
+    "정답": "펌프의 부하/반부하, 총 진동량, 베어링 결함, 임펠러 결함, 캐비테이션 발생과 모터의 회전자 결함, 권선 온도, 축 정렬 불량, 질량 불평형, 베어링 온도 등을 확인할 수 있습니다.",
+    "답변": "The PMS (Performance Monitoring System) song-su pump motor detailed information screen allows you to check the fault information of a selected pump and motor.\n\nOn this screen, you can see the following fault information:\n\n* Pump faults:\n\t+ Overcurrent\n\t+ Undervoltage\n\t+ Overvoltage\n\t+ Temperature overload\n\t+ Vibration overload\n\t+ Other faults (e.g. clogged impeller, faulty control valve)\n* Motor faults:\n\t+ Bearing failure\n\t+ Insulation breakdown\n\t+ Motor overheating\n\t+ Motor overloading\n\t+ Other faults (e.g. faulty commutator, loose connections)\n\nThis information is displayed in a table format, with the pump or motor name, fault type, and description of the fault.\n\nBy checking this screen, you can quickly identify any faults or issues with your pumps and motors, and take corrective action to prevent downtime and maintain optimal system performance."
+  },
+  {
+    "번호": 24,
+    "질문": "iRDC(iWater Real-time Data Center) 프로그램의 시스템 요구사항 중 최소 OS와 권장 OS는 무엇인가요?",
+    "정답": "최소 OS는 Windows 7·32bit 또는 Windows Server 2008 Std 32bit 이상이며, 권장 OS는 Windows 10·64bit 또는 Windows Server 2016 Std 64bit 이상입니다.",
+    "답변": "제 3.1.1.1 절에 따르면, iRDC(iWater Real-time Data Center) 프로그램의 시스템 요구 사항은 다음과 같습니다.\n\n* 최소 OS : Windows 7·32bit, Windows Server 2008 Std 32bit\n* 권장 OS : Windows 10·64bit 이상, Windows Server 2016 Std 64bit 이상\n\n따라서, iRDC(iWater Real-time Data Center) 프로그램은 최소 Windows 7·32bit 또는 Windows Server 2008 Std 32bit을 요구하고, 권장하는 운영 체제는 Windows 10·64bit 이상 또는 Windows Server 2016 Std 64bit 이상입니다."
+  },
+  {
+    "번호": 25,
+    "질문": "iRDC 프로그램의 이중화 구성은 어떤 구조로 이루어져 있나요?",
+    "정답": "iWater SCADA 시스템의 이중화 구성을 기반으로 Active-Standby 구조로 독립적으로 구성됩니다.",
+    "답변": "iRDC 프로그램의 이중화 구성은 Active-Standby 구조입니다. Active 상태에서는 iRDC 프로그램이 실행되고, Pulse 신호를 SCADA에 전송합니다. Stand-By 상태에서는 iRDC 프로그램이 준비상태에あり, Active 상태가 변할 때마다 즉시 Active 상태로 변경됩니다. 이중화 구성에서는 Heartbeat 통신을 통해 각 서버 간의 상태를 확인하여 Failover 처리를 수행합니다."
+  },
+  {
+    "번호": 26,
+    "질문": "AI 플랫폼 서버에서 Docker 컨테이너의 서비스 상태를 확인하는 명령어는 무엇인가요?",
+    "정답": "Docker 컨테이너의 서비스 상태 확인 명령어는 `docker ps -a`이며, 성공적으로 실행 중이면 \"Up\", 실패 시 \"Exited\" 등으로 표시됩니다.",
+    "답변": "AI 플랫폼 서버에서 Docker 컨테이너의 서비스 상태를 확인하는 명령어는 다음과 같습니다.\n\n① Docker 컨테이너 서비스의 상태 확인 명령어\n- docker ps -a (성공: Up, 실패: Exited)\n- systemctl status docker (실행 중: active(running), 미실행 중: inactive(dead))\n\n참고로, AI 플랫폼 서버에서 Zookeeper 컨테이너 서비스의 상태 확인 명령어는 다음과 같습니다.\n\n① Zookeeper 컨테이너 서비스의 상태 확인 명령어\n- AI 플랫폼 서버 #1 docker ps --filter \"name=DGSWGC_AOS_ZOOKEEPER_001\"\n- AI 플랫폼 서버 #2 docker ps --filter \"name=DGSWGC_AOS_ZOOKEEPER_001\"\n\n이러한 명령어를 사용하여 Docker 컨테이너의 서비스 상태를 확인할 수 있습니다."
+  },
+  {
+    "번호": 27,
+    "질문": "AI 플랫폼 서버에서 MariaDB 재시작 후 갈레라 클러스터 동기화 장애 발생 시 재기동 순서는 어떻게 되나요?",
+    "정답": "반드시 AI 플랫폼 서버 #2 MariaDB부터, 그 다음 AI 플랫폼 서버 #1 MariaDB 순서로 재기동해야 합니다.",
+    "답변": "AI 플랫폼 서버에서 MariaDB 재시작 후 갈레라 클러스터 동기화 장애 발생 시 재기동 순서를 다음과 같이 수행해야 합니다.\n\n1. AI 플랫폼 서버 #2 MariaDB 서비스 Down\n   - AI 플랫폼 서버 #2 docker stop DGSWGC_AOS_MARIADB2_001\n\n2. AI 플랫폼 서버 #1 MariaDB Galera cache 삭제 (해당 파일들이 없으면 skip)\n   - cd /data/docker/volumes/mariadb_1/data\n   - rm galera.cache\n   - AI 플랫폼 서버 #1 rm grastate.dat\n   - AI 플랫폼 서버 #1 rm gvwstate.dat\n\n3. AI 플랫폼 서버 #1 MariaDB start\n   - AI 플랫폼 서버 #1 docker start DGSWGC_AOS_MARIADB1_001\n\n4. MariaDB 클러스터링 완료 확인(DB 접속하여 sql 실행)\n   - AI 플랫폼 서버 #2 show global status like ‘wsrep%_size’;\n     (실행 결과의 wsrep_cluster_size가 2면 클러스터링 완료)\n\n5. MariaDB 동기화 상태 확인(DB 접속하여 sql 실행)\n   - AI 플랫폼 서버 #2 show global status like ‘wsrep%_comment’;\n     (실행 결과의 wsrep_local_state_comment가 Doner/Desynced면 동기화 중, Synced면 동기화 완료)\n\n따라서, MariaDB 재시작 후 갈레라 클러스터 동기화 장애 발생 시는 AI 플랫폼 서버 #2에서 서비스 Down한 후, AI 플랫폼 서버 #1에 Galera cache를 삭제하고, 다시 AI 플랫폼 서버 #1의 MariaDB 서비스를 시작해야 합니다."
+  },
+  {
+    "번호": 28,
+    "질문": "탄소중립 모니터링 시스템의 주요 기능은 무엇인가요?",
+    "정답": "정수장 센서의 실시간 에너지 데이터를 활용해 일일·월별·연간 단위로 탄소 배출량/절감량을 분석하고, 결과를 시각화해 제공합니다.",
+    "답변": "탄소중립 모니터링 시스템의 주요 기능은 다음과 같습니다.\n\n가. 정수장에서 발생하는 탄소 배출량/절감량을 일, 월, 연도별로 모니터링하여 배출 현황을 정확히 파악하고 분석할 수 있습니다.\n나. 정수장 운영 과정에서 발생하는 에너지 소비와 탄소 배출을 관리하여 운영 효율성을 향상시키고 비용을 절감할 수 있습니다.\n\n따라서, 이 시스템은 정수장에서 발생하는 탄소 배출량/절감량을 모니터링하고 이를 기반으로 운영 효율성을 향상시키는 데 사용됩니다."
+  },
+  {
+    "번호": 29,
+    "질문": "탄소중립 모니터링에서 '오늘 탄소저감량'과 '오늘 탄소배출량'은 각각 어떻게 계산되나요?",
+    "정답": "오늘 탄소저감량은 전력 절감량에 전력 탄소 계수(0.4663)를 곱한 값, 오늘 탄소배출량은 전력 사용량에 전력 탄소 계수(0.4663)를 곱한 값으로 계산됩니다.",
+    "답변": "According to the documentation, \"today's carbon emission reduction\" is calculated by multiplying the power consumption on that day by a carbon emissions coefficient (0.4663). This value represents the amount of carbon dioxide equivalent emissions reduced due to the optimized operation of the EMS system.\n\nOn the other hand, \"today's total carbon emissions\" is calculated by multiplying the power consumption on that day by another carbon emissions coefficient (also 0.4663). This value represents the total amount of carbon dioxide equivalent emissions generated on that day.\n\nHere's a summary of how these values are calculated:\n\n* Today's carbon emission reduction = Power consumption on that day × Carbon emissions coefficient (0.4663)\n* Today's total carbon emissions = Power consumption on that day × Carbon emissions coefficient (0.4663)\n\nI hope this clarifies the calculation process! If you have any further questions, feel free to ask. 😊"
+  },
+  {
+    "번호": 30,
+    "질문": "AI 플랫폼 화면에 'Nan'이 표시되는 증상의 원인과 해결 방법은 무엇인가요?",
+    "정답": "'Nan' 표시는 SCADA에서 데이터를 읽어오지 못하거나 디스크 용량이 초과한 경우 발생합니다. 해결을 위해 SCADA 서버(SCADA, iRDC, Kafka)의 정상 동작을 점검하고, 정상이라면 AI 플랫폼 서버의 관련 서비스(SCADA, iRDC, Kafka)를 점검 및 조치해야 합니다.",
+    "답변": "According to the provided QA, the cause of the \"Nan\" display on the AI platform screen is a network error between SCADA and AI platform servers.\n\nThe solution involves temporarily storing untransmitted data in an emergency storage (Fluentd command) and restarting iRDC programs. Specifically:\n\n1. Check the system for temporary storage of untransmitted data using Fluentd commands.\n2. Restart iRDC programs to resolve the issue.\n\nPlease note that this is a summary based on the provided QA, and it's recommended to consult the original document for further details."
+  }
+]
