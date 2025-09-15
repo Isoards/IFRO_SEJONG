@@ -14,7 +14,7 @@ IFRO_SEJONG/
 ├── 🎨 .gitattributes             # Git 속성 설정
 ├── 🎯 django-react-frontend-ifro/ # React 프론트엔드
 ├── 🔌 django-react-backend-api-ifro/ # Django 백엔드 API
-└── 🤖 ollama-LLM-ChatBot/        # AI 챗봇 서비스
+└── 🤖 ollama-llm-chatbot-api-ifro/ # AI 챗봇 서비스 (FastAPI)
 ```
 
 ## 🚀 빠른 시작
@@ -54,10 +54,10 @@ docker-compose ps
 - **기술스택**: Django 4, Django REST Framework, MySQL
 - **주요기능**: 교통 데이터 API, 사용자 인증, 데이터 처리
 
-### 🤖 AI 챗봇 (로컬 LLM + LangChain)
-- **위치**: `ollama-LLM-ChatBot/`
-- **기술스택**: Python, Transformers, ChromaDB, Sentence Transformers
-- **주요기능**: 자연어 처리, 교통 데이터 질의응답, 대화형 인터페이스
+### 🤖 AI 챗봇 (FastAPI + UnifiedPDF)
+- **위치**: `ollama-llm-chatbot-api-ifro/`
+- **기술스택**: FastAPI, Python, Sentence Transformers, FAISS
+- **주요기능**: PDF 문서 기반 질의응답, 자연어 처리, 대화형 인터페이스
 
 ## 🗄️ 데이터베이스
 
