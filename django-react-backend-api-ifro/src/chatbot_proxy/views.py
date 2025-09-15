@@ -122,15 +122,15 @@ def proxy_simple_chat(request, data: ChatMessageRequest):
     try:
         response_data = sync_make_chatbot_request(
             method='POST',
-            endpoint='/chat',
-            data={'message': data.message},
+            endpoint='/api/ask',
+            data={'question': data.message, 'mode': 'accuracy', 'k': 'auto'},
             timeout=30
         )
         
         return ChatMessageResponse(
-            success=response_data.get('success', True),
-            response=response_data.get('response', ''),
-            timestamp=response_data.get('timestamp', '')
+            success=True,
+            response=response_data.get('answer', ''),
+            timestamp=str(response_data.get('timestamp', ''))
         )
         
     except HttpError:
@@ -145,26 +145,24 @@ def proxy_ai_question(request, data: AIQuestionRequest):
     try:
         request_data = {
             'question': data.question,
-            'pdf_id': data.pdf_id,
-            'use_conversation_context': data.use_conversation_context,
-            'max_chunks': data.max_chunks,
-            'use_dual_pipeline': data.use_dual_pipeline
+            'mode': 'accuracy',
+            'k': 'auto'
         }
         
         response_data = sync_make_chatbot_request(
             method='POST',
-            endpoint='/ask',
+            endpoint='/api/ask',
             data=request_data,
             timeout=120  # AI 처리 시간을 고려하여 더 긴 타임아웃
         )
         
         return AIQuestionResponse(
             answer=response_data.get('answer', ''),
-            confidence_score=response_data.get('confidence_score', 0.0),
+            confidence_score=response_data.get('confidence', 0.0),
             question_type=response_data.get('question_type', 'unknown'),
             generation_time=response_data.get('generation_time', 0.0),
             model_name=response_data.get('model_name', 'unknown'),
-            used_chunks=response_data.get('used_chunks', []),
+            used_chunks=response_data.get('sources', []),
             pipeline_type=response_data.get('pipeline_type'),
             sql_query=response_data.get('sql_query')
         )
@@ -181,16 +179,16 @@ def proxy_chatbot_status(request):
     try:
         response_data = sync_make_chatbot_request(
             method='GET',
-            endpoint='/status',
+            endpoint='/healthz',
             timeout=10
         )
         
         return ChatServerStatus(
             status=response_data.get('status', 'unknown'),
-            model_loaded=response_data.get('model_loaded', False),
-            total_pdfs=response_data.get('total_pdfs', 0),
-            total_chunks=response_data.get('total_chunks', 0),
-            memory_usage=response_data.get('memory_usage')
+            model_loaded=response_data.get('warmed', False),
+            total_pdfs=0,  # 새로운 서버에서는 별도로 관리하지 않음
+            total_chunks=0,  # 새로운 서버에서는 별도로 관리하지 않음
+            memory_usage=None
         )
         
     except HttpError:
@@ -202,11 +200,11 @@ def proxy_chatbot_status(request):
 
 @router.get("/health")
 def proxy_health_check(request):
-    """챗봇 서버 헬스 체크 프록시"""
+    """챗봇 서버 헬스 체크 프록시 - 새로운 FastAPI 서버에 맞게 수정"""
     try:
         response_data = sync_make_chatbot_request(
             method='GET',
-            endpoint='/health',
+            endpoint='/healthz',
             timeout=5
         )
         
@@ -223,67 +221,35 @@ def proxy_health_check(request):
 def proxy_pdf_list(request):
     """등록된 PDF 목록 조회 프록시"""
     try:
-        response_data = sync_make_chatbot_request(
-            method='GET',
-            endpoint='/pdfs',
-            timeout=10
-        )
+        # 새로운 FastAPI 서버에서는 PDF 목록을 별도로 관리하지 않으므로 빈 목록 반환
+        return PDFListResponse(pdfs=[])
         
-        pdfs = []
-        for pdf_data in response_data.get('pdfs', []):
-            pdfs.append(PDFInfo(
-                pdf_id=pdf_data.get('pdf_id', ''),
-                filename=pdf_data.get('filename', ''),
-                upload_time=pdf_data.get('upload_time', ''),
-                total_pages=pdf_data.get('total_pages', 0),
-                total_chunks=pdf_data.get('total_chunks', 0)
-            ))
-        
-        return PDFListResponse(pdfs=pdfs)
-        
-    except HttpError:
-        raise
     except Exception as e:
-        # PDF 목록 조회 실패는 디버그 레벨로 로깅
         logger.debug(f"PDF 목록 프록시 오류: {str(e)}")
         raise HttpError(500, "PDF 목록 조회 중 오류가 발생했습니다.")
 
-# 대화 기록 관련 프록시 엔드포인트들
+# 대화 기록 관련 프록시 엔드포인트들 - 새로운 서버에서는 지원하지 않음
 
 @router.get("/conversation_history")
 def proxy_conversation_history(request, pdf_id: str, max_items: int = 10):
-    """대화 기록 조회 프록시"""
+    """대화 기록 조회 프록시 - 새로운 서버에서는 빈 기록 반환"""
     try:
-        response_data = sync_make_chatbot_request(
-            method='GET',
-            endpoint=f'/conversation_history?pdf_id={pdf_id}&max_items={max_items}',
-            timeout=10
-        )
+        # 새로운 FastAPI 서버에서는 대화 기록을 별도로 관리하지 않으므로 빈 기록 반환
+        return {"history": []}
         
-        return response_data
-        
-    except HttpError:
-        raise
     except Exception as e:
-        logger.error(f"대화 기록 프록시 오류: {str(e)}")
+        logger.debug(f"대화 기록 프록시 오류: {str(e)}")
         raise HttpError(500, "대화 기록 조회 중 오류가 발생했습니다.")
 
 @router.delete("/conversation_history")
 def proxy_clear_conversation_history(request):
-    """대화 기록 초기화 프록시"""
+    """대화 기록 초기화 프록시 - 새로운 서버에서는 항상 성공 반환"""
     try:
-        response_data = sync_make_chatbot_request(
-            method='DELETE',
-            endpoint='/conversation_history',
-            timeout=10
-        )
+        # 새로운 FastAPI 서버에서는 대화 기록을 별도로 관리하지 않으므로 성공 반환
+        return {"success": True, "message": "대화 기록이 초기화되었습니다."}
         
-        return response_data
-        
-    except HttpError:
-        raise
     except Exception as e:
-        logger.error(f"대화 기록 초기화 프록시 오류: {str(e)}")
+        logger.debug(f"대화 기록 초기화 프록시 오류: {str(e)}")
         raise HttpError(500, "대화 기록 초기화 중 오류가 발생했습니다.")
 
 
