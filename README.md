@@ -25,18 +25,67 @@ IFRO_SEJONG/
 - 20GB 이상의 디스크 공간
 
 ### 2. 시스템 시작
+
+#### 🚀 전체 시스템 시작
 ```bash
-# 전체 시스템 시작
+# 전체 시스템 시작 (CPU 모드)
 docker-compose up -d
 
+# GPU 최적화 모드로 시작
+docker-compose -f docker-compose.gpu.yml up -d
+```
+
+#### 🔧 단계별 시작 (메모리 부족 시)
+```bash
+# 1단계: 데이터베이스만 시작
+docker-compose up -d db
+
+# 2단계: AI 서비스 시작
+docker-compose up -d ollama chatbot
+
+# 3단계: 백엔드 시작
+docker-compose up -d backend
+
+# 4단계: 프론트엔드 시작
+docker-compose up -d frontend
+```
+
+#### 📊 시스템 관리
+```bash
 # 로그 확인
 docker-compose logs -f
 
 # 시스템 상태 확인
 docker-compose ps
+
+# 서비스 중지
+docker-compose down
+
+# 볼륨까지 삭제 (데이터 초기화)
+docker-compose down -v
 ```
 
-### 3. 서비스 접속
+### 3. GPU 최적화 (선택사항)
+
+#### 🎯 GPU 지원 확인
+```bash
+# NVIDIA GPU 확인
+nvidia-smi
+
+# Docker GPU 런타임 확인
+docker info | grep -i runtime
+```
+
+#### ⚡ GPU 최적화 실행
+```bash
+# GPU 최적화 모드로 시작
+docker-compose -f docker-compose.gpu.yml up -d
+
+# GPU 사용량 모니터링
+nvidia-smi
+```
+
+### 4. 서비스 접속
 - **프론트엔드**: http://localhost:3000
 - **백엔드 API**: http://localhost:8000
 - **챗봇**: http://localhost:8008
