@@ -79,9 +79,12 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     hitRate: 0,
   });
   const [useCache, setUseCache] = useState(true);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+  const [lastStatusChange, setLastStatusChange] = useState<Date | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 메시지 스크롤
   const scrollToBottom = () => {
@@ -91,6 +94,97 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // AI 상태 확인 함수
+  const checkAIStatus = async () => {
+    if (isCheckingStatus) return; // 이미 확인 중이면 스킵
+    
+    setIsCheckingStatus(true);
+    try {
+      const status = await checkAIServiceStatus();
+      setAiStatus(prevStatus => {
+        // 상태가 변경되었는지 확인
+        const hasChanged = 
+          prevStatus.ai_available !== status.ai_available ||
+          prevStatus.model_loaded !== status.model_loaded ||
+          prevStatus.total_pdfs !== status.total_pdfs ||
+          prevStatus.total_chunks !== status.total_chunks;
+        
+        if (hasChanged) {
+          console.log('AI 상태 변경 감지:', status);
+          setLastStatusChange(new Date());
+          
+          // 상태 변경 알림 메시지 추가
+          const statusMessage: Message = {
+            id: `status-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            content: getStatusChangeMessage(prevStatus, status),
+            sender: "bot",
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, statusMessage]);
+        }
+        
+        return status;
+      });
+    } catch (error) {
+      console.error('AI 상태 확인 중 오류:', error);
+      // 오류 시에도 상태를 업데이트하여 연결 안됨 상태로 표시
+      setAiStatus(prevStatus => ({
+        ...prevStatus,
+        ai_available: false,
+        model_loaded: false,
+      }));
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  // 주기적 상태 확인 설정
+  useEffect(() => {
+    if (isOpen) {
+      // 즉시 한 번 확인
+      checkAIStatus();
+      
+      // 5초마다 상태 확인
+      statusCheckIntervalRef.current = setInterval(checkAIStatus, 5000);
+      
+      return () => {
+        if (statusCheckIntervalRef.current) {
+          clearInterval(statusCheckIntervalRef.current);
+          statusCheckIntervalRef.current = null;
+        }
+      };
+    }
+  }, [isOpen]);
+
+  // 상태 변경 메시지 생성 함수
+  const getStatusChangeMessage = (prevStatus: any, newStatus: any): string => {
+    const now = new Date().toLocaleTimeString();
+    
+    if (!prevStatus.ai_available && newStatus.ai_available) {
+      if (newStatus.model_loaded) {
+        return `🟢 AI 서비스가 연결되었습니다! (${now})\n모델이 준비되어 정확한 답변을 제공할 수 있습니다.`;
+      } else {
+        return `🟡 AI 서비스가 연결되었습니다! (${now})\n모델 로딩 중입니다. 잠시 후 더 정확한 답변을 받으실 수 있습니다.`;
+      }
+    }
+    
+    if (prevStatus.ai_available && !newStatus.ai_available) {
+      return `🔴 AI 서비스 연결이 끊어졌습니다. (${now})\n기본 모드로 전환됩니다.`;
+    }
+    
+    if (prevStatus.ai_available && newStatus.ai_available && 
+        !prevStatus.model_loaded && newStatus.model_loaded) {
+      return `🟢 AI 모델이 로드되었습니다! (${now})\n이제 더 정확한 답변을 제공할 수 있습니다.`;
+    }
+    
+    if (prevStatus.ai_available && newStatus.ai_available && 
+        prevStatus.model_loaded && !newStatus.model_loaded) {
+      return `🟡 AI 모델이 언로드되었습니다. (${now})\n기본 모드로 전환됩니다.`;
+    }
+    
+    return `🔄 AI 서비스 상태가 업데이트되었습니다. (${now})`;
+  };
 
   // 패널이 열릴 때 초기화 (최적화된 버전)
   useEffect(() => {
@@ -102,21 +196,17 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
         }, 100);
       }
 
-      // 한 번만 상태 확인 (불필요한 반복 제거)
+      // 초기화 함수 (상태 확인은 별도 useEffect에서 처리)
       const initializeChatbot = async () => {
         try {
-          // AI 서비스 상태 확인 (한 번만)
-          const status = await checkAIServiceStatus();
-          setAiStatus(status);
-
-          // PDF 목록 조회 (한 번만)
+          // PDF 목록 조회
           const pdfs = await getAvailablePDFs();
           setAvailablePdfs(pdfs);
 
           // 캐시 정보 업데이트
           setCacheInfo(getChatCacheInfo());
 
-          // 환영 메시지 설정
+          // 환영 메시지 설정 (상태는 실시간으로 업데이트됨)
           const currentHour = new Date().getHours();
           let timeGreeting = "안녕하세요!";
           
@@ -132,10 +222,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           
           const welcomeMessage: Message = {
             id: "1",
-            content:
-              status.ai_available && status.model_loaded
-                ? `${timeGreeting} IFRO 교통 분석 AI 어시스턴트입니다! 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n🚗 교통량 분석, 📊 통계 조회, 📈 트렌드 분석 등 무엇이든 물어보세요!`
-                : `${timeGreeting} IFRO 교통 분석 어시스턴트입니다! 🚗\n\n현재 AI 모델이 로드 중이거나 일시적으로 사용할 수 없습니다. 기본 키워드 기반 응답으로 도움을 드리겠습니다.\n\n잠시 후 다시 시도해보시면 더 정확한 답변을 받으실 수 있습니다.`,
+            content: `${timeGreeting} IFRO 교통 분석 AI 어시스턴트입니다! 🤖\n\n저는 PDF 문서를 기반으로 한 지능형 AI로, 교통 데이터 분석과 대시보드 사용법에 대해 도움을 드릴 수 있습니다.\n\n💾 캐시 기능이 활성화되어 있어 동일한 질문에 대해 빠른 답변을 제공합니다.\n\n🚗 교통량 분석, 📊 통계 조회, 📈 트렌드 분석 등 무엇이든 물어보세요!\n\n🔄 AI 서비스 상태는 실시간으로 모니터링됩니다.`,
             sender: "bot",
             timestamp: new Date(),
           };
@@ -243,9 +330,17 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
   };
 
   const getStatusText = () => {
+    if (isCheckingStatus) return "상태 확인 중...";
     if (aiStatus.ai_available && aiStatus.model_loaded) return "AI 모델 준비됨";
     if (aiStatus.ai_available) return "AI 서비스 연결됨";
     return "AI 서비스 연결 안됨";
+  };
+
+  const getStatusDotColor = () => {
+    if (isCheckingStatus) return "bg-blue-500 animate-pulse";
+    if (aiStatus.ai_available && aiStatus.model_loaded) return "bg-green-500";
+    if (aiStatus.ai_available) return "bg-yellow-500 animate-pulse";
+    return "bg-red-500";
   };
 
   if (!isOpen) return null;
@@ -269,10 +364,7 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
             <h3 className="font-semibold text-gray-800">AI 어시스턴트</h3>
             <div className="flex items-center space-x-1 text-xs">
               <div
-                className={`w-2 h-2 rounded-full ${getStatusColor().replace(
-                  "text-",
-                  "bg-"
-                )}`}
+                className={`w-2 h-2 rounded-full ${getStatusDotColor()}`}
               ></div>
               <span className={getStatusColor()}>{getStatusText()}</span>
               {useCache && (
@@ -317,6 +409,14 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
                 {aiStatus.model_loaded ? "로드됨" : "로드 안됨"}
               </span>
             </div>
+            {lastStatusChange && (
+              <div className="flex justify-between">
+                <span>마지막 업데이트:</span>
+                <span className="text-xs text-gray-500">
+                  {lastStatusChange.toLocaleTimeString()}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>PDF 문서:</span>
               <span>{aiStatus.total_pdfs}개</span>

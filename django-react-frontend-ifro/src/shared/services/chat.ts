@@ -241,12 +241,13 @@ export const checkAIServiceStatus = async (): Promise<{
   try {
     const response = await chatApi.get("/status");
     return {
-      ai_available: true,
+      ai_available: response.data.ai_available,
       model_loaded: response.data.model_loaded,
       total_pdfs: response.data.total_pdfs,
       total_chunks: response.data.total_chunks,
     };
   } catch (error) {
+    console.log("챗봇 서버 상태 확인 실패:", error);
     return {
       ai_available: false,
       model_loaded: false,
