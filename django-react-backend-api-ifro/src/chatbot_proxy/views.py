@@ -17,7 +17,7 @@ import os
 logger = logging.getLogger(__name__)
 
 # 챗봇 서버 URL 설정
-CHATBOT_BASE_URL = os.getenv('CHATBOT_URL', 'http://chatbot:8008')
+CHATBOT_BASE_URL = os.getenv('CHATBOT_URL', 'http://chatbot:8000')
 
 router = Router()
 
@@ -32,23 +32,19 @@ class ChatMessageResponse(Schema):
 
 class AIQuestionRequest(Schema):
     question: str
-    pdf_id: str = 'default_pdf'
-    use_conversation_context: bool = True
-    max_chunks: int = 5
-    use_dual_pipeline: bool = True
+    mode: str = 'accuracy'
+    k: str = 'auto'
 
 class AIQuestionResponse(Schema):
     answer: str
-    confidence_score: float
-    question_type: str
-    generation_time: float
-    model_name: str
-    used_chunks: Optional[List[str]] = None
-    pipeline_type: Optional[str] = None
-    sql_query: Optional[str] = None
+    confidence: float
+    sources: Optional[List[Dict[str, Any]]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    fallback_used: Optional[bool] = None
 
 class ChatServerStatus(Schema):
     status: str
+    ai_available: bool
     model_loaded: bool
     total_pdfs: int
     total_chunks: int
@@ -63,6 +59,14 @@ class PDFInfo(Schema):
 
 class PDFListResponse(Schema):
     pdfs: List[PDFInfo]
+
+class BatchQuestionRequest(Schema):
+    items: List[Dict[str, Any]]
+    mode: str = 'accuracy'
+
+class BatchQuestionResponse(Schema):
+    results: List[Dict[str, Any]]
+    config_hash: str
 
 # 비동기 HTTP 클라이언트 헬퍼 함수 (최적화된 버전)
 async def make_chatbot_request(method: str, endpoint: str, data: Dict[str, Any] = None, timeout: int = 60) -> Dict[str, Any]:
@@ -124,7 +128,7 @@ def proxy_simple_chat(request, data: ChatMessageRequest):
             method='POST',
             endpoint='/api/ask',
             data={'question': data.message, 'mode': 'accuracy', 'k': 'auto'},
-            timeout=30
+            timeout=120  # AI 처리 시간을 고려하여 타임아웃 증가
         )
         
         return ChatMessageResponse(
@@ -145,8 +149,8 @@ def proxy_ai_question(request, data: AIQuestionRequest):
     try:
         request_data = {
             'question': data.question,
-            'mode': 'accuracy',
-            'k': 'auto'
+            'mode': data.mode,
+            'k': data.k
         }
         
         response_data = sync_make_chatbot_request(
@@ -156,15 +160,19 @@ def proxy_ai_question(request, data: AIQuestionRequest):
             timeout=120  # AI 처리 시간을 고려하여 더 긴 타임아웃
         )
         
+        # fallback_used 필드 처리 - 문자열 'none'을 False로 변환
+        fallback_used = response_data.get('fallback_used', False)
+        if isinstance(fallback_used, str):
+            fallback_used = fallback_used.lower() not in ['none', 'false', '0', '']
+        elif fallback_used is None:
+            fallback_used = False
+            
         return AIQuestionResponse(
             answer=response_data.get('answer', ''),
-            confidence_score=response_data.get('confidence', 0.0),
-            question_type=response_data.get('question_type', 'unknown'),
-            generation_time=response_data.get('generation_time', 0.0),
-            model_name=response_data.get('model_name', 'unknown'),
-            used_chunks=response_data.get('sources', []),
-            pipeline_type=response_data.get('pipeline_type'),
-            sql_query=response_data.get('sql_query')
+            confidence=response_data.get('confidence', 0.0),
+            sources=response_data.get('sources', []),
+            metrics=response_data.get('metrics', {}),
+            fallback_used=fallback_used
         )
         
     except HttpError:
@@ -173,22 +181,50 @@ def proxy_ai_question(request, data: AIQuestionRequest):
         logger.error(f"AI 질문 프록시 오류: {str(e)}")
         raise HttpError(500, "AI 질문 처리 중 오류가 발생했습니다.")
 
+@router.post("/batch", response=BatchQuestionResponse)
+def proxy_batch_questions(request, data: BatchQuestionRequest):
+    """배치 질문 답변 프록시"""
+    try:
+        request_data = {
+            'items': data.items,
+            'mode': data.mode
+        }
+        
+        response_data = sync_make_chatbot_request(
+            method='POST',
+            endpoint='/api/qa/batch',
+            data=request_data,
+            timeout=300  # 배치 처리 시간을 고려하여 더 긴 타임아웃
+        )
+        
+        return BatchQuestionResponse(
+            results=response_data.get('results', []),
+            config_hash=response_data.get('config_hash', '')
+        )
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        logger.error(f"배치 질문 프록시 오류: {str(e)}")
+        raise HttpError(500, "배치 질문 처리 중 오류가 발생했습니다.")
+
 @router.get("/status", response=ChatServerStatus)
 def proxy_chatbot_status(request):
     """챗봇 서버 상태 조회 프록시"""
     try:
         response_data = sync_make_chatbot_request(
             method='GET',
-            endpoint='/healthz',
+            endpoint='/status',
             timeout=10
         )
         
         return ChatServerStatus(
             status=response_data.get('status', 'unknown'),
-            model_loaded=response_data.get('warmed', False),
-            total_pdfs=0,  # 새로운 서버에서는 별도로 관리하지 않음
-            total_chunks=0,  # 새로운 서버에서는 별도로 관리하지 않음
-            memory_usage=None
+            ai_available=response_data.get('ai_available', False),
+            model_loaded=response_data.get('model_loaded', False),
+            total_pdfs=response_data.get('total_pdfs', 0),
+            total_chunks=response_data.get('total_chunks', 0),
+            memory_usage=response_data.get('memory_usage', None)
         )
         
     except HttpError:
@@ -216,6 +252,33 @@ def proxy_health_check(request):
         # 헬스 체크 실패는 디버그 레벨로 로깅
         logger.debug(f"헬스 체크 프록시 오류: {str(e)}")
         raise HttpError(500, "헬스 체크 중 오류가 발생했습니다.")
+
+@router.get("/metrics")
+def proxy_metrics(request):
+    """챗봇 서버 메트릭 조회 프록시"""
+    try:
+        url = f"{CHATBOT_BASE_URL}/metrics"
+        
+        import httpx
+        with httpx.Client(timeout=10) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            
+            # 메트릭은 텍스트 형식으로 반환되므로 텍스트로 처리
+            return {"metrics": response.text}
+        
+    except httpx.TimeoutException:
+        logger.error(f"챗봇 서버 메트릭 요청 타임아웃: {url}")
+        raise HttpError(504, "챗봇 서버 메트릭 응답 시간이 초과되었습니다.")
+    except httpx.ConnectError:
+        logger.error(f"챗봇 서버 메트릭 연결 실패: {url}")
+        raise HttpError(503, "챗봇 서버에 연결할 수 없습니다.")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"챗봇 서버 메트릭 HTTP 오류: {e.response.status_code} - {e.response.text}")
+        raise HttpError(502, f"챗봇 서버 메트릭 오류: {e.response.status_code}")
+    except Exception as e:
+        logger.debug(f"메트릭 프록시 오류: {str(e)}")
+        raise HttpError(500, "메트릭 조회 중 오류가 발생했습니다.")
 
 @router.get("/pdfs", response=PDFListResponse)
 def proxy_pdf_list(request):
