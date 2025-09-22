@@ -17,3 +17,10 @@ django-react-frontend-ifro/.env*
 !django-react-frontend-ifro/.env.example
 npm-debug.log
 yarn-error.log
+
+
+# Chatbot specific
+./ollama-chatbot-api-ifro/data/*
+./ollama-chatbot-api-ifro/logs/*
+./ollama-chatbot-api-ifro/out/*
+./ollama-chatbot-api-ifro/vector_store/*

@@ -111,7 +111,7 @@ services:
     container_name: ollama
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "11436:11434"
     environment:
       - OLLAMA_KEEP_ALIVE=24h
     volumes:
@@ -138,7 +138,7 @@ services:
     build: ./ollama-chatbot-api-ifro
     container_name: ifro-chatbot
     ports:
-      - "8008:8000"
+      - "8010:8000"
     environment:
       # 메모리 최적화 환경 변수
       - PYTHONUNBUFFERED=1
@@ -147,6 +147,10 @@ services:
       - RERANK_TIMEOUT=15
       - SEARCH_TIMEOUT=10
       - OLLAMA_HOST=ollama
+      # 모델 자동 다운로드 설정
+      - AUTO_PULL_MODEL=true
+      - MODEL_PULL_TIMEOUT=600
+      - MODEL_PULL_RETRIES=3
       
       # 한글 지원 설정
       - LANG=ko_KR.UTF-8
@@ -170,10 +174,10 @@ services:
           memory: 1G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
 
 volumes:
   mysql_data:
