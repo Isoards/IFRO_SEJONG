@@ -24,3 +24,9 @@ yarn-error.log
 ./ollama-chatbot-api-ifro/logs/*
 ./ollama-chatbot-api-ifro/out/*
 ./ollama-chatbot-api-ifro/vector_store/*
+
+# Large files and database backups
+*.sql
+seoul-intersection-data/*.sql
+**/sqldata-backup/**
+**/seoul_traffic_database_backup.sql
