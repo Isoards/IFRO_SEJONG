@@ -54,6 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - ./django-react-backend-api-ifro:/app
+      - ./ollama-chatbot-api-ifro/data:/app/data
     command: >
       sh -c "cd /app/src &&
              echo 'Waiting for MySQL to be ready...' &&
@@ -105,7 +106,7 @@ services:
     container_name: ollama-gpu
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "11435:11434"
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - NVIDIA_VISIBLE_DEVICES=all
@@ -139,7 +140,7 @@ services:
     build: ./ollama-chatbot-api-ifro
     container_name: chatbot-gpu
     ports:
-      - "8008:8000"
+      - "8009:8000"
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONUTF8=1
@@ -152,6 +153,10 @@ services:
       - OLLAMA_GPU_LAYERS=-1
       - BATCH_SIZE=8  # 배치 크기 증가로 GPU 활용도 향상
       - MAX_CONCURRENT_REQUESTS=4  # 동시 요청 수 증가
+      # 모델 자동 다운로드 설정
+      - AUTO_PULL_MODEL=true
+      - MODEL_PULL_TIMEOUT=600
+      - MODEL_PULL_RETRIES=3
       # 로깅 설정 - Docker Desktop에서 확인하기 쉽도록
       - LOG_LEVEL=INFO
       - LOG_FORMAT=detailed
@@ -182,10 +187,10 @@ services:
           memory: 4G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
 
 volumes:
   mysql_data:
