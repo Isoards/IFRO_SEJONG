@@ -142,7 +142,7 @@ export default function Dashboard() {
 
   // 교차로 데이터 로드
   useEffect(() => {
-    const loadIntersections = async () => {
+    const loadIntersectionsData = async () => {
       try {
         const data = await getTrafficIntersections();
         setIntersections(data);
@@ -160,7 +160,7 @@ export default function Dashboard() {
       }
     };
 
-    loadIntersections();
+    loadIntersectionsData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
