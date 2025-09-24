@@ -11,6 +11,7 @@ import {
   getProposals,
   getMyProposals,
 } from "../../../shared/services/proposals";
+import { ChatBotButton } from "../../chatbot/components/ChatBotButton";
 
 const CATEGORY_LABELS: Record<ProposalCategory, string> = {
   traffic_signal: "신호등 관련",
@@ -425,6 +426,9 @@ const ProposalList: React.FC = () => {
         총 {totalCount}개의 정책제안 중 {(currentPage - 1) * pageSize + 1}-
         {Math.min(currentPage * pageSize, totalCount)}개 표시
       </div>
+
+      {/* AI 챗봇 플로팅 버튼 */}
+      <ChatBotButton />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import {
   updateProposalStatus,
 } from "../../../shared/services/proposals";
 import { getCurrentUser } from "../../../shared/services/user";
+import { ChatBotButton } from "../../chatbot/components/ChatBotButton";
 
 const CATEGORY_LABELS: Record<ProposalCategory, string> = {
   traffic_signal: "신호등 관련",
@@ -488,6 +489,9 @@ const ProposalDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI 챗봇 플로팅 버튼 */}
+      <ChatBotButton />
     </div>
   );
 };

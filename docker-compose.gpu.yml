@@ -54,6 +54,7 @@ services:
         condition: service_healthy
     volumes:
       - ./django-react-backend-api-ifro:/app
+      - ./ollama-chatbot-api-ifro/data:/app/data
     command: >
       sh -c "cd /app/src &&
              echo 'Waiting for MySQL to be ready...' &&
