@@ -52,7 +52,76 @@ interface GoogleMapProps {
 }
 
 // const defaultCenter = { lat: -12.0464, lng: -77.0428 }; // Lima, Peru
-const defaultCenter = { lat: 36.5040736, lng: 127.2494855 }; //세종
+const defaultCenter = { lat: 37.5665, lng: 126.9780 }; // 서울 중심부
+
+// 교통 관리자용 지도 스타일 (핵심 정보만 표시)
+const mapStyles = [
+  {
+    featureType: "all",
+    elementType: "labels",
+    stylers: [{ visibility: "off" }]
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }] // 고속도로/주요도로명만 표시
+  },
+  {
+    featureType: "poi.business",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }] // 주요 비즈니스 건물만 표시
+  },
+  {
+    featureType: "poi.government",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }] // 정부기관 표시
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#a8d8ea" }] // 연한 파란색 (한강, 바다)
+  },
+  {
+    featureType: "landscape",
+    elementType: "geometry",
+    stylers: [{ color: "#d8d8c0" }] // 지형 특성별 색상 (산지/구릉지)
+  },
+  {
+    featureType: "landscape.man_made",
+    elementType: "geometry",
+    stylers: [{ color: "#e0e0c8" }] // 평지/개발지역
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#ffffff" }] // 흰색 (도로)
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#e0e0e0" }] // 연한 회색 테두리 (도로 경계)
+  },
+  {
+    featureType: "poi",
+    elementType: "geometry",
+    stylers: [{ color: "#e0e0c8" }] // 평지/개발지역과 같은 색 (건물)
+  },
+  {
+    featureType: "transit",
+    elementType: "geometry",
+    stylers: [{ color: "#e0e0c8" }] // 평지/개발지역과 같은 색 (대중교통)
+  },
+  {
+    featureType: "administrative",
+    elementType: "geometry",
+    stylers: [{ color: "#e0e0c8" }] // 평지/개발지역과 같은 색 (행정구역)
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#c8d8c0" }] // 공원/녹지 (산지와 구분)
+  }
+];
 
 export const GoogleMap: React.FC<GoogleMapProps> = ({
   selectedIntersection,
@@ -999,11 +1068,11 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       const unselectedMarkers = visibleMarkers
         .filter((intersection) => !selectedIds.includes(intersection.id))
         .map((intersection) => {
-          // 뷰에 따른 마커 색상 결정
+          // 뷰에 따른 마커 색상 결정 (더 명확한 구분)
           let fillColor = "#3b82f6"; // 기본 파란색
           let strokeColor = "#ffffff";
-          let strokeWeight = 1.5;
-          let scale = 6;
+          let strokeWeight = 2;
+          let scale = 8; // 크기 증가로 더 명확하게
 
           // 선택된 교차로인지 확인하여 시각적 강조
           const isSelected =
@@ -1011,9 +1080,10 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
             selectedIntersection.id === intersection.id;
 
           if (isSelected) {
-            strokeColor = "#fbbf24"; // 노란색 테두리
+            fillColor = "#ef4444"; // 빨간색으로 더 명확하게
+            strokeColor = "#ffffff"; // 흰색 테두리
             strokeWeight = 3; // 더 두꺼운 테두리
-            scale = 8; // 더 큰 크기
+            scale = 12; // 더 큰 크기
           }
 
           switch (activeTrafficView) {
@@ -1309,13 +1379,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       }}
       onIdle={onMapIdle}
       options={{
-        styles: [
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }],
-          },
-        ],
+        styles: mapStyles,
         disableDefaultUI: true,
         zoomControl: true,
         scrollwheel: true,
