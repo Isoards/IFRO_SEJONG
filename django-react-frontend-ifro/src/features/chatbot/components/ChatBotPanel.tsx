@@ -114,14 +114,21 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
           console.log('AI 상태 변경 감지:', status);
           setLastStatusChange(new Date());
           
-          // 상태 변경 알림 메시지 추가
-          const statusMessage: Message = {
-            id: `status-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            content: getStatusChangeMessage(prevStatus, status),
-            sender: "bot",
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, statusMessage]);
+          // 상태 변경 메시지 비활성화 - 더 이상 메시지를 추가하지 않음
+          // const statusMessageContent = getStatusChangeMessage(prevStatus, status);
+          // setMessages(prev => {
+          //   const lastMessage = prev[prev.length - 1];
+          //   if (!lastMessage || !lastMessage.content.includes('AI 서비스가 연결되었습니다')) {
+          //     const statusMessage: Message = {
+          //       id: `status-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          //       content: statusMessageContent,
+          //       sender: "bot",
+          //       timestamp: new Date(),
+          //     };
+          //     return [...prev, statusMessage];
+          //   }
+          //   return prev;
+          // });
         }
         
         return status;
@@ -139,14 +146,14 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
     }
   };
 
-  // 주기적 상태 확인 설정
+  // 주기적 상태 확인 설정 - 완전히 비활성화
   useEffect(() => {
     if (isOpen) {
-      // 즉시 한 번 확인
-      checkAIStatus();
+      // 상태 확인 완전히 비활성화
+      // checkAIStatus();
       
-      // 5초마다 상태 확인
-      statusCheckIntervalRef.current = setInterval(checkAIStatus, 5000);
+      // 주기적 상태 확인도 비활성화
+      // statusCheckIntervalRef.current = setInterval(checkAIStatus, 5000);
       
       return () => {
         if (statusCheckIntervalRef.current) {

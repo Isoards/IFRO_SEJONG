@@ -319,3 +319,8 @@ class ProposalByIntersectionSchema(Schema):
     intersection_id: int
     intersection_name: str
     count: int
+
+class PDFSaveRequestSchema(Schema):
+    """PDF 저장 요청 스키마"""
+    filename: str
+    pdf_data: str

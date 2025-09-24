@@ -6,6 +6,7 @@ import {
   htmlToCanvas,
   canvasToImageData,
   downloadPDF,
+  downloadAndSavePDF,
   generateReportFilename,
   isPDFGenerationSupported,
   estimateGenerationTime,
@@ -254,9 +255,9 @@ export class PDFReportGenerator {
         completed: false,
       });
 
-      // Step 5: Download the PDF
+      // Step 5: Download the PDF and save to server for automatic embedding
       const filename = generateReportFilename(reportData);
-      downloadPDF(pdf, filename);
+      await downloadAndSavePDF(pdf, filename);
       
       // Complete
       this.updateProgress({

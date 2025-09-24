@@ -117,6 +117,58 @@ export const downloadPDF = (pdf: jsPDF, filename: string): void => {
 };
 
 /**
+ * Saves PDF to server and triggers automatic embedding
+ */
+export const savePDFToServer = async (pdf: jsPDF, filename: string): Promise<boolean> => {
+  try {
+    // Convert PDF to base64
+    const pdfData = pdf.output('datauristring');
+    const base64Data = pdfData.split(',')[1]; // Remove data:application/pdf;filename=generated.pdf;base64, prefix
+    
+    // Send to backend
+    const response = await fetch('http://localhost:8000/api/traffic/pdf/save-and-notify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: filename,
+        pdf_data: base64Data
+      })
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      console.log('PDF 서버 저장 및 자동 임베딩 완료:', result.message);
+      return true;
+    } else {
+      console.error('PDF 서버 저장 실패:', response.statusText);
+      return false;
+    }
+  } catch (error) {
+    console.error('PDF 서버 저장 오류:', error);
+    return false;
+  }
+};
+
+/**
+ * Downloads PDF and saves to server for automatic embedding
+ */
+export const downloadAndSavePDF = async (pdf: jsPDF, filename: string): Promise<void> => {
+  // Download to user's device
+  downloadPDF(pdf, filename);
+  
+  // Save to server for automatic embedding
+  const saved = await savePDFToServer(pdf, filename);
+  
+  if (saved) {
+    console.log('PDF가 다운로드되고 챗봇에 자동 임베딩되었습니다!');
+  } else {
+    console.warn('PDF 다운로드는 완료되었지만 서버 저장에 실패했습니다.');
+  }
+};
+
+/**
  * Generates a filename for the PDF report
  */
 export const generateReportFilename = (reportData: ReportData): string => {
