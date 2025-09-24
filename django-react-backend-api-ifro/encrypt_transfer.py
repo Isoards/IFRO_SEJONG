@@ -137,6 +137,47 @@ def migrate_volume(cursor):
             print(f"❌ {id_}번 행 실패: {e}")
     print(f"✅ {inserted}개 행 암호화 및 삽입 완료")
 
+# === S_traffic_volume 이관 ===
+def migrate_traffic_volume(cursor):
+    print("\n--- [4] S_traffic_volume 이관 시작 ---")
+    create_sql = """
+    CREATE TABLE IF NOT EXISTS S_traffic_volume (
+        id BIGINT NOT NULL PRIMARY KEY,
+        datetime BLOB,
+        direction BLOB,
+        volume BLOB,
+        is_simulated BLOB,
+        intersection_id BLOB
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    """
+    ensure_table_exists(cursor, "S_traffic_volume", create_sql)
+    
+    # 기존 데이터 삭제
+    cursor.execute("DELETE FROM S_traffic_volume")
+
+    cursor.execute("SELECT id, datetime, direction, volume, is_simulated, intersection_id FROM traffic_trafficvolume")
+    rows = cursor.fetchall()
+    print(f"🔄 읽은 행 수: {len(rows)}")
+
+    inserted = 0
+    for row in rows:
+        id_, dt, direction, volume, is_sim, inter_id = row
+        try:
+            enc_dt = encrypt_text(dt)
+            enc_direction = encrypt_text(direction)
+            enc_volume = encrypt_text(volume)
+            enc_is_sim = encrypt_text(is_sim)
+            enc_inter_id = encrypt_text(inter_id)
+            
+            cursor.execute(
+                "INSERT INTO S_traffic_volume (id, datetime, direction, volume, is_simulated, intersection_id) VALUES (%s, %s, %s, %s, %s, %s)",
+                (id_, enc_dt, enc_direction, enc_volume, enc_is_sim, enc_inter_id)
+            )
+            inserted += 1
+        except Exception as e:
+            print(f"❌ {id_}번 행 실패: {e}")
+    print(f"✅ {inserted}개 행 암호화 및 삽입 완료")
+
 # === S_incident 이관 ===
 def migrate_incident(cursor):
     print("\n--- [3] S_incident 이관 시작 ---")
@@ -192,6 +233,7 @@ def main():
 
         migrate_intersection(cursor)
         migrate_volume(cursor)
+        migrate_traffic_volume(cursor)
         migrate_incident(cursor)
 
         conn.commit()
