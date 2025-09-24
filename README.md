@@ -14,7 +14,7 @@ IFRO_SEJONG/
 ├── 🎨 .gitattributes             # Git 속성 설정
 ├── 🎯 django-react-frontend-ifro/ # React 프론트엔드
 ├── 🔌 django-react-backend-api-ifro/ # Django 백엔드 API
-└── 🤖 ollama-llm-chatbot-api-ifro/ # AI 챗봇 서비스 (FastAPI)
+└── 🤖 ollama-chatbot-api-ifro/ # AI 챗봇 서비스 (FastAPI)
 ```
 
 ## 🚀 빠른 시작
@@ -88,7 +88,7 @@ nvidia-smi
 ### 4. 서비스 접속
 - **프론트엔드**: http://localhost:3000
 - **백엔드 API**: http://localhost:8000
-- **챗봇**: http://localhost:8008
+- **챗봇 API**: http://localhost:8010
 - **데이터베이스**: localhost:3307
 
 ## 🏛️ 서비스 구성
@@ -104,7 +104,7 @@ nvidia-smi
 - **주요기능**: 교통 데이터 API, 사용자 인증, 데이터 처리
 
 ### 🤖 AI 챗봇 (FastAPI + UnifiedPDF)
-- **위치**: `ollama-llm-chatbot-api-ifro/`
+- **위치**: `ollama-chatbot-api-ifro/`
 - **기술스택**: FastAPI, Python, Sentence Transformers, FAISS
 - **주요기능**: PDF 문서 기반 질의응답, 자연어 처리, 대화형 인터페이스
 
@@ -129,8 +129,8 @@ cd django-react-frontend-ifro
 npm start
 
 # 챗봇 개발
-cd ollama-LLM-ChatBot
-python run_server.py
+cd ollama-chatbot-api-ifro
+uvicorn server.app:app --host 0.0.0.0 --port 8000
 ```
 
 ### 환경 변수
@@ -162,7 +162,7 @@ docker-compose logs -f chatbot
 docker-compose ps
 
 # 챗봇 헬스체크
-curl http://localhost:8008/health
+curl http://localhost:8010/healthz
 ```
 
 ## 🛠️ 유지보수

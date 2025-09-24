@@ -9,6 +9,7 @@ import {
 } from "../../../shared/types/global.types";
 import { createProposal } from "../../../shared/services/proposals";
 import { getTrafficIntersections } from "../../../shared/services/intersections";
+import { ChatBotButton } from "../../chatbot/components/ChatBotButton";
 
 interface CreateProposalFormProps {
   preselectedIntersectionId?: number;
@@ -408,6 +409,9 @@ const CreateProposalForm: React.FC<CreateProposalFormProps> = ({
           </button>
         </div>
       </form>
+
+      {/* AI 챗봇 플로팅 버튼 */}
+      <ChatBotButton />
     </div>
   );
 };

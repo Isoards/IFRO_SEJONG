@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from ninja_extra import Router
 from typing import List
+import requests
+import logging
 from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, Incident, TrafficInterpretation,
     S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation,
@@ -18,7 +20,7 @@ from .schemas import (
     AdminStatsSchema, IntersectionStatsListSchema,
     PolicyProposalSchema, CreateProposalRequestSchema, UpdateProposalRequestSchema, UpdateProposalStatusRequestSchema,
     ProposalListResponseSchema, ProposalVoteRequestSchema, ProposalVoteResponseSchema, ProposalStatsSchema,
-    ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema
+    ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema, PDFSaveRequestSchema
 )
 from django.db.models import Sum, OuterRef, Subquery, Count, Q, F, Max
 from django.db import transaction, models
@@ -2462,3 +2464,83 @@ def get_heatmap_data(request):
     except Exception as e:
         print(f"Error getting heatmap data: {str(e)}")
         return []
+
+@router.post("/pdf/save-and-notify")
+def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
+    """
+    PDF 데이터를 받아서 저장하고 챗봇 서버에 알림을 보냅니다.
+    """
+    try:
+        import base64
+        import os
+        from django.conf import settings
+        
+        # 스키마에서 파라미터 추출
+        filename = data.filename
+        pdf_data = data.pdf_data
+        
+        if not filename or not pdf_data:
+            return {"status": "error", "message": "filename과 pdf_data가 필요합니다."}
+        
+        # PDF 데이터 디코딩 (base64)
+        try:
+            pdf_bytes = base64.b64decode(pdf_data)
+        except Exception as e:
+            logging.error(f"PDF 데이터 디코딩 실패: {str(e)}")
+            return {"status": "error", "message": f"PDF 데이터 디코딩 실패: {str(e)}"}
+        
+        # PDF 저장 경로 설정 (챗봇 서버와 공유되는 볼륨)
+        pdf_dir = "/app/data/pdfs"  # 챗봇 서버와 동일한 경로
+        os.makedirs(pdf_dir, exist_ok=True)
+        file_path = os.path.join(pdf_dir, filename)
+        
+        # 파일 저장
+        with open(file_path, "wb") as f:
+            f.write(pdf_bytes)
+        
+        logging.info(f"✅ PDF 파일 저장 완료: {file_path}")
+        
+        # 챗봇 서버에 알림 전송
+        return notify_pdf_upload(request, filename, file_path)
+        
+    except Exception as e:
+        logging.error(f"❌ PDF 저장 및 알림 처리 실패: {str(e)}")
+        return {"status": "error", "message": f"PDF 저장 및 알림 처리 실패: {str(e)}"}
+
+@router.post("/pdf/notify-upload")
+def notify_pdf_upload(request, filename: str, file_path: str):
+    """
+    PDF 파일이 저장되었을 때 챗봇 서버에 알림을 보냅니다.
+    """
+    try:
+        # 챗봇 서버 URL (Docker 환경에서 접근 가능한 주소)
+        chatbot_url = "http://chatbot-gpu:8000/api/pdf/notify-upload"
+        
+        # 알림 데이터
+        notification_data = {
+            "filename": filename,
+            "file_path": file_path,
+            "timestamp": datetime.now().isoformat(),
+            "source": "backend_api"
+        }
+        
+        # 챗봇 서버에 POST 요청
+        response = requests.post(
+            chatbot_url,
+            json=notification_data,
+            timeout=600  # 10분으로 증가
+        )
+        
+        if response.status_code == 200:
+            logging.info(f"✅ PDF 업로드 알림 전송 성공: {filename}")
+            return {"status": "success", "message": f"PDF 업로드 알림이 챗봇 서버에 전송되었습니다: {filename}"}
+        else:
+            logging.error(f"❌ PDF 업로드 알림 전송 실패: {response.status_code} - {response.text}")
+            return {"status": "error", "message": f"챗봇 서버 알림 전송 실패: {response.status_code}"}
+            
+    except requests.exceptions.RequestException as e:
+        logging.error(f"❌ 챗봇 서버 연결 실패: {str(e)}")
+        return {"status": "error", "message": f"챗봇 서버 연결 실패: {str(e)}"}
+    except Exception as e:
+        logging.error(f"❌ PDF 업로드 알림 처리 실패: {str(e)}")
+        return {"status": "error", "message": f"알림 처리 실패: {str(e)}"}

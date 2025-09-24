@@ -13,6 +13,7 @@ import {
   updateProposalStatus,
   getProposalStats,
 } from "../../../shared/services/proposals";
+import { ChatBotButton } from "../../chatbot/components/ChatBotButton";
 
 const AdminProposalManagement: React.FC = () => {
   const { t } = useTranslation();
@@ -595,6 +596,9 @@ const AdminProposalManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* AI 챗봇 플로팅 버튼 */}
+      <ChatBotButton />
     </div>
   );
 };

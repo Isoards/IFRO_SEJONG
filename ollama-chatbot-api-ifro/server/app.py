@@ -107,6 +107,32 @@ if FASTAPI_AVAILABLE:
     _warmed = False
     # Simple in-memory aggregator
     AGG = {"requests_total": 0, "no_answer_total": 0}
+    
+    # PDF 업로드 API 라우터 추가 (선택적)
+    try:
+        from server.pdf_upload import router as pdf_router
+        app.include_router(pdf_router, prefix="/api", tags=["PDF Management"])
+        logger.info("PDF 업로드 API 라우터 로드 완료")
+    except ImportError as e:
+        logger.warning(f"PDF 업로드 API 라우터 로드 실패: {e}")
+    
+    # 핫 리로드 시스템 초기화 (선택적)
+    try:
+        from server.hot_reload import initialize_hot_reload, start_hot_reload_monitoring
+        
+        def on_pipeline_reload(new_pipeline):
+            """파이프라인 리로드 콜백"""
+            global pipe
+            pipe = new_pipeline
+            logger.info("✅ 이전 추출한 PDF의 학습이 완료되었습니다.")
+            print("✅ 이전 추출한 PDF의 학습이 완료되었습니다.")
+        
+        # 핫 리로드 관리자 초기화
+        hot_reload_manager = initialize_hot_reload(callback=on_pipeline_reload)
+        logger.info("핫 리로드 시스템 초기화 완료")
+    except ImportError as e:
+        logger.warning(f"핫 리로드 시스템 초기화 실패: {e}")
+        hot_reload_manager = None
 
     class AskRequest(BaseModel):
         question: str
@@ -383,6 +409,14 @@ if FASTAPI_AVAILABLE:
                         print(f"Model warmup completed: {warmup_result.get('response', '')[:50]}...")
                         print(f"Model '{model_name}' is now loaded in memory and will stay warm for 24h")
                         _warmed = True
+                        
+                        # 핫 리로드 모니터링 시작 (선택적)
+                        try:
+                            start_hot_reload_monitoring(check_interval=5.0)
+                            logger.info("핫 리로드 모니터링 시작")
+                        except Exception as e:
+                            logger.warning(f"핫 리로드 모니터링 시작 실패: {e}")
+                        
                 except Exception as warmup_e:
                     print(f"Model warmup failed: {warmup_e}")
                     _warmed = False
