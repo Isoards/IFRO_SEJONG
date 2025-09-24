@@ -151,7 +151,8 @@ const AdminDashboard = () => {
           top_ai_report_areas: [],
           total_views: 0,
           total_favorites: 0,
-          total_ai_reports: 0
+          total_ai_reports: 0,
+          total_policy_proposals: 0
         });
         setIntersectionStats([]);
       } finally {
@@ -275,7 +276,7 @@ const AdminDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">총 정책 제안</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {loading ? "..." : "0"}
+                  {loading ? "..." : (adminStats?.total_policy_proposals || 0)}
                 </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -293,8 +294,7 @@ const AdminDashboard = () => {
               </div>
             </div>
             <div className="mt-2 flex items-center">
-              <span className="text-gray-600 text-sm font-medium">준비 중</span>
-              <span className="text-gray-500 text-sm ml-1">기능 개발 예정</span>
+              <span className="text-gray-600 text-sm font-medium">실시간 업데이트</span>
             </div>
           </div>
 

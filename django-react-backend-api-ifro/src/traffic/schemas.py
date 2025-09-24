@@ -192,6 +192,7 @@ class AdminStatsSchema(Schema):
     total_views: int
     total_favorites: int
     total_ai_reports: int
+    total_policy_proposals: int
 
 class IntersectionStatsListSchema(Schema):
     """교차로 통계 목록 스키마"""

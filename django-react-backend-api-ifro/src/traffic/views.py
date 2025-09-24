@@ -1184,6 +1184,9 @@ def get_admin_stats(request):
             total_ai_reports=Sum('ai_report_count')
         )
         
+        # 총 정책 제안 수 계산
+        total_policy_proposals = PolicyProposal.objects.count()
+        
         # 결과 구성
         top_viewed_list = [
             {
@@ -1221,7 +1224,8 @@ def get_admin_stats(request):
             top_ai_report_areas=top_ai_report_list,
             total_views=totals['total_views'] or 0,
             total_favorites=totals['total_favorites'] or 0,
-            total_ai_reports=totals['total_ai_reports'] or 0
+            total_ai_reports=totals['total_ai_reports'] or 0,
+            total_policy_proposals=total_policy_proposals
         )
         
     except Exception as e:
@@ -1636,6 +1640,9 @@ def get_admin_stats(request):
         # 총 AI 리포트 수 (TrafficInterpretation 테이블에서)
         total_ai_reports = TrafficInterpretation.objects.count()
         
+        # 총 정책 제안 수 (PolicyProposal 테이블에서)
+        total_policy_proposals = PolicyProposal.objects.count()
+        
         # 최다 조회 구간 TOP 10
         top_viewed_areas = list(IntersectionViewLog.objects.values(
             'intersection__name'
@@ -1691,6 +1698,7 @@ def get_admin_stats(request):
             'total_views': total_views,
             'total_favorites': total_favorites,
             'total_ai_reports': total_ai_reports,
+            'total_policy_proposals': total_policy_proposals,
             'top_viewed_areas': formatted_viewed,
             'top_favorite_areas': formatted_favorites,
             'top_ai_report_areas': formatted_ai_reports

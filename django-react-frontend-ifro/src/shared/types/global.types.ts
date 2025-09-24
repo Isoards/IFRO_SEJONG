@@ -220,6 +220,7 @@ export interface AdminStats {
   total_views: number;
   total_favorites: number;
   total_ai_reports: number;
+  total_policy_proposals: number;
 }
 
 // 교통 흐름 분석 즐겨찾기 관련 타입들
