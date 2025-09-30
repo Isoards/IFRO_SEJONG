@@ -23,5 +23,10 @@ ENV LC_ALL=ko_KR.UTF-8
 ENV LC_CTYPE=ko_KR.UTF-8
 ENV PYTHONUTF8=1
 
+# 웹 검색 기능을 위한 추가 의존성 설치
+RUN pip install --no-cache-dir beautifulsoup4 lxml googlesearch-python duckduckgo-search mysql-connector-python
+
 EXPOSE 8000
-CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "warning"]
+
+# 웹 검색 기능이 추가된 서버 시작
+CMD ["uvicorn", "server.web_enhanced_app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "warning"]

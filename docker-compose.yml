@@ -1,10 +1,11 @@
+version: '3.8'
+
 # IFRO 시스템 Docker Compose 설정
 # 사용법:
 #   docker-compose up -d                    # 전체 서비스 (메모리 8GB+ 필요)
 #   docker-compose up -d db backend frontend # 경량 모드 (AI 서비스 제외)
 #   docker-compose up -d ollama chatbot      # AI 서비스만 (CPU)
 #   docker-compose -f docker-compose.gpu.yml up -d # GPU 지원 AI 서비스
-version: '3.8'
 
 services:
   db:
@@ -114,16 +115,18 @@ services:
       - "11436:11434"
     environment:
       - OLLAMA_KEEP_ALIVE=24h
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
     volumes:
       - ollama_data:/root/.ollama
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 8G
         reservations:
-          memory: 2G
-    # GPU 설정은 docker-compose.gpu.yml에서 사용
-    # runtime: nvidia  # GPU 사용 시 주석 해제
+          memory: 4G
+    # GPU 설정 (runtime 방식)
+    runtime: nvidia
     # 기본 ollama serve 명령어 사용
     # 모델은 챗봇 서버 시작 시 자동으로 다운로드됨
     healthcheck:
@@ -156,6 +159,10 @@ services:
       - LANG=ko_KR.UTF-8
       - LC_ALL=ko_KR.UTF-8
       - LC_CTYPE=ko_KR.UTF-8
+      # 웹 검색 설정
+      - WEB_SEARCH_ENABLED=true
+      - WEB_SEARCH_ENGINE=duckduckgo
+      - WEB_SEARCH_API_KEY=
     volumes:
       - ./ollama-chatbot-api-ifro:/app
       - ./ollama-chatbot-api-ifro/data:/app/data

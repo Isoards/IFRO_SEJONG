@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict, Optional
 
 
@@ -80,14 +80,14 @@ class DomainConfig:
 
 @dataclass
 class PipelineConfig:
-    thresholds: Thresholds = Thresholds()
-    rrf: RRFPolicy = RRFPolicy()
-    context: ContextPolicy = ContextPolicy()
-    flags: ModeFlags = ModeFlags()
-    domain: DomainConfig = DomainConfig()
-    deduplication: DeduplicationPolicy = DeduplicationPolicy()
+    thresholds: Thresholds = field(default_factory=Thresholds)
+    rrf: RRFPolicy = field(default_factory=RRFPolicy)
+    context: ContextPolicy = field(default_factory=ContextPolicy)
+    flags: ModeFlags = field(default_factory=ModeFlags)
+    domain: DomainConfig = field(default_factory=DomainConfig)
+    deduplication: DeduplicationPolicy = field(default_factory=DeduplicationPolicy)
     seed: int = 42
-    model_name: str = "llama3.1:8b-instruct-q4_K_M"
+    model_name: str = "qwen2.5:3b-instruct"
     embedding_model: str = "jhgan/ko-sroberta-multitask"
     vector_store_dir: str = "vector_store"
     llm_retries: int = 3
