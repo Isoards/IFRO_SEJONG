@@ -285,6 +285,36 @@ class UpdateProposalStatusRequestSchema(Schema):
     status: str = Field(..., description="상태")
     admin_response: Optional[str] = Field(None, description="관리자 답변")
 
+# 댓글 관련 스키마
+class CommentSchema(Schema):
+    """댓글 스키마"""
+    id: int
+    content: str
+    author: str
+    author_id: int
+    parent_comment_id: Optional[int] = None
+    reply_count: int = 0
+    is_deleted: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+class CreateCommentRequestSchema(Schema):
+    """댓글 작성 요청 스키마"""
+    content: str = Field(..., min_length=1, max_length=1000, description="댓글 내용")
+    parent_comment_id: Optional[int] = Field(None, description="부모 댓글 ID (대댓글인 경우)")
+
+class UpdateCommentRequestSchema(Schema):
+    """댓글 수정 요청 스키마"""
+    content: str = Field(..., min_length=1, max_length=1000, description="댓글 내용")
+
+class CommentListResponseSchema(Schema):
+    """댓글 목록 응답 스키마"""
+    comments: List[CommentSchema]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
+
 class ProposalListResponseSchema(Schema):
     """정책제안 목록 응답 스키마"""
     results: List[PolicyProposalSchema]

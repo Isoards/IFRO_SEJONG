@@ -4,7 +4,7 @@ from django.db.models import Count
 from django.utils import timezone
 from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, 
-    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag,
+    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag, ProposalComment,
     IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog,
     TrafficFlowAnalysisFavorite, TrafficFlowAnalysisStats
 )
@@ -180,3 +180,15 @@ class ProposalTagAdmin(admin.ModelAdmin):
     def get_proposals_count(self, obj):
         return obj.proposals.count()
     get_proposals_count.short_description = '제안 수'
+
+@admin.register(ProposalComment)
+class ProposalCommentAdmin(admin.ModelAdmin):
+    list_display = ('proposal', 'author', 'content_preview', 'parent_comment', 'is_deleted', 'created_at')
+    list_filter = ('is_deleted', 'created_at', 'parent_comment')
+    search_fields = ('proposal__title', 'author__username', 'content')
+    readonly_fields = ('created_at', 'updated_at')
+    raw_id_fields = ('proposal', 'author', 'parent_comment')
+    
+    def content_preview(self, obj):
+        return obj.content[:50] + '...' if len(obj.content) > 50 else obj.content
+    content_preview.short_description = '내용 미리보기'

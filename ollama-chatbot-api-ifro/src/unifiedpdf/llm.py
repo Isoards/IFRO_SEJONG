@@ -133,7 +133,7 @@ def _select_best_contexts(contexts: List[RetrievedSpan], question: str, max_cont
 def _format_prompt(question: str, contexts: List[RetrievedSpan], qtype: str = "general") -> str:
     # 자연스러운 챗봇 스타일 프롬프트
     parts = [
-        "안녕하세요! 정수장 시스템에 대해 궁금한 점이 있으시군요.",
+        "안녕하세요! 대시보드 플랫폼에 대해 궁금한 점이 있으시군요.",
         "",
         "제가 문서를 확인해서 친근하게 답변드릴게요.",
         "",
@@ -158,32 +158,30 @@ def _format_prompt(question: str, contexts: List[RetrievedSpan], qtype: str = "g
 def _format_prompt_v2(question: str, contexts: List[RetrievedSpan], qtype: str = "general", domain_dict: dict = None) -> str:
     """Domain Dictionary를 활용한 개선된 문서 중심 답변 프롬프트"""
     
-    # 질문 유형별 맞춤형 프롬프트 전략 (개선된 버전)
-    if qtype in ["technical_spec", "definition"]:
-        # 기술사양이나 정의형 질문은 더 상세한 정보 필요
+    # 질문 유형별 맞춤형 프롬프트 전략 (교통 대시보드에 맞게 수정)
+    if qtype in ["traffic_analysis", "congestion"]:
+        # 교통 분석이나 혼잡도 관련 질문은 더 상세한 정보 필요
         max_contexts = 6  # 4 → 6개로 증가
         text_length = 800  # 500 → 800자로 증가
-        instruction_emphasis = "기술적 세부사항과 정확한 용어를 포함하여"
-    elif qtype in ["system_info", "numeric"]:
-        # 시스템 정보나 수치형 질문은 정확한 데이터 중요
+        instruction_emphasis = "교통 데이터 분석과 혼잡도 정보를 포함하여"
+    elif qtype in ["intersection_info", "traffic_data"]:
+        # 교차로 정보나 교통 데이터 관련 질문은 정확한 데이터 중요
         max_contexts = 5  # 3 → 5개로 증가
         text_length = 600  # 400 → 600자로 증가
-        instruction_emphasis = "정확한 수치, URL, 계정 정보를 그대로"
+        instruction_emphasis = "정확한 교통 수치, 교차로 정보, 사고 데이터를 그대로"
     else:
-        # 일반적인 질문
+        # 일반적인 교통 관련 질문
         max_contexts = 4  # 3 → 4개로 증가
         text_length = 500  # 400 → 500자로 증가
-        instruction_emphasis = "문서 내용을 바탕으로"
+        instruction_emphasis = "교통 정책 문서 내용을 바탕으로"
     
     # Domain Dictionary를 활용한 키워드 기반 최적의 컨텍스트 선택
     selected_contexts = _select_best_contexts(contexts, question, max_contexts, domain_dict, qtype)
     
     parts = [
-        "당신은 고산 정수장 시스템 사용자 설명서 전문 챗봇입니다.",
+        "당신은 IFRO 교통 분석 시스템의 AI 어시스턴트입니다.",
         "",
-        "중요: 반드시 제공된 문서 내용만을 기반으로 답변하세요. 외부 지식이나 일반적인 정보는 사용하지 마세요.",
-        "",
-        "문서 내용:",
+        "교통 정책 문서 내용:",
     ]
     
     # 더 많은 문서와 더 긴 텍스트 사용 (chunk overlap 포함)
@@ -245,11 +243,11 @@ def _format_prompt_recovery(question: str, contexts: List[RetrievedSpan], qtype:
     selected_contexts = _select_best_contexts(contexts, question, max_contexts, domain_dict, qtype)
     
     parts = [
-        "고산 정수장 시스템 사용자 설명서 전문 챗봇입니다.",
+        "IFRO 교통 분석 시스템의 AI 어시스턴트입니다.",
         "",
-        "경고: 오직 제공된 문서 내용만 사용하세요. 외부 지식은 절대 사용하지 마세요.",
+        "경고: 오직 제공된 교통 정책 문서 내용만 사용하세요. 외부 지식은 절대 사용하지 마세요.",
         "",
-        "문서 내용:",
+        "교통 정책 문서 내용:",
     ]
     
     # 더 많은 문서와 더 긴 텍스트 사용
@@ -480,66 +478,67 @@ def _extract_highlighted_info(text: str, question: str, keywords: List[str]) -> 
         if port_numbers:
             return f"포트 번호: {', '.join(port_numbers)}"
     
-    # 입력변수 관련 추출
-    if any(term in question_lower for term in ["입력변수", "수질", "인자"]):
-        # 수질 인자 키워드 매칭
-        water_quality_terms = ["원수", "탁도", "pH", "온도", "알칼리도", "전기전도도", "응집제", "주입률", "NaOH", "활성탄"]
-        found_terms = [term for term in water_quality_terms if term.lower() in text.lower()]
+    # 교통 데이터 관련 추출
+    if any(term in question_lower for term in ["교통량", "속도", "혼잡도", "교통데이터"]):
+        # 교통 데이터 키워드 매칭
+        traffic_terms = ["교통량", "평균속도", "혼잡도", "교차로", "신호등", "교통사고", "대중교통", "버스", "지하철"]
+        found_terms = [term for term in traffic_terms if term.lower() in text.lower()]
         if found_terms:
-            return f"수질 인자: {', '.join(found_terms)}"
+            return f"교통 데이터: {', '.join(found_terms)}"
     
-    # 발행일 및 컨소시엄 정보 추출
-    if any(term in question_lower for term in ["발행일", "컨소시엄", "작성"]):
+    # 교통 정책 발행일 및 기관 정보 추출
+    if any(term in question_lower for term in ["발행일", "기관", "정책", "작성"]):
         # 날짜 패턴 추출
         date_pattern = r'\d{4}년\s*\d{1,2}월\s*\d{1,2}일|\d{4}\.\d{1,2}\.\d{1,2}|\d{4}-\d{1,2}-\d{1,2}'
         dates = re.findall(date_pattern, text)
         if dates:
-            return f"발행일: {', '.join(dates)}"
+            return f"정책 발행일: {', '.join(dates)}"
         
-        # 컨소시엄 정보 추출
-        consortium_pattern = r'[가-힣]+컨소시엄|에셈블'
-        consortiums = re.findall(consortium_pattern, text)
-        if consortiums:
-            return f"컨소시엄: {', '.join(consortiums)}"
+        # 교통 관련 기관 정보 추출
+        agency_pattern = r'[가-힣]+부|[가-힣]+청|[가-힣]+시|[가-힣]+도'
+        agencies = re.findall(agency_pattern, text)
+        if agencies:
+            return f"관련 기관: {', '.join(agencies)}"
     
-    # 시스템 목적 관련 추출
-    if any(term in question_lower for term in ["목적", "주요", "시스템"]):
-        # 목적 관련 키워드 매칭
-        purpose_keywords = ["자율운영", "AI", "활용성", "안정적", "정보제공", "시운전", "성능검증"]
+    # 교통 시스템 목적 관련 추출
+    if any(term in question_lower for term in ["목적", "주요", "시스템", "교통정책"]):
+        # 교통 정책 목적 관련 키워드 매칭
+        purpose_keywords = ["교통안전", "친환경교통", "대중교통", "교통접근성", "스마트교통", "교통혁신", "자율주행", "전기차"]
         found_purpose = [kw for kw in purpose_keywords if kw.lower() in text.lower()]
         if found_purpose:
-            return f"시스템 목적: {', '.join(found_purpose)}"
+            return f"교통 정책 목적: {', '.join(found_purpose)}"
     
-    # 혼화응집 공정 목표 추출
-    if any(term in question_lower for term in ["혼화응집", "목표", "산출"]):
-        # 혼화응집 관련 키워드 매칭
-        mixing_keywords = ["혼화", "응집", "목표", "산출", "예측", "제어"]
-        found_mixing = [kw for kw in mixing_keywords if kw.lower() in text.lower()]
-        if found_mixing:
-            return f"혼화응집 목표: {', '.join(found_mixing)}"
+    # 교통 정책 목표 추출
+    if any(term in question_lower for term in ["목표", "산출", "정책목표"]):
+        # 교통 정책 목표 관련 키워드 매칭
+        policy_keywords = ["교통사고감소", "온실가스감소", "대중교통이용률", "교통소외지역해소", "자율주행상용화", "전기차보급"]
+        found_policy = [kw for kw in policy_keywords if kw.lower() in text.lower()]
+        if found_policy:
+            return f"교통 정책 목표: {', '.join(found_policy)}"
     
-    # EMS 자동/부분 모드 차이점 추출
-    if any(term in question_lower for term in ["ems", "자동모드", "부분모드", "차이점"]):
-        # EMS 관련 키워드 매칭
-        ems_keywords = ["자동모드", "부분모드", "ems", "송수펌프", "제어"]
-        found_ems = [kw for kw in ems_keywords if kw.lower() in text.lower()]
-        if found_ems:
-            return f"EMS 모드: {', '.join(found_ems)}"
+    # 대중교통 정책 추출
+    if any(term in question_lower for term in ["대중교통", "버스", "지하철", "택시"]):
+        # 대중교통 관련 키워드 매칭
+        public_transport_keywords = ["버스전용차로", "지하철확장", "버스노선", "택시요금", "대중교통이용률", "버스정보시스템"]
+        found_transport = [kw for kw in public_transport_keywords if kw.lower() in text.lower()]
+        if found_transport:
+            return f"대중교통 정책: {', '.join(found_transport)}"
     
-    # PMS 펌프 결함 정보 추출
-    if any(term in question_lower for term in ["pms", "펌프", "결함", "진단"]):
-        # PMS 관련 키워드 매칭
-        pms_keywords = ["pms", "펌프", "결함", "진단", "모터", "진동", "온도"]
-        found_pms = [kw for kw in pms_keywords if kw.lower() in text.lower()]
-        if found_pms:
-            return f"PMS 결함 정보: {', '.join(found_pms)}"
+    # 친환경 교통 정책 추출
+    if any(term in question_lower for term in ["친환경", "전기차", "자전거", "보행자"]):
+        # 친환경 교통 관련 키워드 매칭
+        eco_keywords = ["전기차보급", "전기차충전", "자전거도로", "보행자전용구역", "친환경교통수단", "온실가스감소"]
+        found_eco = [kw for kw in eco_keywords if kw.lower() in text.lower()]
+        if found_eco:
+            return f"친환경 교통 정책: {', '.join(found_eco)}"
     
-    # 계정 정보 추출
-    if any(term in question_lower for term in ["계정", "사용자", "로그인"]):
-        account_pattern = r'[가-힣]+\([^)]+\)|[A-Za-z]+@[A-Za-z]+\.[A-Za-z]+'
-        accounts = re.findall(account_pattern, text)
-        if accounts:
-            return f"계정 정보: {', '.join(accounts)}"
+    # 교통 안전 정책 추출
+    if any(term in question_lower for term in ["교통안전", "사고예방", "어린이보호", "음주운전"]):
+        # 교통 안전 관련 키워드 매칭
+        safety_keywords = ["교통사고예방", "속도제한", "신호체계개선", "어린이보호구역", "스쿨존", "음주운전근절"]
+        found_safety = [kw for kw in safety_keywords if kw.lower() in text.lower()]
+        if found_safety:
+            return f"교통 안전 정책: {', '.join(found_safety)}"
     
     return ""
 

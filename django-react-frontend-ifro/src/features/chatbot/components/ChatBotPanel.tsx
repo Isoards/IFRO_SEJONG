@@ -149,11 +149,11 @@ export const ChatBotPanel: React.FC<ChatBotPanelProps> = ({
   // 주기적 상태 확인 설정 - 완전히 비활성화
   useEffect(() => {
     if (isOpen) {
-      // 상태 확인 완전히 비활성화
-      // checkAIStatus();
+      // AI 상태 확인 활성화
+      checkAIStatus();
       
-      // 주기적 상태 확인도 비활성화
-      // statusCheckIntervalRef.current = setInterval(checkAIStatus, 5000);
+      // 주기적 상태 확인 활성화 (5초마다)
+      statusCheckIntervalRef.current = setInterval(checkAIStatus, 5000);
       
       return () => {
         if (statusCheckIntervalRef.current) {

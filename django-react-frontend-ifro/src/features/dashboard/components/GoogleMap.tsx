@@ -1379,8 +1379,7 @@ export const GoogleMap: React.FC<GoogleMapProps> = ({
       }}
       onIdle={onMapIdle}
       options={{
-        styles: mapStyles,
-        disableDefaultUI: true,
+        disableDefaultUI: false,
         zoomControl: true,
         scrollwheel: true,
         gestureHandling: "greedy",

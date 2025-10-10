@@ -15,6 +15,7 @@ import {
 } from "../../../shared/services/proposals";
 import { getCurrentUser } from "../../../shared/services/user";
 import { ChatBotButton } from "../../chatbot/components/ChatBotButton";
+import CommentSection from "./CommentSection";
 
 const CATEGORY_LABELS: Record<ProposalCategory, string> = {
   traffic_signal: "신호등 관련",
@@ -367,6 +368,9 @@ const ProposalDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 댓글 섹션 */}
+      <CommentSection proposalId={proposal.id} />
 
       {/* 하단 버튼 */}
       <div className="flex justify-between">

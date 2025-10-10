@@ -7,7 +7,7 @@ from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, Incident, TrafficInterpretation,
     S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation,
     IntersectionStats, IntersectionViewLog, IntersectionFavoriteLog,
-    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag
+    PolicyProposal, ProposalAttachment, ProposalVote, ProposalViewLog, ProposalTag, ProposalComment
 )
 from .services import TrafficInterpretationService
 from .gemini_service import GeminiTrafficAnalyzer
@@ -20,7 +20,8 @@ from .schemas import (
     AdminStatsSchema, IntersectionStatsListSchema,
     PolicyProposalSchema, CreateProposalRequestSchema, UpdateProposalRequestSchema, UpdateProposalStatusRequestSchema,
     ProposalListResponseSchema, ProposalVoteRequestSchema, ProposalVoteResponseSchema, ProposalStatsSchema,
-    ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema, PDFSaveRequestSchema
+    ProposalByCategorySchema, ProposalByIntersectionSchema, CoordinatesSchema, PDFSaveRequestSchema,
+    CommentSchema, CreateCommentRequestSchema, UpdateCommentRequestSchema, CommentListResponseSchema
 )
 from django.db.models import Sum, OuterRef, Subquery, Count, Q, F, Max
 from django.db import transaction, models
@@ -2054,6 +2055,219 @@ def create_proposal(request, payload: CreateProposalRequestSchema):
             
     except Exception as e:
         raise HttpError(500, f"정책제안 생성 중 오류가 발생했습니다: {str(e)}")
+
+# 댓글 관련 API 엔드포인트
+@router.get("/proposals/{proposal_id}/comments", response=CommentListResponseSchema)
+def get_proposal_comments(request, proposal_id: int, page: int = 1, page_size: int = 20):
+    """정책제안 댓글 목록 조회"""
+    try:
+        # 정책제안 존재 확인
+        proposal = PolicyProposal.objects.filter(id=proposal_id).first()
+        if not proposal:
+            raise HttpError(404, "정책제안을 찾을 수 없습니다.")
+        
+        # 댓글 조회 (대댓글 제외, 최상위 댓글만)
+        comments = ProposalComment.objects.filter(
+            proposal=proposal,
+            parent_comment__isnull=True,
+            is_deleted=False
+        ).select_related('author').prefetch_related('replies').order_by('created_at')
+        
+        # 페이지네이션
+        total_count = comments.count()
+        total_pages = (total_count + page_size - 1) // page_size
+        start = (page - 1) * page_size
+        end = start + page_size
+        comments_page = comments[start:end]
+        
+        # 댓글 데이터 변환
+        comment_list = []
+        for comment in comments_page:
+            comment_data = {
+                'id': comment.id,
+                'content': comment.content,
+                'author': comment.author.username,
+                'author_id': comment.author.id,
+                'parent_comment_id': comment.parent_comment_id,
+                'reply_count': comment.reply_count,
+                'is_deleted': comment.is_deleted,
+                'created_at': comment.created_at,
+                'updated_at': comment.updated_at
+            }
+            comment_list.append(comment_data)
+        
+        return {
+            'comments': comment_list,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages
+        }
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        raise HttpError(500, f"댓글 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/proposals/{proposal_id}/comments/{comment_id}/replies", response=CommentListResponseSchema)
+def get_comment_replies(request, proposal_id: int, comment_id: int, page: int = 1, page_size: int = 20):
+    """대댓글 목록 조회"""
+    try:
+        # 부모 댓글 존재 확인
+        parent_comment = ProposalComment.objects.filter(
+            id=comment_id,
+            proposal_id=proposal_id,
+            parent_comment__isnull=True
+        ).first()
+        if not parent_comment:
+            raise HttpError(404, "댓글을 찾을 수 없습니다.")
+        
+        # 대댓글 조회
+        replies = ProposalComment.objects.filter(
+            parent_comment=parent_comment,
+            is_deleted=False
+        ).select_related('author').order_by('created_at')
+        
+        # 페이지네이션
+        total_count = replies.count()
+        total_pages = (total_count + page_size - 1) // page_size
+        start = (page - 1) * page_size
+        end = start + page_size
+        replies_page = replies[start:end]
+        
+        # 대댓글 데이터 변환
+        reply_list = []
+        for reply in replies_page:
+            reply_data = {
+                'id': reply.id,
+                'content': reply.content,
+                'author': reply.author.username,
+                'author_id': reply.author.id,
+                'parent_comment_id': reply.parent_comment_id,
+                'reply_count': 0,  # 대댓글은 대댓글을 가질 수 없음
+                'is_deleted': reply.is_deleted,
+                'created_at': reply.created_at,
+                'updated_at': reply.updated_at
+            }
+            reply_list.append(reply_data)
+        
+        return {
+            'comments': reply_list,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages
+        }
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        raise HttpError(500, f"대댓글 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.post("/proposals/{proposal_id}/comments", response=CommentSchema, auth=JWTAuth())
+def create_comment(request, proposal_id: int, payload: CreateCommentRequestSchema):
+    """댓글 작성"""
+    try:
+        # 정책제안 존재 확인
+        proposal = PolicyProposal.objects.filter(id=proposal_id).first()
+        if not proposal:
+            raise HttpError(404, "정책제안을 찾을 수 없습니다.")
+        
+        # 부모 댓글 확인 (대댓글인 경우)
+        parent_comment = None
+        if payload.parent_comment_id:
+            parent_comment = ProposalComment.objects.filter(
+                id=payload.parent_comment_id,
+                proposal=proposal,
+                parent_comment__isnull=True  # 대댓글은 최상위 댓글에만 달 수 있음
+            ).first()
+            if not parent_comment:
+                raise HttpError(404, "부모 댓글을 찾을 수 없습니다.")
+        
+        # 댓글 생성
+        comment = ProposalComment.objects.create(
+            proposal=proposal,
+            author=request.user,
+            content=payload.content,
+            parent_comment=parent_comment
+        )
+        
+        return {
+            'id': comment.id,
+            'content': comment.content,
+            'author': comment.author.username,
+            'author_id': comment.author.id,
+            'parent_comment_id': comment.parent_comment_id,
+            'reply_count': comment.reply_count,
+            'is_deleted': comment.is_deleted,
+            'created_at': comment.created_at,
+            'updated_at': comment.updated_at
+        }
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        raise HttpError(500, f"댓글 작성 중 오류가 발생했습니다: {str(e)}")
+
+@router.put("/proposals/{proposal_id}/comments/{comment_id}", response=CommentSchema, auth=JWTAuth())
+def update_comment(request, proposal_id: int, comment_id: int, payload: UpdateCommentRequestSchema):
+    """댓글 수정"""
+    try:
+        # 댓글 존재 및 권한 확인
+        comment = ProposalComment.objects.filter(
+            id=comment_id,
+            proposal_id=proposal_id,
+            author=request.user,
+            is_deleted=False
+        ).first()
+        if not comment:
+            raise HttpError(404, "댓글을 찾을 수 없거나 수정 권한이 없습니다.")
+        
+        # 댓글 수정
+        comment.content = payload.content
+        comment.save()
+        
+        return {
+            'id': comment.id,
+            'content': comment.content,
+            'author': comment.author.username,
+            'author_id': comment.author.id,
+            'parent_comment_id': comment.parent_comment_id,
+            'reply_count': comment.reply_count,
+            'is_deleted': comment.is_deleted,
+            'created_at': comment.created_at,
+            'updated_at': comment.updated_at
+        }
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        raise HttpError(500, f"댓글 수정 중 오류가 발생했습니다: {str(e)}")
+
+@router.delete("/proposals/{proposal_id}/comments/{comment_id}", auth=JWTAuth())
+def delete_comment(request, proposal_id: int, comment_id: int):
+    """댓글 삭제 (소프트 삭제)"""
+    try:
+        # 댓글 존재 및 권한 확인
+        comment = ProposalComment.objects.filter(
+            id=comment_id,
+            proposal_id=proposal_id,
+            author=request.user,
+            is_deleted=False
+        ).first()
+        if not comment:
+            raise HttpError(404, "댓글을 찾을 수 없거나 삭제 권한이 없습니다.")
+        
+        # 소프트 삭제
+        comment.is_deleted = True
+        comment.save()
+        
+        return {"message": "댓글이 삭제되었습니다."}
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        raise HttpError(500, f"댓글 삭제 중 오류가 발생했습니다: {str(e)}")
 
 # 정책제안 수정 (본인만)
 @router.patch("/proposals/{proposal_id}", response=PolicyProposalSchema, auth=JWTAuth())

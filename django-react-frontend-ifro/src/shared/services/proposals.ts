@@ -5,6 +5,10 @@ import {
   UpdateProposalStatusRequest,
   ProposalListResponse,
   ProposalFilters,
+  ProposalComment,
+  CreateCommentRequest,
+  UpdateCommentRequest,
+  CommentListResponse,
 } from "../types/global.types";
 
 const PROPOSALS_BASE_URL = "traffic/proposals";
@@ -169,5 +173,67 @@ export async function getProposalsByIntersectionId(
   });
 
   const response = await api.get(`${PROPOSALS_BASE_URL}/?${params.toString()}`);
+  return response.data;
+}
+
+// 댓글 관련 API 함수들
+// 정책제안 댓글 목록 조회
+export async function getProposalComments(
+  proposalId: number,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<CommentListResponse> {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+  });
+
+  const response = await api.get(
+    `${PROPOSALS_BASE_URL}/${proposalId}/comments?${params.toString()}`
+  );
+  return response.data;
+}
+
+// 정책제안 댓글 작성
+export async function createProposalComment(
+  proposalId: number,
+  commentData: CreateCommentRequest
+): Promise<ProposalComment> {
+  const response = await api.post(
+    `${PROPOSALS_BASE_URL}/${proposalId}/comments`,
+    commentData
+  );
+  return response.data;
+}
+
+// 정책제안 댓글 수정
+export async function updateProposalComment(
+  proposalId: number,
+  commentId: number,
+  commentData: UpdateCommentRequest
+): Promise<ProposalComment> {
+  const response = await api.put(
+    `${PROPOSALS_BASE_URL}/${proposalId}/comments/${commentId}`,
+    commentData
+  );
+  return response.data;
+}
+
+// 정책제안 댓글 삭제
+export async function deleteProposalComment(
+  proposalId: number,
+  commentId: number
+): Promise<void> {
+  await api.delete(`${PROPOSALS_BASE_URL}/${proposalId}/comments/${commentId}`);
+}
+
+// 대댓글 목록 조회
+export async function getCommentReplies(
+  proposalId: number,
+  commentId: number
+): Promise<ProposalComment[]> {
+  const response = await api.get(
+    `${PROPOSALS_BASE_URL}/${proposalId}/comments/${commentId}/replies`
+  );
   return response.data;
 }

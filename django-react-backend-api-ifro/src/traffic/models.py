@@ -568,3 +568,48 @@ class ProposalTag(models.Model):
 
     def __str__(self):
         return self.name
+
+class ProposalComment(models.Model):
+    """정책제안 댓글 모델"""
+    proposal = models.ForeignKey(
+        PolicyProposal, 
+        on_delete=models.CASCADE, 
+        related_name='comments',
+        verbose_name="정책제안"
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE,
+        related_name='proposal_comments',
+        verbose_name="작성자"
+    )
+    content = models.TextField(verbose_name="댓글 내용")
+    parent_comment = models.ForeignKey(
+        'self', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='replies',
+        verbose_name="부모 댓글"
+    )
+    is_deleted = models.BooleanField(default=False, verbose_name="삭제 여부")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="작성일")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="수정일")
+
+    class Meta:
+        verbose_name = "정책제안 댓글"
+        verbose_name_plural = "정책제안 댓글들"
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['proposal', 'created_at']),
+            models.Index(fields=['author']),
+            models.Index(fields=['parent_comment']),
+        ]
+
+    def __str__(self):
+        return f"{self.proposal.title} - {self.author.username} - {self.content[:50]}"
+
+    @property
+    def reply_count(self):
+        """대댓글 수"""
+        return self.replies.filter(is_deleted=False).count()

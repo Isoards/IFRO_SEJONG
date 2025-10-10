@@ -48,7 +48,7 @@ services:
       - DJANGO_ENCRYPTION_PASSWORD=forBus_password
       - DJANGO_DEBUG=True
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-      - GEMINI_API_KEY=AIzaSyAwA17afiK3RW95Z9hBcWpDOOVU_PELtfw
+      - GEMINI_API_KEY=AIzaSyApCGrauxpGv2P2xNDKKvLwYRxSvcdrN6c
       - CHATBOT_URL=http://chatbot:8000
       # 한글 지원 설정
       - LANG=ko_KR.UTF-8

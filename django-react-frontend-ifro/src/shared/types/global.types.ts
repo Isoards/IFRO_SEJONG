@@ -365,3 +365,33 @@ export interface ProposalFilters {
   date_from?: string;
   date_to?: string;
 }
+
+// 댓글 관련 타입들
+export interface ProposalComment {
+  id: number;
+  content: string;
+  author: string;
+  author_id: number;
+  parent_comment_id?: number;
+  reply_count: number;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCommentRequest {
+  content: string;
+  parent_comment_id?: number;
+}
+
+export interface UpdateCommentRequest {
+  content: string;
+}
+
+export interface CommentListResponse {
+  comments: ProposalComment[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
