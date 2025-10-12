@@ -391,3 +391,6 @@ const CommentSection: React.FC<CommentSectionProps> = ({ proposalId }) => {
 };
 
 export default CommentSection;
+
+
+

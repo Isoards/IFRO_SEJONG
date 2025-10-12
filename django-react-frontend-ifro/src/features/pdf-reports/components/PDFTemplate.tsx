@@ -9,6 +9,7 @@ import {
   ChartSection,
   ReportFooter,
 } from './sections';
+import { PolicyAnalysisSection } from './sections/PolicyAnalysisSection';
 
 interface PDFTemplateProps {
   reportData: ReportData;
@@ -95,6 +96,17 @@ export const PDFTemplate: React.FC<PDFTemplateProps> = ({
         chartTitle={t("reports.visualTrafficAnalysis") || "Análisis Visual del Tráfico"}
         chartDescription={t("reports.trafficDataVisualization") || "Representación gráfica de los datos de tráfico analizados"}
       />
+
+      {/* Policy Analysis Section */}
+      {aiAnalysis && (
+        <PolicyAnalysisSection
+          policyEvaluation={aiAnalysis.policy_evaluation}
+          policyProposals={aiAnalysis.policy_proposals}
+          citizenConcerns={aiAnalysis.citizen_concerns}
+          dataDrivenInsights={aiAnalysis.data_driven_insights}
+          className="mb-6"
+        />
+      )}
 
       {/* Report Footer */}
       <ReportFooter

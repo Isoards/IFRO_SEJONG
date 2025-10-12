@@ -384,7 +384,7 @@ class GeminiTrafficAnalyzer:
         # Language-specific prompts
         prompts = {
             "es": {
-                "title": "Eres un experto analista de tráfico. Analiza los siguientes datos de tráfico para la intersección",
+                "title": "Eres un experto analista de tráfico y consultor de políticas públicas. Analiza los siguientes datos de tráfico para la intersección",
                 "data_section": "DATOS DE LA INTERSECCIÓN",
                 "name": "Nombre",
                 "location": "Ubicación",
@@ -407,12 +407,15 @@ class GeminiTrafficAnalyzer:
                     "Proporciona recomendaciones prácticas para mejorar el flujo",
                     "Considera factores como seguridad vial y eficiencia",
                     "Si hay datos insuficientes, menciona las limitaciones",
-                    "Usa terminología técnica apropiada para gestión de tráfico"
+                    "Usa terminología técnica apropiada para gestión de tráfico",
+                    "EVALUACIÓN DE POLÍTICAS: Evalúa la necesidad de políticas específicas como mejoras en semáforos, señalización, infraestructura peatonal, y accesibilidad",
+                    "PRIORIZACIÓN: Clasifica las mejoras sugeridas por urgencia (alta, media, baja) y impacto esperado",
+                    "FACTIBILIDAD: Considera la viabilidad técnica, económica y temporal de las recomendaciones"
                 ],
                 "sample_data_notice": "IMPORTANTE: Este análisis se basa en datos de muestra generados para demostración, no en datos reales de tráfico."
             },
             "en": {
-                "title": "You are an expert traffic analyst. Analyze the following traffic data for intersection",
+                "title": "You are an expert traffic analyst and public policy consultant. Analyze the following traffic data for intersection",
                 "data_section": "INTERSECTION DATA",
                 "name": "Name",
                 "location": "Location",
@@ -435,12 +438,15 @@ class GeminiTrafficAnalyzer:
                     "Provide practical recommendations to improve flow",
                     "Consider factors like road safety and efficiency",
                     "If data is insufficient, mention limitations",
-                    "Use appropriate technical terminology for traffic management"
+                    "Use appropriate technical terminology for traffic management",
+                    "POLICY EVALUATION: Assess the need for specific policies such as traffic signal improvements, signage, pedestrian infrastructure, and accessibility enhancements",
+                    "PRIORITIZATION: Classify suggested improvements by urgency (high, medium, low) and expected impact",
+                    "FEASIBILITY: Consider technical, economic, and temporal feasibility of recommendations"
                 ],
                 "sample_data_notice": "IMPORTANT: This analysis is based on generated sample data for demonstration purposes, not actual traffic data."
             },
             "ko": {
-                "title": "당신은 교통 분석 전문가입니다. 다음 교차로의 교통 데이터를 분석해주세요",
+                "title": "당신은 교통 분석 전문가이자 정책 제안 컨설턴트입니다. 다음 교차로의 교통 데이터를 분석해주세요",
                 "data_section": "교차로 데이터",
                 "name": "이름",
                 "location": "위치",
@@ -465,7 +471,11 @@ class GeminiTrafficAnalyzer:
                     "교통 흐름 개선을 위한 실용적인 권장사항을 제공해주세요",
                     "도로 안전과 효율성 같은 요소들을 고려해주세요",
                     "데이터가 불충분한 경우 한계점을 언급해주세요",
-                    "교통 관리에 적절한 전문 용어를 사용해주세요"
+                    "교통 관리에 적절한 전문 용어를 사용해주세요",
+                    "정책 평가: 신호등 개선, 표지판 설치, 보행자 인프라, 접근성 향상 등 구체적인 정책 필요성을 평가해주세요",
+                    "우선순위: 제안된 개선사항을 긴급도(높음, 보통, 낮음)와 예상 효과에 따라 분류해주세요",
+                    "실행 가능성: 권장사항의 기술적, 경제적, 시간적 실행 가능성을 고려해주세요",
+                    "정책 제안 데이터: 시민 제안에 활용할 수 있는 구체적인 정책 제안 내용을 포함해주세요"
                 ],
                 "sample_data_notice": "중요: 이 분석은 실제 교통 데이터가 아닌 시연용 샘플 데이터를 기반으로 작성되었습니다."
             }
@@ -514,7 +524,27 @@ class GeminiTrafficAnalyzer:
     "trends": ["identified", "traffic", "trends"],
     "insights": ["key", "analysis", "insights"],
     "peak_hours": ["identified", "peak", "hours"],
-    "improvement_suggestions": ["specific", "improvement", "suggestions"]
+    "improvement_suggestions": ["specific", "improvement", "suggestions"],
+    "policy_evaluation": {{
+        "safety_priority": "high|medium|low",
+        "infrastructure_needs": ["specific", "infrastructure", "improvements"],
+        "accessibility_issues": ["identified", "accessibility", "problems"],
+        "signal_optimization": "needed|not_needed|urgent"
+    }},
+    "policy_proposals": [
+        {{
+            "category": "traffic_signal|road_safety|traffic_flow|infrastructure|policy|other",
+            "title": "specific policy proposal title",
+            "description": "detailed policy proposal description",
+            "priority": "high|medium|low|urgent",
+            "expected_impact": "high|medium|low",
+            "implementation_difficulty": "easy|medium|hard",
+            "estimated_cost": "low|medium|high",
+            "timeline": "short|medium|long"
+        }}
+    ],
+    "citizen_concerns": ["identified", "citizen", "concerns", "and", "complaints"],
+    "data_driven_insights": ["data", "based", "insights", "for", "policy", "making"]
 }}
 
 INSTRUCTIONS:
@@ -639,6 +669,15 @@ INSTRUCTIONS:
                         'insights': parsed_response.get('insights', []),
                         'peak_hours': parsed_response.get('peak_hours', []),
                         'improvement_suggestions': parsed_response.get('improvement_suggestions', []),
+                        'policy_evaluation': parsed_response.get('policy_evaluation', {
+                            'safety_priority': 'medium',
+                            'infrastructure_needs': [],
+                            'accessibility_issues': [],
+                            'signal_optimization': 'not_needed'
+                        }),
+                        'policy_proposals': parsed_response.get('policy_proposals', []),
+                        'citizen_concerns': parsed_response.get('citizen_concerns', []),
+                        'data_driven_insights': parsed_response.get('data_driven_insights', []),
                         'ai_generated': True,
                         'timestamp': datetime.now().isoformat()
                     }
@@ -669,6 +708,15 @@ INSTRUCTIONS:
                 'recommendations': extracted_recommendations if extracted_recommendations else ['상세 분석이 텍스트 형태로 제공되었습니다'],
                 'trends': [],
                 'insights': extracted_insights,
+                'policy_evaluation': {
+                    'safety_priority': 'medium',
+                    'infrastructure_needs': ['기본 인프라 개선 필요'],
+                    'accessibility_issues': ['접근성 개선 필요'],
+                    'signal_optimization': 'needed'
+                },
+                'policy_proposals': [],
+                'citizen_concerns': ['시민 안전 및 편의성 개선 필요'],
+                'data_driven_insights': ['데이터 기반 정책 수립 필요'],
                 'ai_generated': True,
                 'timestamp': datetime.now().isoformat()
             }
@@ -682,6 +730,15 @@ INSTRUCTIONS:
                 'recommendations': ['Ver análisis detallado en el texto principal'],
                 'trends': [],
                 'insights': [],
+                'policy_evaluation': {
+                    'safety_priority': 'medium',
+                    'infrastructure_needs': ['Mejoras básicas de infraestructura necesarias'],
+                    'accessibility_issues': ['Mejoras de accesibilidad necesarias'],
+                    'signal_optimization': 'needed'
+                },
+                'policy_proposals': [],
+                'citizen_concerns': ['Mejoras de seguridad y conveniencia ciudadana necesarias'],
+                'data_driven_insights': ['Políticas basadas en datos necesarias'],
                 'ai_generated': True,
                 'timestamp': datetime.now().isoformat()
             }

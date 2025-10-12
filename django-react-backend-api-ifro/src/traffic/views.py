@@ -3,6 +3,7 @@ from ninja_extra import Router
 from typing import List
 import requests
 import logging
+from datetime import datetime
 from .models import (
     Intersection, TrafficVolume, TotalTrafficVolume, Incident, TrafficInterpretation,
     S_Incident, S_TrafficVolume, S_TotalTrafficVolume, S_TrafficInterpretation,
@@ -892,6 +893,133 @@ def generate_secure_ai_traffic_analysis(request, intersection_id: int, time_peri
     except Exception as e:
         print(f"Secure AI Analysis Error: {str(e)}")
         raise HttpError(500, "Failed to generate AI analysis. Please check API configuration.")
+
+@router.get("/intersections/{intersection_id}/policy-proposals")
+def get_intersection_policy_proposals(request, intersection_id: int, time_period: str = "24h", language: str = "ko"):
+    """
+    Get policy proposals based on AI analysis for a specific intersection
+    
+    Path Parameters:
+    - intersection_id: ID of the intersection to analyze
+    
+    Query Parameters:
+    - time_period: Time period for analysis ("24h", "7d", "30d")
+    - language: Language for analysis ("ko", "en", "es")
+    
+    Returns:
+    - Policy proposals and evaluation data for the intersection
+    """
+    try:
+        # Validate intersection exists
+        intersection = Intersection.objects.filter(id=intersection_id).first()
+        if not intersection:
+            raise HttpError(404, f"Intersection with ID {intersection_id} not found")
+        
+        # Validate time period
+        if time_period not in ["24h", "7d", "30d"]:
+            raise HttpError(400, "Invalid time period. Must be one of: 24h, 7d, 30d")
+        
+        # Initialize Gemini analyzer
+        analyzer = GeminiTrafficAnalyzer()
+        
+        # Generate analysis with policy focus
+        analysis_result = analyzer.analyze_intersection_traffic(intersection_id, time_period, language, use_report_data=True)
+        
+        # Extract policy-related data
+        policy_data = {
+            "intersection_id": intersection_id,
+            "intersection_name": intersection.name,
+            "time_period": time_period,
+            "analysis_timestamp": analysis_result.get('timestamp'),
+            "policy_evaluation": analysis_result.get('policy_evaluation', {}),
+            "policy_proposals": analysis_result.get('policy_proposals', []),
+            "citizen_concerns": analysis_result.get('citizen_concerns', []),
+            "data_driven_insights": analysis_result.get('data_driven_insights', []),
+            "ai_generated": analysis_result.get('ai_generated', False),
+            "is_sample_data": analysis_result.get('is_sample_data', False)
+        }
+        
+        return policy_data
+        
+    except ValueError as e:
+        raise HttpError(400, str(e))
+    except Exception as e:
+        print(f"Policy Proposals Error: {str(e)}")
+        raise HttpError(500, "Failed to generate policy proposals. Please check API configuration.")
+
+@router.post("/intersections/{intersection_id}/generate-citizen-proposals")
+def generate_citizen_proposals_from_ai(request, intersection_id: int, time_period: str = "24h", language: str = "ko"):
+    """
+    Generate citizen policy proposals based on AI analysis
+    
+    Path Parameters:
+    - intersection_id: ID of the intersection to analyze
+    
+    Query Parameters:
+    - time_period: Time period for analysis ("24h", "7d", "30d")
+    - language: Language for analysis ("ko", "en", "es")
+    
+    Returns:
+    - Generated citizen proposals ready for submission
+    """
+    try:
+        # Get policy proposals from AI analysis
+        policy_data = get_intersection_policy_proposals(request, intersection_id, time_period, language)
+        
+        # Convert AI policy proposals to citizen proposal format
+        citizen_proposals = []
+        
+        for proposal in policy_data.get('policy_proposals', []):
+            # Map AI categories to citizen proposal categories
+            category_mapping = {
+                'traffic_signal': '교통신호',
+                'road_safety': '도로안전',
+                'traffic_flow': '교통흐름',
+                'infrastructure': '인프라개선',
+                'policy': '교통정책',
+                'other': '기타'
+            }
+            
+            # Map AI priority to citizen proposal priority
+            priority_mapping = {
+                'urgent': 'urgent',
+                'high': 'high',
+                'medium': 'medium',
+                'low': 'low'
+            }
+            
+            citizen_proposal = {
+                "title": proposal.get('title', ''),
+                "description": proposal.get('description', ''),
+                "category": category_mapping.get(proposal.get('category', 'other'), '기타'),
+                "priority": priority_mapping.get(proposal.get('priority', 'medium'), 'medium'),
+                "location": f"{policy_data.get('intersection_name', '')} 교차로 일대",
+                "intersection_id": intersection_id,
+                "ai_generated": True,
+                "ai_analysis_data": {
+                    "expected_impact": proposal.get('expected_impact', 'medium'),
+                    "implementation_difficulty": proposal.get('implementation_difficulty', 'medium'),
+                    "estimated_cost": proposal.get('estimated_cost', 'medium'),
+                    "timeline": proposal.get('timeline', 'medium')
+                }
+            }
+            
+            citizen_proposals.append(citizen_proposal)
+        
+        return {
+            "intersection_id": intersection_id,
+            "intersection_name": policy_data.get('intersection_name'),
+            "time_period": time_period,
+            "generated_proposals": citizen_proposals,
+            "policy_evaluation": policy_data.get('policy_evaluation', {}),
+            "citizen_concerns": policy_data.get('citizen_concerns', []),
+            "data_driven_insights": policy_data.get('data_driven_insights', []),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"Generate Citizen Proposals Error: {str(e)}")
+        raise HttpError(500, "Failed to generate citizen proposals. Please check API configuration.")
 
 # ChatBot Endpoints
 @router.post("/chat/message")

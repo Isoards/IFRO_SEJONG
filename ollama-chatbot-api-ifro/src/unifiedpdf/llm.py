@@ -289,7 +289,7 @@ def ollama_generate(prompt: str, model_name: str, timeout_s: Optional[int] = Non
         "stream": False,
         "keep_alive": "24h",  # 모델을 메모리에 유지하여 응답 속도 향상
         "options": {
-            "temperature": 0.0,  # llama3.1 모델에 적합한 매우 낮은 온도
+            "temperature": 0.1,  # llama3.1 모델에 적합한 낮은 온도
             "top_p": 0.9,        # 높은 집중도
             "top_k": 40,         # 어휘 다양성 조절
             "repeat_penalty": 1.1,  # 반복 방지

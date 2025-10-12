@@ -115,6 +115,25 @@ export type TrafficInterpretationResponse = {
   analysis_summary: AnalysisSummary;
 };
 
+// Policy Evaluation Types
+export type PolicyEvaluation = {
+  safety_priority: 'high' | 'medium' | 'low';
+  infrastructure_needs: string[];
+  accessibility_issues: string[];
+  signal_optimization: 'needed' | 'not_needed' | 'urgent';
+};
+
+export type AIPolicyProposal = {
+  category: 'traffic_signal' | 'road_safety' | 'traffic_flow' | 'infrastructure' | 'policy' | 'other';
+  title: string;
+  description: string;
+  priority: 'high' | 'medium' | 'low' | 'urgent';
+  expected_impact: 'high' | 'medium' | 'low';
+  implementation_difficulty: 'easy' | 'medium' | 'hard';
+  estimated_cost: 'low' | 'medium' | 'high';
+  timeline: 'short' | 'medium' | 'long';
+};
+
 // AI Traffic Analysis Types
 export type AITrafficAnalysis = {
   analysis: string;
@@ -125,6 +144,10 @@ export type AITrafficAnalysis = {
   insights: string[];
   peak_hours?: string[];
   improvement_suggestions?: string[];
+  policy_evaluation?: PolicyEvaluation;
+  policy_proposals?: AIPolicyProposal[];
+  citizen_concerns?: string[];
+  data_driven_insights?: string[];
   ai_generated: boolean;
   timestamp: string;
   is_sample_data?: boolean;

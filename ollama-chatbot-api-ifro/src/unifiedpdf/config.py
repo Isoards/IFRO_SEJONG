@@ -87,7 +87,7 @@ class PipelineConfig:
     domain: DomainConfig = field(default_factory=DomainConfig)
     deduplication: DeduplicationPolicy = field(default_factory=DeduplicationPolicy)
     seed: int = 42
-    model_name: str = "qwen2.5:3b-instruct"
+    model_name: str = "llama3.1:8b-instruct-q4_K_M"
     embedding_model: str = "jhgan/ko-sroberta-multitask"
     vector_store_dir: str = "vector_store"
     llm_retries: int = 3
