@@ -195,22 +195,22 @@ class QuestionClassifier:
         enhanced_query = query
         
         if question_type == QuestionType.NUMERIC:
-            # 수치 관련 키워드 강화
-            numeric_keywords = ["수치", "값", "계수", "비율", "퍼센트", "상관계수", "R²", "발행일", "작성일"]
+            # 교통 수치 관련 키워드 강화
+            numeric_keywords = ["교통량", "속도", "거리", "시간", "면적", "용량", "효율", "사고율", "대기시간", "교통밀도", "혼잡도", "지연시간", "ADT", "AHT", "km/h", "m/s", "대/일", "대/시간"]
             for keyword in numeric_keywords:
                 if keyword in query:
                     enhanced_query += f" {keyword} {keyword}"  # 키워드 반복으로 강조
         
         elif question_type == QuestionType.SYSTEM_INFO:
-            # 시스템 정보 관련 키워드 강화
-            system_keywords = ["URL", "계정", "비밀번호", "로그인", "접속", "IP", "포트", "서버"]
+            # 교통 시스템 정보 관련 키워드 강화
+            system_keywords = ["URL", "계정", "비밀번호", "로그인", "접속", "IP", "포트", "서버", "교통관제센터", "교통정보센터", "CCTV", "VMS", "ITS"]
             for keyword in system_keywords:
                 if keyword in query:
                     enhanced_query += f" {keyword} {keyword}"
         
         elif question_type == QuestionType.TECHNICAL_SPEC:
-            # 기술 사양 관련 키워드 강화
-            tech_keywords = ["모델", "알고리즘", "성능", "지표", "설정값", "N-beats", "LSTM", "GRU"]
+            # 교통 기술 사양 관련 키워드 강화
+            tech_keywords = ["모델", "알고리즘", "성능", "지표", "설정값", "LSTM", "GRU", "ARIMA", "교통예측", "교통최적화", "교통시뮬레이션", "ATMS", "ATIS", "APTS", "CVO"]
             for keyword in tech_keywords:
                 if keyword in query:
                     enhanced_query += f" {keyword} {keyword}"

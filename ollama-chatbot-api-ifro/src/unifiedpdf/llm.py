@@ -30,9 +30,9 @@ def _extract_keywords_from_question(question: str, domain_dict: dict = None, qty
     
     # Domain Dictionary가 없으면 기본 방식 사용
     if domain_dict is None:
-        # 기본 키워드 추출 (하위 호환성)
-        tech_terms = re.findall(r'[가-힣]+(?:공정|모델|알고리즘|시스템|플랫폼|입력변수|수질|인자)', question)
-        keywords.extend(tech_terms)
+        # 기본 키워드 추출 (하위 호환성) - 교통 도메인 특화
+        traffic_terms = re.findall(r'[가-힣]+(?:교통|도로|신호|안전|사고|속도|혼잡|정책|시스템|플랫폼|모델|알고리즘)', question)
+        keywords.extend(traffic_terms)
         
         nouns = re.findall(r'[가-힣]{2,}', question)
         keywords.extend([noun for noun in nouns if len(noun) >= 2])
@@ -126,6 +126,17 @@ def _select_best_contexts(contexts: List[RetrievedSpan], question: str, max_cont
         scored_contexts.append((total_score, context))
     
     # 점수 순으로 정렬하고 상위 선택
+    scored_contexts.sort(key=lambda x: x[0], reverse=True)
+    return [ctx for _, ctx in scored_contexts[:max_contexts]]
+
+
+def _select_best_contexts_simple(contexts: List[RetrievedSpan], question: str, max_contexts: int = 4, domain_dict: dict = None, qtype: str = "general") -> List[RetrievedSpan]:
+    """단순한 컨텍스트 선택 (도메인 특화 키워드 매칭 없음) - 비교 테스트용"""
+    if len(contexts) <= max_contexts:
+        return contexts
+    
+    # 단순히 원래 점수만으로 정렬
+    scored_contexts = [(context.score, context) for context in contexts]
     scored_contexts.sort(key=lambda x: x[0], reverse=True)
     return [ctx for _, ctx in scored_contexts[:max_contexts]]
 

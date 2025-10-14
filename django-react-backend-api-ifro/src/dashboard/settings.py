@@ -112,8 +112,8 @@ DATABASES = {
         'NAME': config('MYSQL_DATABASE', default='traffic'),
         'USER': config('MYSQL_USER', default='root'),
         'PASSWORD': config('MYSQL_PASSWORD', default='1234'),
-        'HOST': config('MYSQL_HOST', default='db'),
-        'PORT': config('MYSQL_PORT', default='3306'),
+        'HOST': config('MYSQL_HOST', default='localhost'),
+        'PORT': config('MYSQL_PORT', default='3307'),
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
             'charset': 'utf8mb4',

@@ -53,13 +53,13 @@ def analyze_question(q: str, cfg: PipelineConfig) -> Analysis:
     def _re_or(base: str, extras: List[str]) -> str:
         return base if not extras else base[:-1] + "|" + "|".join(map(re.escape, extras)) + ")"
 
-    # 정수장 도메인 특화 질문 유형 분류
+    # 교통 도메인 특화 질문 유형 분류
     is_definition = bool(re.search(_re_or(r"(정의|무엇|란|의미|개념|설명|목적|기능|특징)", dom.get("definition", [])), q))
     is_procedural = bool(re.search(_re_or(r"(방법|절차|순서|어떻게|운영|조치|설정|접속|로그인)", dom.get("procedural", [])), q))
     is_comparative = bool(re.search(_re_or(r"(비교|vs|더|높|낮|차이|장점|단점|차이점)", dom.get("comparative", [])), ql))
     is_problem = bool(re.search(_re_or(r"(문제|오류|이상|고장|원인|대응|대책|해결|증상)", dom.get("problem", [])), q))
     
-    # 정수장 특화 질문 유형 추가
+    # 교통 특화 질문 유형 추가
     is_system_info = bool(re.search(r"(시스템|플랫폼|대시보드|로그인|계정|비밀번호|주소|url)", ql))
     is_technical_spec = bool(re.search(r"(모델|알고리즘|성능|지표|입력변수|설정값|고려사항)", ql))
     is_operational = bool(re.search(r"(운영|모드|제어|알람|진단|결함|정보|현황)", ql))

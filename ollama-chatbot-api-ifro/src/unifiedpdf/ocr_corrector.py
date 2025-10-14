@@ -28,23 +28,23 @@ def _ollama_generate(prompt: str, model_name: str, timeout: int = 20) -> str:
 
 
 def _format_correction_prompt(text: str, dictionary: str | None = None) -> str:
-    # 정수장 도메인 사전을 기본으로 사용
+    # 교통 도메인 사전을 기본으로 사용
     if dictionary is None:
         from .domain_dictionary import get_domain_dictionary
         dictionary = get_domain_dictionary()
     
     parts = [
-        "당신은 정수장 전문 OCR 후교정기입니다. 절대 재작성/요약/삭제를 하지 마세요.",
+        "당신은 교통 전문 OCR 후교정기입니다. 절대 재작성/요약/삭제를 하지 마세요.",
         "규칙:",
         "1) 줄바꿈/공백/번호/구두점을 유지",
-        "2) 숫자/단위/기호 보존(예: mg/L, ppm, ℃, L/s, m³/d, NTU, pH, DO)",
-        "3) 확실한 OCR 오류만 교정(rn→m, 0↔O, l↔1, cl→d, mg|L→mg/L 등)",
-        "4) 정수장 전문 용어는 사전 기준으로 교정, 불확실하면 원문 그대로",
-        "5) 수치 범위 확인: pH(6.5-8.5), 탁도(0-0.5NTU), 잔류염소(0.1-0.4mg/L)",
+        "2) 숫자/단위/기호 보존(예: km/h, m/s, 대/일, 대/시간, km, m, ha, m²)",
+        "3) 확실한 OCR 오류만 교정(rn→m, 0↔O, l↔1, cl→d, km|h→km/h 등)",
+        "4) 교통 전문 용어는 사전 기준으로 교정, 불확실하면 원문 그대로",
+        "5) 수치 범위 확인: 속도(30-120km/h), 교통량(0-10000대/시간), 대기시간(0-300초)",
         "출력: 교정된 본문만 출력",
     ]
     if dictionary:
-        parts.append("[정수장 전문 사전]")
+        parts.append("[교통 전문 사전]")
         parts.append(dictionary)
     parts.append("[원문]")
     parts.append(text)
