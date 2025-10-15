@@ -1,0 +1,7 @@
+{
+  "type": "tfidf",
+  "dim": 2203,
+  "documents": 150,
+  "vocabulary_size": 2203,
+  "created_at": "2024-10-16T04:00:00Z"
+}

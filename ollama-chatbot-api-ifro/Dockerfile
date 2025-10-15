@@ -28,5 +28,5 @@ RUN pip install --no-cache-dir beautifulsoup4 lxml googlesearch-python duckduckg
 
 EXPOSE 8000
 
-# 웹 검색 기능이 추가된 서버 시작
-CMD ["uvicorn", "server.web_enhanced_app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "warning"]
+# 순수 RAG 서버 시작 (SQL 데이터 및 웹 검색 비활성화)
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "warning"]

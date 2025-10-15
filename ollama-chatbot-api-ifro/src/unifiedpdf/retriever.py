@@ -218,25 +218,43 @@ class HybridRetriever:
         return query
     
     def _determine_dynamic_k(self, query: str, question_type: str, domain_dict: dict = None) -> int:
-        """질문 유형과 복잡도에 따른 동적 k 값 결정"""
+        """질문 유형과 복잡도에 따른 동적 k 값 결정 (보수적 최적화)"""
         base_k = 50
         
-        # 질문 유형별 조정
-        if question_type in ["technical_spec", "definition"]:
-            base_k = 80  # 기술사양은 더 많은 검색 결과 필요
-        elif question_type in ["system_info", "numeric"]:
-            base_k = 60  # 시스템 정보는 정확한 매칭 중요
+        # 질문 유형별 조정 (보수적 접근)
+        if question_type in ["comparative", "policy_analysis"]:
+            base_k = 60  # 비교 분석은 적당한 컨텍스트 (기존 70에서 감소)
+        elif question_type in ["system_info", "financial"]:
+            base_k = 55  # 시스템 정보와 재정 정보 (기존 60에서 감소)
+        elif question_type in ["safety", "regulation"]:
+            base_k = 58  # 안전 및 규제 관련 (기존 65에서 감소)
+        elif question_type in ["technical_spec", "definition"]:
+            base_k = 70  # 기술사양 (기존 80에서 감소)
         else:
             base_k = 50
         
-        # 도메인 키워드 매칭에 따른 추가 조정
+        # 교통 정책 특화 키워드 매칭에 따른 보수적 조정
         if domain_dict:
-            domain_keywords = domain_dict.get("keywords", [])
-            matched_keywords = sum(1 for kw in domain_keywords if kw.lower() in query.lower())
-            if matched_keywords >= 3:
-                base_k += 20  # 많은 도메인 키워드 매칭 시 더 많은 결과 필요
+            # 정책 관련 키워드
+            policy_keywords = ["준공영제", "환승할인", "스쿨존", "생활도로 5030", "BRT", "GTX", "ITS", "MaaS"]
+            policy_matches = sum(1 for kw in policy_keywords if kw.lower() in query.lower())
+            
+            # 법령 관련 키워드
+            legal_keywords = ["제13조", "제17조", "제24조", "제27조", "제32조", "제33조"]
+            legal_matches = sum(1 for kw in legal_keywords if kw.lower() in query.lower())
+            
+            # 수치 관련 키워드
+            numeric_keywords = ["억원", "%", "km/h", "대", "건", "만원"]
+            numeric_matches = sum(1 for kw in numeric_keywords if kw.lower() in query.lower())
+            
+            # 매칭된 키워드 수에 따른 보수적 조정
+            total_matches = policy_matches + legal_matches + numeric_matches
+            if total_matches >= 3:
+                base_k += 15  # 많은 교통 정책 키워드 매칭 시 (기존 25에서 감소)
+            elif total_matches >= 1:
+                base_k += 5  # 일부 키워드 매칭 시 (기존 10에서 감소)
         
-        return min(base_k, 100)  # 최대 100개로 제한
+        return min(base_k, 80)  # 최대 80개로 제한 (기존 100에서 감소)
 
     def _cache_key(self, query: str, topk_each: int) -> tuple:
         return (query, int(topk_each), self._corpus_sig, self.cfg.config_hash())

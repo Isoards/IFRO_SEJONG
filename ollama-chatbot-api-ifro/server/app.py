@@ -17,11 +17,12 @@ from unifiedpdf.facade import UnifiedPDFPipeline
 from unifiedpdf.types import Chunk
 
 # 로깅 설정 - Docker Desktop에서 확인하기 쉽도록 개선
+# 로그 파일 권한 문제로 임시 비활성화
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler('logs/chatbot_conversations.log', encoding='utf-8'),
+        # logging.FileHandler('logs/chatbot_conversations.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -29,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 # 질문/답변 전용 로거 생성
 qa_logger = logging.getLogger('qa_conversations')
-qa_handler = logging.FileHandler('logs/qa_detailed.log', encoding='utf-8')
-qa_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
-qa_logger.addHandler(qa_handler)
+# qa_handler = logging.FileHandler('logs/qa_detailed.log', encoding='utf-8')
+# qa_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+# qa_logger.addHandler(qa_handler)
 qa_logger.setLevel(logging.INFO)
 
 # uvicorn access 로그 레벨 조정 (health check 로그 줄이기)
@@ -170,8 +171,8 @@ if FASTAPI_AVAILABLE:
             
         return {
             "model_loaded": _warmed,
-            "total_pdfs": len(pipe.corpus) if hasattr(pipe, 'corpus') else 0,
-            "total_chunks": len(pipe.corpus) if hasattr(pipe, 'corpus') else 0,
+            "total_pdfs": len(pipe.retriever.chunks) if hasattr(pipe, 'retriever') and hasattr(pipe.retriever, 'chunks') else 0,
+            "total_chunks": len(pipe.retriever.chunks) if hasattr(pipe, 'retriever') and hasattr(pipe.retriever, 'chunks') else 0,
             "ai_available": _warmed,
             "warmed": _warmed,
             "model_status": model_status,

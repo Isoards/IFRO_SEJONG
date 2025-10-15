@@ -14,14 +14,15 @@ from .timeouts import LLM_TIMEOUT_S, run_with_timeout
 import re
 
 
-_LOG_PATH = os.path.join("logs", "llm_errors.log")
-os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
+# 로그 파일 권한 문제로 임시 비활성화
+# _LOG_PATH = os.path.join("logs", "llm_errors.log")
+# os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
 logging.basicConfig(level=logging.ERROR)
 _logger = logging.getLogger("unifiedpdf.llm")
-if not _logger.handlers:
-    _fh = logging.FileHandler(_LOG_PATH, encoding="utf-8")
-    _fh.setLevel(logging.ERROR)
-    _logger.addHandler(_fh)
+# if not _logger.handlers:
+#     _fh = logging.FileHandler(_LOG_PATH, encoding="utf-8")
+#     _fh.setLevel(logging.ERROR)
+#     _logger.addHandler(_fh)
 
 
 def _extract_keywords_from_question(question: str, domain_dict: dict = None, qtype: str = "general") -> List[str]:
@@ -117,28 +118,68 @@ def _select_best_contexts(contexts: List[RetrievedSpan], question: str, max_cont
             high_priority_keywords = domain_dict.get("high_priority_keywords", []) if domain_dict else []
             high_priority_matches = sum(1 for kw in high_priority_keywords if kw.lower() in text_lower)
         
-        # 점수 = 원래 점수 + 키워드 매칭 보너스 + 도메인 키워드 보너스 + 고우선순위 보너스
-        basic_bonus = keyword_matches * 0.1  # 기본 키워드 매칭당 0.1점
-        domain_bonus = domain_keyword_matches * 0.2  # 도메인 키워드 매칭당 0.2점
-        priority_bonus = high_priority_matches * 0.3  # 고우선순위 키워드 매칭당 0.3점
-        total_score = context.score + basic_bonus + domain_bonus + priority_bonus
+        # 도메인 랭킹 알고리즘 최적화 (매우 보수적 가중치)
+        # 기본 점수를 절대 우선시하고, 도메인 특화 키워드는 최소한의 보너스만 제공
+        base_score = context.score
+        
+        # 기본 키워드 매칭 보너스 (매우 보수적)
+        basic_bonus = keyword_matches * 0.05  # 기본 키워드 매칭당 0.05점 (더욱 감소)
+        
+        # 도메인 키워드 보너스 (최소 가중치)
+        domain_bonus = domain_keyword_matches * 0.08  # 도메인 키워드 매칭당 0.08점 (더욱 감소)
+        
+        # 고우선순위 키워드 보너스 (적당한 가중치)
+        priority_bonus = high_priority_matches * 0.12  # 고우선순위 키워드 매칭당 0.12점 (더욱 감소)
+        
+        # 법령 조문과 정책 명칭에 최소 가중치
+        legal_bonus = 0
+        policy_bonus = 0
+        if domain_dict:
+            # 법령 조문 키워드 (제13조, 제17조 등) - 최소 가중치
+            legal_keywords = ["제13조", "제17조", "제24조", "제27조", "제32조", "제33조", 
+                            "제11조", "제15조", "제9조", "제14조", "제43조", "제49조", "제59조", "제67조"]
+            legal_matches = sum(1 for kw in legal_keywords if kw in text_lower)
+            legal_bonus = legal_matches * 0.15  # 법령 조문 매칭당 0.15점 (대폭 감소)
+            
+            # 정책 명칭 키워드 - 최소 가중치
+            policy_keywords = ["생활도로 5030", "스쿨존", "BRT", "GTX", "ITS", "MaaS", "UAM", 
+                            "안전신문고", "환승할인", "준공영제", "광역환승할인", "따릉이", "보행환경 개선"]
+            policy_matches = sum(1 for kw in policy_keywords if kw in text_lower)
+            policy_bonus = policy_matches * 0.1  # 정책 명칭 매칭당 0.1점 (대폭 감소)
+        
+        # 수치 데이터에 최소 가중치
+        numeric_bonus = 0
+        numeric_patterns = [r'\d+억원', r'\d+%', r'\d+km/h', r'\d+대', r'\d+건', r'\d+만원']
+        import re
+        for pattern in numeric_patterns:
+            if re.search(pattern, text_lower):
+                numeric_bonus += 0.05  # 수치 데이터 매칭당 0.05점 (감소)
+        
+        # 최종 점수 계산 (기본 점수 절대 우선, 보너스는 최소한의 보조 역할)
+        total_score = base_score + basic_bonus + domain_bonus + priority_bonus + legal_bonus + policy_bonus + numeric_bonus
         
         scored_contexts.append((total_score, context))
     
-    # 점수 순으로 정렬하고 상위 선택
+    # 점수 순으로 정렬하고 상위 선택 (단순화된 선택 로직)
     scored_contexts.sort(key=lambda x: x[0], reverse=True)
-    return [ctx for _, ctx in scored_contexts[:max_contexts]]
-
-
-def _select_best_contexts_simple(contexts: List[RetrievedSpan], question: str, max_contexts: int = 4, domain_dict: dict = None, qtype: str = "general") -> List[RetrievedSpan]:
-    """단순한 컨텍스트 선택 (도메인 특화 키워드 매칭 없음) - 비교 테스트용"""
-    if len(contexts) <= max_contexts:
-        return contexts
     
-    # 단순히 원래 점수만으로 정렬
-    scored_contexts = [(context.score, context) for context in contexts]
-    scored_contexts.sort(key=lambda x: x[0], reverse=True)
-    return [ctx for _, ctx in scored_contexts[:max_contexts]]
+    # 기본 점수와 보너스 점수를 모두 고려하되, 기본 점수를 더 중시
+    selected_contexts = []
+    
+    # 1단계: 기본 점수가 높은 컨텍스트 우선 선택 (70%)
+    base_sorted = sorted([(ctx.score, ctx) for _, ctx in scored_contexts], key=lambda x: x[0], reverse=True)
+    base_count = int(max_contexts * 0.7)
+    for _, ctx in base_sorted[:base_count]:
+        selected_contexts.append(ctx)
+    
+    # 2단계: 보너스 점수가 높은 컨텍스트로 보완 (30%)
+    remaining_slots = max_contexts - len(selected_contexts)
+    if remaining_slots > 0:
+        for score, ctx in scored_contexts:
+            if ctx not in selected_contexts and len(selected_contexts) < max_contexts:
+                selected_contexts.append(ctx)
+    
+    return selected_contexts[:max_contexts]
 
 
 def _format_prompt(question: str, contexts: List[RetrievedSpan], qtype: str = "general") -> str:
