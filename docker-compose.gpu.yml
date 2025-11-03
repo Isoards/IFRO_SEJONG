@@ -137,7 +137,7 @@ services:
       start_period: 30s
 
   chatbot:
-    build: ./ollama-chatbot-api-ifro
+    build: ./Chatbot_v6
     container_name: chatbot-gpu
     ports:
       - "8009:8000"
@@ -163,12 +163,14 @@ services:
       - LANG=ko_KR.UTF-8
       - LC_ALL=ko_KR.UTF-8
       - LC_CTYPE=ko_KR.UTF-8
+      # Chatbot_v6 환경 변수
+      - DJANGO_DEBUG=True
+      - CHATBOT_API_PORT=8000
     volumes:
-      - ./ollama-chatbot-api-ifro:/app
-      - ./ollama-chatbot-api-ifro/data:/app/data
-      - ./ollama-chatbot-api-ifro/models:/app/models
-      - ./ollama-chatbot-api-ifro/vector_store:/app/vector_store
-      - ./ollama-chatbot-api-ifro/logs:/app/logs
+      - ./Chatbot_v6:/app
+      - ./Chatbot_v6/data:/app/data
+      - ./Chatbot_v6/vector_store:/app/vector_store
+      - ./Chatbot_v6/logs:/app/logs
     depends_on:
       ollama:
         condition: service_healthy

@@ -2468,16 +2468,18 @@ def get_heatmap_data(request):
 @router.post("/pdf/save-and-notify")
 def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
     """
-    PDF 데이터를 받아서 저장하고 챗봇 서버에 알림을 보냅니다.
+    PDF 데이터를 받아서 저장하고 Chatbot 서버로 처리 요청을 보냅니다.
     """
     try:
         import base64
         import os
+        import requests
         from django.conf import settings
         
         # 스키마에서 파라미터 추출
         filename = data.filename
         pdf_data = data.pdf_data
+        text_content = data.text  # Gemini 원본 텍스트
         
         if not filename or not pdf_data:
             return {"status": "error", "message": "filename과 pdf_data가 필요합니다."}
@@ -2489,8 +2491,8 @@ def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
             logging.error(f"PDF 데이터 디코딩 실패: {str(e)}")
             return {"status": "error", "message": f"PDF 데이터 디코딩 실패: {str(e)}"}
         
-        # PDF 저장 경로 설정 (챗봇 서버와 공유되는 볼륨)
-        pdf_dir = "/app/data/pdfs"  # 챗봇 서버와 동일한 경로
+        # PDF 저장 경로 설정
+        pdf_dir = "/app/data/pdfs"
         os.makedirs(pdf_dir, exist_ok=True)
         file_path = os.path.join(pdf_dir, filename)
         
@@ -2498,14 +2500,71 @@ def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
         with open(file_path, "wb") as f:
             f.write(pdf_bytes)
         
-        logging.info(f"✅ PDF 파일 저장 완료: {file_path}")
+        # Backend 콜백 URL (이 서버 주소 + 콜백 엔드포인트)
+        backend_callback_url = f"http://backend:8000/api/traffic/chatbot/embedding-callback"
         
-        # 챗봇 서버에 알림 전송
-        return notify_pdf_upload(request, filename, file_path)
+        # Chatbot 서버로 처리 요청 (TEXT 또는 PDF 경로)
+        if text_content:
+            # TEXT가 있으면 텍스트 임베딩 요청
+            chatbot_url = "http://chatbot:8000/api/text/add-to-vectordb"
+            
+            embedding_data = {
+                "text": text_content,
+                "metadata": {
+                    "source": "gemini_analysis",
+                    "filename": filename,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "callback_url": backend_callback_url
+            }
+        else:
+            # TEXT가 없으면 PDF 바이너리를 Chatbot에 전송
+            chatbot_url = "http://chatbot:8000/api/pdf/extract-and-embed"
+            
+            embedding_data = {
+                "pdf_data": pdf_data,  # Base64 인코딩된 PDF 데이터
+                "filename": filename,
+                "metadata": {
+                    "source": "pdf_ocr_extraction",
+                    "filename": filename,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "callback_url": backend_callback_url
+            }
+        
+        # Chatbot 서버로 요청 전송
+        try:
+            response = requests.post(
+                chatbot_url,
+                json=embedding_data,
+                timeout=600
+            )
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "message": f"보고서 처리를 Chatbot 서버에 요청했습니다.",
+                    "pdf_saved": True
+                }
+            else:
+                logging.error(f"Chatbot 서버 요청 실패: {response.status_code}")
+                return {
+                    "status": "warning",
+                    "message": f"PDF는 저장되었지만 Chatbot 서버 요청에 실패했습니다",
+                    "pdf_saved": True
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Chatbot 서버 연결 실패: {str(e)}")
+            return {
+                "status": "warning",
+                "message": f"PDF는 저장되었지만 Chatbot 서버 연결에 실패했습니다",
+                "pdf_saved": True
+            }
         
     except Exception as e:
-        logging.error(f"❌ PDF 저장 및 알림 처리 실패: {str(e)}")
-        return {"status": "error", "message": f"PDF 저장 및 알림 처리 실패: {str(e)}"}
+        logging.error(f"PDF 저장 및 처리 실패: {str(e)}")
+        return {"status": "error", "message": f"PDF 저장 및 처리 실패: {str(e)}"}
 
 @router.post("/pdf/notify-upload")
 def notify_pdf_upload(request, filename: str, file_path: str):
@@ -2544,3 +2603,32 @@ def notify_pdf_upload(request, filename: str, file_path: str):
     except Exception as e:
         logging.error(f"❌ PDF 업로드 알림 처리 실패: {str(e)}")
         return {"status": "error", "message": f"알림 처리 실패: {str(e)}"}
+
+@router.post("/chatbot/embedding-callback")
+def chatbot_embedding_callback(request, data: dict):
+    """
+    Chatbot_v6에서 임베딩 완료 후 콜백으로 받는 엔드포인트
+    """
+    try:
+        status = data.get('status')
+        message = data.get('message')
+        chunks_created = data.get('chunks_created', 0)
+        total_chunks = data.get('total_chunks', 0)
+        
+        if status == "success":
+            logging.debug(f"Chatbot 임베딩 완료 - 새 청크: {chunks_created}, 전체: {total_chunks}")
+        else:
+            logging.warning(f"Chatbot 임베딩 콜백: {message}")
+        
+        return {
+            "status": "success",
+            "message": "보고서의 내용을 챗봇에 적용하였습니다.",
+            "received_data": {
+                "chunks_created": chunks_created,
+                "total_chunks": total_chunks,
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Chatbot 콜백 처리 중 오류: {str(e)}")
+        return {"status": "error", "message": f"콜백 처리 실패: {str(e)}"}

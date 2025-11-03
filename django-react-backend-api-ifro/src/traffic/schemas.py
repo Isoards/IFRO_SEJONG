@@ -89,7 +89,7 @@ class AllIntersectionsTrafficDataSchema(Schema):
 class TrafficVolumeDataSchema(Schema):
     """Schema for traffic volume data by direction"""
     N: int = Field(..., ge=0, description="North traffic volume")
-    S: int = Field(..., ge=0, description="South traffic volume") 
+    S: int = Field(..., ge=0, description="South traffic volume")
     E: int = Field(..., ge=0, description="East traffic volume")
     W: int = Field(..., ge=0, description="West traffic volume")
 
@@ -324,3 +324,5 @@ class PDFSaveRequestSchema(Schema):
     """PDF 저장 요청 스키마"""
     filename: str
     pdf_data: str
+    text: str = ""  # Gemini 원본 응답 텍스트
+    pdf_binary: Optional[bytes] = None
