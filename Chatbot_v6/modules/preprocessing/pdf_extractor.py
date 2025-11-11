@@ -71,6 +71,11 @@ class PDFExtractor:
                        pages=len(pages_text),
                        total_chars=len(full_text))
             
+            # 텍스트가 비어있으면 OCR 시도
+            if not full_text or full_text.strip() == "":
+                logger.info(f"No text extracted from PDF - falling back to OCR: {path}")
+                return self._extract_text_ocr(str(path))
+            
             return full_text
         
         except ImportError as e:
@@ -80,8 +85,67 @@ class PDFExtractor:
             ) from e
         
         except Exception as e:
+            logger.warning(f"PDF text extraction failed, attempting OCR fallback: {path}")
+            try:
+                return self._extract_text_ocr(str(path))
+            except Exception as ocr_error:
+                raise TextExtractionError(
+                    str(path),
+                    cause=e,
+                ) from e
+    
+    def _extract_text_ocr(self, file_path: str) -> str:
+        """
+        PDF를 OCR로 텍스트 추출 (fallback)
+        
+        Args:
+            file_path: PDF 파일 경로
+            
+        Returns:
+            추출된 텍스트
+            
+        Raises:
+            TextExtractionError: OCR 추출 실패
+        """
+        try:
+            import pytesseract
+            from PIL import Image
+            import pymupdf
+            
+            logger.info(f"Using Tesseract OCR for: {file_path}")
+            
+            doc = pymupdf.open(file_path)
+            extracted_text = ""
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                # 2x zoom for better OCR accuracy
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(2, 2))
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                page_text = pytesseract.image_to_string(img, lang='kor+eng')
+                extracted_text += page_text + "\n\n"
+                logger.debug(f"OCR extracted page {page_num + 1}/{len(doc)}", 
+                            chars=len(page_text))
+            
+            doc.close()
+            
+            logger.info(f"OCR extraction complete", 
+                       pages=len(doc),
+                       total_chars=len(extracted_text))
+            
+            return extracted_text
+        
+        except ImportError as e:
+            logger.error(f"Required OCR libraries not installed: pytesseract, Pillow", error_code="E402")
             raise TextExtractionError(
-                str(path),
+                file_path,
+                cause=ImportError("pytesseract or Pillow not installed. Run: pip install pytesseract Pillow")
+            ) from e
+        
+        except Exception as e:
+            logger.error(f"OCR extraction failed: {file_path}", error_code="E402", exc_info=True)
+            raise TextExtractionError(
+                file_path,
                 cause=e,
             ) from e
     
