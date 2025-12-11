@@ -137,7 +137,7 @@ services:
       start_period: 30s
 
   chatbot:
-    build: ./chatbot_v10
+    build: ./ontology_system_v11
     container_name: chatbot-gpu
     ports:
       - "8009:8000"
@@ -158,8 +158,7 @@ services:
       - HOST=0.0.0.0
       - PORT=8000
     volumes:
-      - ./chatbot_v10:/app
-      - ./chatbot_v10/logs:/app/logs
+      - ./ontology_system_v11:/app
     depends_on:
       ollama:
         condition: service_healthy

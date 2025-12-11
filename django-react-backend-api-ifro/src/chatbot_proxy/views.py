@@ -48,10 +48,10 @@ class AIQuestionResponse(Schema):
     timestamp: Optional[str] = None
 
 class ChatServerStatus(Schema):
-    """v5.2 API 상태 응답과 호환되도록 수정"""
+    """Ontology 시스템 응답과 호환되도록 구성"""
     status: str = 'unknown'
     ready: bool = True
-    version: str = '5.2.0'
+    version: str = '11.0.0'
     entity_count: int = 0
     relation_count: int = 0
     vector_count: int = 0
@@ -175,6 +175,15 @@ def proxy_ai_question(request, data: AIQuestionRequest):
             timeout=120  # AI 처리 시간을 고려하여 더 긴 타임아웃
         )
         
+        if isinstance(response_data, str):
+            # If response is just a string, wrap it
+            response_data = {
+                'answer': response_data,
+                'confidence': 1.0,
+                'sources': [],
+                'reasoning_used': False
+            }
+
         # v5.2 AskResponse 형식 처리
         # sources 변환 (SourceInfo -> Dict)
         sources_raw = response_data.get('sources', [])
@@ -244,7 +253,7 @@ def proxy_chatbot_status(request):
         return ChatServerStatus(
             status='healthy' if response_data.get('ready', False) else 'initializing',
             ready=response_data.get('ready', False),
-            version=response_data.get('version', '5.2.0'),
+            version=response_data.get('version', '11.0.0'),
             entity_count=response_data.get('entity_count', 0),
             relation_count=response_data.get('relation_count', 0),
             vector_count=response_data.get('vector_count', 0),
@@ -254,9 +263,9 @@ def proxy_chatbot_status(request):
             # 하위 호환성 매핑
             ai_available=response_data.get('llm_available', False),
             model_loaded=response_data.get('ready', False),
-            total_pdfs=0,
-            total_chunks=response_data.get('vector_count', 0),
-            memory_usage=None
+            total_pdfs=response_data.get('total_pdfs', 0),
+            total_chunks=response_data.get('total_chunks', response_data.get('vector_count', 0)),
+            memory_usage=response_data.get('memory_usage')
         )
         
     except HttpError:
@@ -346,5 +355,4 @@ def proxy_clear_conversation_history(request):
     except Exception as e:
         logger.debug(f"대화 기록 초기화 프록시 오류: {str(e)}")
         raise HttpError(500, "대화 기록 초기화 중 오류가 발생했습니다.")
-
 

@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from ninja_extra import Router
 from typing import List
+import os
 import requests
 import logging
 from .models import (
@@ -35,6 +36,7 @@ from ninja.errors import HttpError
 from ninja_jwt.authentication import JWTAuth
 
 router = Router()
+CHATBOT_BASE_URL = os.getenv("CHATBOT_URL", "http://chatbot:8000")
 
 @router.get("/intersections", response=List[IntersectionSchema])
 @router.get("/intersections/", response=List[IntersectionSchema])
@@ -2506,7 +2508,7 @@ def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
         # Chatbot 서버로 처리 요청 (TEXT 또는 PDF 경로)
         if text_content:
             # TEXT가 있으면 텍스트 임베딩 요청
-            chatbot_url = "http://chatbot:8000/api/text/add-to-vectordb"
+            chatbot_url = f"{CHATBOT_BASE_URL}/api/text/add-to-vectordb"
             
             embedding_data = {
                 "text": text_content,
@@ -2519,7 +2521,7 @@ def save_pdf_and_notify(request, data: PDFSaveRequestSchema):
             }
         else:
             # TEXT가 없으면 PDF 바이너리를 Chatbot에 전송
-            chatbot_url = "http://chatbot:8000/api/pdf/extract-and-embed"
+            chatbot_url = f"{CHATBOT_BASE_URL}/api/pdf/extract-and-embed"
             
             embedding_data = {
                 "pdf_data": pdf_data,  # Base64 인코딩된 PDF 데이터
@@ -2573,7 +2575,7 @@ def notify_pdf_upload(request, filename: str, file_path: str):
     """
     try:
         # 챗봇 서버 URL (Docker 환경에서 접근 가능한 주소)
-        chatbot_url = "http://chatbot-gpu:8000/api/pdf/notify-upload"
+        chatbot_url = f"{CHATBOT_BASE_URL}/api/pdf/notify-upload"
         
         # 알림 데이터
         notification_data = {
