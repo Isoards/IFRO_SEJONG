@@ -36,18 +36,33 @@ class AIQuestionRequest(Schema):
     k: str = 'auto'
 
 class AIQuestionResponse(Schema):
+    """v5.2 API AskResponse와 호환"""
     answer: str
-    confidence: float
+    confidence: float = 0.0
     sources: Optional[List[Dict[str, Any]]] = None
+    reasoning_used: bool = False
+    reasoning_trace: Optional[List[str]] = None
+    action_suggested: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
     fallback_used: Optional[bool] = None
+    timestamp: Optional[str] = None
 
 class ChatServerStatus(Schema):
-    status: str
-    ai_available: bool
-    model_loaded: bool
-    total_pdfs: int
-    total_chunks: int
+    """v5.2 API 상태 응답과 호환되도록 수정"""
+    status: str = 'unknown'
+    ready: bool = True
+    version: str = '5.2.0'
+    entity_count: int = 0
+    relation_count: int = 0
+    vector_count: int = 0
+    llm_available: bool = False
+    reasoning_enabled: bool = True
+    action_enabled: bool = True
+    # 하위 호환성
+    ai_available: bool = False
+    model_loaded: bool = False
+    total_pdfs: int = 0
+    total_chunks: int = 0
     memory_usage: Optional[Dict[str, Any]] = None
 
 class PDFInfo(Schema):
@@ -160,19 +175,26 @@ def proxy_ai_question(request, data: AIQuestionRequest):
             timeout=120  # AI 처리 시간을 고려하여 더 긴 타임아웃
         )
         
-        # fallback_used 필드 처리 - 문자열 'none'을 False로 변환
-        fallback_used = response_data.get('fallback_used', False)
-        if isinstance(fallback_used, str):
-            fallback_used = fallback_used.lower() not in ['none', 'false', '0', '']
-        elif fallback_used is None:
-            fallback_used = False
-            
+        # v5.2 AskResponse 형식 처리
+        # sources 변환 (SourceInfo -> Dict)
+        sources_raw = response_data.get('sources', [])
+        sources = []
+        for s in sources_raw:
+            if isinstance(s, dict):
+                sources.append(s)
+            else:
+                sources.append({'entity_name': str(s), 'confidence': 0.5})
+        
         return AIQuestionResponse(
             answer=response_data.get('answer', ''),
             confidence=response_data.get('confidence', 0.0),
-            sources=response_data.get('sources', []),
+            sources=sources,
+            reasoning_used=response_data.get('reasoning_used', False),
+            reasoning_trace=response_data.get('reasoning_trace', []),
+            action_suggested=response_data.get('action_suggested'),
             metrics=response_data.get('metrics', {}),
-            fallback_used=fallback_used
+            fallback_used=False,  # v5.2에서는 사용 안함
+            timestamp=response_data.get('timestamp')
         )
         
     except HttpError:
@@ -210,7 +232,7 @@ def proxy_batch_questions(request, data: BatchQuestionRequest):
 
 @router.get("/status", response=ChatServerStatus)
 def proxy_chatbot_status(request):
-    """챗봇 서버 상태 조회 프록시"""
+    """챗봇 서버 상태 조회 프록시 - v5.2 API 호환"""
     try:
         response_data = sync_make_chatbot_request(
             method='GET',
@@ -218,13 +240,23 @@ def proxy_chatbot_status(request):
             timeout=10
         )
         
+        # v5.2 StatusResponse 형식 처리
         return ChatServerStatus(
-            status=response_data.get('status', 'unknown'),
-            ai_available=response_data.get('ai_available', False),
-            model_loaded=response_data.get('model_loaded', False),
-            total_pdfs=response_data.get('total_pdfs', 0),
-            total_chunks=response_data.get('total_chunks', 0),
-            memory_usage=response_data.get('memory_usage', None)
+            status='healthy' if response_data.get('ready', False) else 'initializing',
+            ready=response_data.get('ready', False),
+            version=response_data.get('version', '5.2.0'),
+            entity_count=response_data.get('entity_count', 0),
+            relation_count=response_data.get('relation_count', 0),
+            vector_count=response_data.get('vector_count', 0),
+            llm_available=response_data.get('llm_available', False),
+            reasoning_enabled=response_data.get('reasoning_enabled', True),
+            action_enabled=response_data.get('action_enabled', True),
+            # 하위 호환성 매핑
+            ai_available=response_data.get('llm_available', False),
+            model_loaded=response_data.get('ready', False),
+            total_pdfs=0,
+            total_chunks=response_data.get('vector_count', 0),
+            memory_usage=None
         )
         
     except HttpError:
